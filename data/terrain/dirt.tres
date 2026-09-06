@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="TerrainData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/schemas/terrain_data.gd" id="1_terrain"]
+
+[resource]
+script = ExtResource("1_terrain")
+id = &"dirt"
+display_name = "Dirt"
+speed_mult = 0.85
+grip = 0.8
+drag_mult = 1.2
+particle_color = Color(0.55, 0.3, 0.12, 1)
+particle_type = &"dirt_dust"
+sound_type = &"dirt"
