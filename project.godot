@@ -1,0 +1,126 @@
+; Engine configuration file.
+; Edit through the Godot editor when possible.
+; Format: [section] followed by param=value entries.
+
+config_version=5
+
+[application]
+
+config/name="Turbo Circuit"
+run/main_scene="res://scenes/main.tscn"
+
+[autoload]
+
+GameState="*res://core/autoload/game_state.gd"
+EventBus="*res://core/autoload/event_bus.gd"
+SettingsManager="*res://core/autoload/settings_manager.gd"
+SaveManager="*res://core/autoload/save_manager.gd"
+AudioManager="*res://core/autoload/audio_manager.gd"
+DebugOverlay="*res://core/autoload/debug_overlay.tscn"
+
+[display]
+
+window/size/viewport_width=1600
+window/size/viewport_height=900
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/gut/plugin.cfg")
+
+[input]
+
+accelerate={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":87), Object(InputEventJoypadMotion,"axis":5,"axis_value":1.0), Object(InputEventJoypadButton,"button_index":0)]
+}
+brake={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":83), Object(InputEventJoypadMotion,"axis":4,"axis_value":1.0), Object(InputEventJoypadButton,"button_index":1)]
+}
+steer_left={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":65), Object(InputEventJoypadMotion,"axis":0,"axis_value":-1.0)]
+}
+steer_right={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":68), Object(InputEventJoypadMotion,"axis":0,"axis_value":1.0)]
+}
+drift={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":32), Object(InputEventJoypadButton,"button_index":10), Object(InputEventJoypadButton,"button_index":2)]
+}
+use_item={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":69), Object(InputEventJoypadButton,"button_index":9), Object(InputEventJoypadButton,"button_index":3)]
+}
+look_back={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":81), Object(InputEventJoypadMotion,"axis":3,"axis_value":1.0)]
+}
+pause={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":4194305), Object(InputEventJoypadButton,"button_index":6)]
+}
+ui_accept={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":4194309), Object(InputEventKey,"physical_keycode":32), Object(InputEventJoypadButton,"button_index":0)]
+}
+ui_cancel={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":4194305), Object(InputEventJoypadButton,"button_index":1)]
+}
+ui_left={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":4194311), Object(InputEventJoypadMotion,"axis":0,"axis_value":-1.0), Object(InputEventJoypadButton,"button_index":13)]
+}
+ui_right={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":4194313), Object(InputEventJoypadMotion,"axis":0,"axis_value":1.0), Object(InputEventJoypadButton,"button_index":14)]
+}
+ui_up={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":4194320), Object(InputEventJoypadMotion,"axis":1,"axis_value":-1.0), Object(InputEventJoypadButton,"button_index":11)]
+}
+ui_down={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":4194322), Object(InputEventJoypadMotion,"axis":1,"axis_value":1.0), Object(InputEventJoypadButton,"button_index":12)]
+}
+
+[input_devices]
+
+pointer/emulate_touch_from_mouse=false
+
+[layer_names]
+
+3d_physics/layer_1="world"
+3d_physics/layer_2="kart_body"
+3d_physics/layer_3="kart_bump"
+3d_physics/layer_4="projectile"
+3d_physics/layer_5="track_trigger"
+3d_physics/layer_6="item_box"
+3d_physics/layer_7="hazard"
+3d_physics/layer_8="kill_zone"
+3d_physics/layer_9="shortcut_marker"
+
+[network]
+
+tls/certificate_bundle_override.macos="/etc/ssl/cert.pem"
+
+[physics]
+
+3d/default_gravity=24.0
+common/physics_interpolation=true
+common/physics_ticks_per_second=60
+
+[rendering]
+
+renderer/rendering_method="forward_plus"
+renderer/rendering_method.mobile="forward_plus"
+
+[debug]
+
+gdscript/warnings/untyped_declaration=2
+gdscript/warnings/unsafe_method_access=1
+gdscript/warnings/unsafe_property_access=1
