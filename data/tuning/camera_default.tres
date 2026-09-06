@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="FeelTuning" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/schemas/feel_tuning.gd" id="1_feel"]
+
+[resource]
+script = ExtResource("1_feel")
+camera_distance = 5.5
+camera_height = 2.2
+follow_stiffness = 10.0
+base_fov = 70.0
+speed_fov_add = 14.0
+boost_fov_add = 8.0
+drift_side_offset = 0.7
+drift_camera_roll_degrees = 2.0
+trauma_decay = 1.5
+maximum_shake_rotation_degrees = 2.0
+maximum_shake_position = 0.15
+look_back_blend_time = 0.15

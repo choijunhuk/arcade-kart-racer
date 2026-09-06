@@ -1,0 +1,101 @@
+[gd_resource type="Resource" script_class="PhysicsTuning" load_steps=14 format=3]
+
+[ext_resource type="Script" path="res://data/schemas/physics_tuning.gd" id="1_physics"]
+[ext_resource type="Script" path="res://data/schemas/mini_turbo_tier.gd" id="2_tier"]
+[ext_resource type="Script" path="res://data/schemas/boost_spec_data.gd" id="3_boost"]
+
+[sub_resource type="Curve" id="Curve_accel"]
+_data = [Vector2(0, 1), 0.0, -0.7, 0, 0, Vector2(1, 0), -1.4, 0.0, 0, 0]
+point_count = 2
+
+[sub_resource type="Curve" id="Curve_steer"]
+min_value = 0.0
+max_value = 1.0
+_data = [Vector2(0, 1), 0.0, -0.3, 0, 0, Vector2(1, 0.45), -0.7, 0.0, 0, 0]
+point_count = 2
+
+[sub_resource type="Resource" id="Boost_slipstream"]
+script = ExtResource("3_boost")
+id = &"slipstream_exit"
+speed_mult = 1.08
+accel_mult = 1.08
+duration = 0.8
+priority = 1
+
+[sub_resource type="Resource" id="Tier_1"]
+script = ExtResource("2_tier")
+tier = 1
+charge_seconds = 1.0
+speed_mult = 1.18
+duration = 0.8
+visual_color = Color(0.1, 0.9, 1, 1)
+
+[sub_resource type="Resource" id="Tier_2"]
+script = ExtResource("2_tier")
+tier = 2
+charge_seconds = 2.2
+speed_mult = 1.25
+duration = 1.4
+visual_color = Color(1, 0.62, 0.1, 1)
+
+[sub_resource type="Resource" id="Tier_3"]
+script = ExtResource("2_tier")
+tier = 3
+charge_seconds = 3.6
+speed_mult = 1.33
+duration = 2.2
+visual_color = Color(1, 0.1, 0.72, 1)
+
+[sub_resource type="Resource" id="Boost_trick"]
+script = ExtResource("3_boost")
+id = &"trick"
+speed_mult = 1.18
+accel_mult = 1.1
+duration = 0.6
+priority = 2
+
+[sub_resource type="Resource" id="Boost_pad"]
+script = ExtResource("3_boost")
+id = &"boost_pad"
+speed_mult = 1.3
+accel_mult = 1.2
+duration = 1.0
+priority = 3
+ignores_offroad = true
+
+[sub_resource type="Resource" id="Boost_item"]
+script = ExtResource("3_boost")
+id = &"nitro_can"
+speed_mult = 1.29
+accel_mult = 1.25
+duration = 1.6
+priority = 4
+ignores_offroad = true
+
+[sub_resource type="Resource" id="Boost_start_1"]
+script = ExtResource("3_boost")
+id = &"start_boost_1"
+speed_mult = 1.18
+accel_mult = 1.2
+duration = 0.8
+priority = 2
+
+[sub_resource type="Resource" id="Boost_start_2"]
+script = ExtResource("3_boost")
+id = &"start_boost_2"
+speed_mult = 1.25
+accel_mult = 1.3
+duration = 1.4
+priority = 3
+
+[resource]
+script = ExtResource("1_physics")
+accel_curve = SubResource("Curve_accel")
+steer_curve = SubResource("Curve_steer")
+slipstream_exit_boost = SubResource("Boost_slipstream")
+trick_boost = SubResource("Boost_trick")
+mini_turbo_tiers = Array[ExtResource("2_tier")]([SubResource("Tier_1"), SubResource("Tier_2"), SubResource("Tier_3")])
+boost_pad_boost = SubResource("Boost_pad")
+item_boost = SubResource("Boost_item")
+start_boost_tier_one = SubResource("Boost_start_1")
+start_boost_tier_two = SubResource("Boost_start_2")

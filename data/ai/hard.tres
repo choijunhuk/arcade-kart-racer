@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="AIDifficultyProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/schemas/ai_difficulty_profile.gd" id="1_ai"]
+
+[resource]
+script = ExtResource("1_ai")
+id = &"hard"
+display_name = "Hard"
+speed_confidence = 1.0
+look_ahead_time = 0.55
+steer_kp = 2.25
+steer_kd = 0.48
+steer_noise = 0.02
+drift_skill = 0.95
+target_tier = 3
+late_brake_prob = 0.03
+shortcut_take_prob = 0.9
+item_decision_delay = 0.25
+projectile_dodge_prob = 0.7
+rubber_band_strength = 0.02
+item_use_accuracy = 0.93
+start_boost_skill = 0.9
+trick_prob = 0.95

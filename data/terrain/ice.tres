@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="TerrainData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/schemas/terrain_data.gd" id="1_terrain"]
+
+[resource]
+script = ExtResource("1_terrain")
+id = &"ice"
+display_name = "Ice"
+speed_mult = 1.0
+grip = 0.25
+drag_mult = 0.7
+particle_color = Color(0.72, 0.9, 1, 1)
+particle_type = &"ice_shards"
+sound_type = &"ice"

@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="FeelTuning" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/schemas/feel_tuning.gd" id="1_feel"]
+
+[resource]
+script = ExtResource("1_feel")
+roll_per_lateral = 0.025
+maximum_body_roll_degrees = 12.0
+acceleration_pitch_degrees = 3.0
+braking_pitch_degrees = 4.0
+suspension_bob_amplitude = 0.04
+suspension_bob_frequency = 7.0
+suspension_stiffness = 18.0
+suspension_damping = 8.0
+maximum_wheel_steer_degrees = 28.0
+drift_wheel_jitter = 0.02
+particle_nodes_per_kart = 6
+central_clear_fraction = 0.4
+speed_line_strength = 1.0
+hit_flash_duration = 0.1
+hit_flash_count = 2
+hit_stop_duration = 0.05
+hit_stop_time_scale = 0.3

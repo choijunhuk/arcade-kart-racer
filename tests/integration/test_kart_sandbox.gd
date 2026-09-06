@@ -1,0 +1,40 @@
+extends GutTest
+
+const SANDBOX_PATH: String = "res://scenes/test/kart_sandbox.tscn"
+
+
+func test_sandbox_instantiates_track_kart_mesh_and_active_camera() -> void:
+	var packed: PackedScene = load(SANDBOX_PATH) as PackedScene
+	assert_not_null(packed)
+	var sandbox: Node = packed.instantiate()
+	add_child_autofree(sandbox)
+
+	var kart: CharacterBody3D = sandbox.get_node("PlaceholderKart") as CharacterBody3D
+	var kart_mesh: MeshInstance3D = sandbox.get_node("PlaceholderKart/Body") as MeshInstance3D
+	var camera: Camera3D = sandbox.get_node("Camera3D") as Camera3D
+
+	assert_not_null(sandbox.get_node_or_null("TestLoop/RacingLine"))
+	assert_not_null(kart)
+	assert_not_null(kart_mesh.mesh)
+	assert_eq(kart.collision_layer, 2)
+	assert_eq(kart.collision_mask, 1)
+	assert_true(camera.current)
+
+
+func test_test_loop_geometry_uses_world_collision_layer() -> void:
+	var packed: PackedScene = load(SANDBOX_PATH) as PackedScene
+	var sandbox: Node = packed.instantiate()
+	add_child_autofree(sandbox)
+
+	var geometry: StaticBody3D = sandbox.get_node("TestLoop/Geometry") as StaticBody3D
+
+	assert_not_null(geometry)
+	assert_eq(geometry.collision_layer, 1)
+	assert_gte(geometry.get_child_count(), 1)
+
+
+func test_debug_overlay_autoload_is_visible_in_the_sandbox_bootstrap() -> void:
+	var overlay: CanvasLayer = get_tree().root.get_node_or_null("DebugOverlay") as CanvasLayer
+
+	assert_not_null(overlay)
+	assert_true(overlay.visible)

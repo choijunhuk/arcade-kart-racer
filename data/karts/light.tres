@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="KartData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/schemas/kart_data.gd" id="1_kart"]
+
+[resource]
+script = ExtResource("1_kart")
+id = &"light"
+display_name = "Comet Feather"
+weight_class = 0
+max_speed = 26.0
+acceleration = 16.0
+handling = 1.15
+drift_factor = 1.15
+weight = 0.75
+traction = 1.05
+boost_power = 1.0
+offroad_resistance = 0.0
+body_color = Color(0.15, 0.85, 1, 1)

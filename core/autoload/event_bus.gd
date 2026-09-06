@@ -1,0 +1,18 @@
+extends Node
+
+signal race_state_changed(previous_state: int, new_state: int)
+signal race_started()
+signal kart_finished(kart: Node, finish_time_seconds: float)
+signal position_changed(kart: Node, old_position: int, new_position: int)
+signal lap_completed(kart: Node, lap: int, lap_time_seconds: float)
+signal wrong_way(kart: Node, active: bool)
+signal item_used(kart: Node, item_id: StringName)
+signal item_hit(source_kart: Node, target_kart: Node, item_id: StringName)
+signal boost_started(kart: Node, boost_spec: Resource)
+signal boost_ended(kart: Node)
+signal drift_started(kart: Node, direction: int)
+signal drift_tier_changed(kart: Node, tier: int)
+signal drift_ended(kart: Node, released_tier: int)
+signal kart_hit(kart: Node, hit_type: int)
+signal kart_respawned(kart: Node)
+signal settings_changed(section: StringName)

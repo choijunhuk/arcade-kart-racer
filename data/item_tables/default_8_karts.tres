@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="ItemTableData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/schemas/item_table_data.gd" id="1_table"]
+
+[resource]
+script = ExtResource("1_table")
+item_ids = Array[StringName]([&"rocket_dart", &"hunter_drone", &"spike_mine", &"nitro_can", &"aegis_bubble", &"pulse_blast", &"storm_beacon"])
+rows = Array[PackedFloat32Array]([PackedFloat32Array(15, 0, 30, 0, 45, 10, 0), PackedFloat32Array(25, 5, 25, 5, 30, 10, 0), PackedFloat32Array(25, 15, 20, 15, 15, 10, 0), PackedFloat32Array(20, 20, 15, 25, 10, 10, 0), PackedFloat32Array(15, 20, 10, 30, 5, 15, 5), PackedFloat32Array(10, 20, 5, 30, 5, 15, 15), PackedFloat32Array(5, 15, 5, 30, 0, 20, 25), PackedFloat32Array(5, 10, 0, 35, 0, 20, 30)])
