@@ -15,6 +15,12 @@ var _sliders: Dictionary[StringName, Dictionary] = {}
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# Spec §6.2: debug overlay is disabled in release builds.
+	if not OS.is_debug_build():
+		visible = false
+		set_process(false)
+		set_physics_process(false)
+		set_process_unhandled_input(false)
 
 
 func _physics_process(_delta: float) -> void:
