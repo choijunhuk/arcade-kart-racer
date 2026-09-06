@@ -53,6 +53,17 @@ func unwatch(name: StringName) -> void:
 	_watches.erase(name)
 
 
+## Removes a runtime tuning slider and its row so a freed scene's getter and
+## setter callables are never called again on the next frame.
+func remove_slider(name: StringName) -> void:
+	if not _sliders.has(name):
+		return
+	var control: HSlider = _sliders[name]["control"] as HSlider
+	if is_instance_valid(control) and is_instance_valid(control.get_parent()):
+		control.get_parent().queue_free()
+	_sliders.erase(name)
+
+
 ## Adds a runtime tuning slider backed by getter and setter callables.
 func add_slider(
 	name: StringName,

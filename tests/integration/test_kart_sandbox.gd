@@ -9,9 +9,9 @@ func test_sandbox_instantiates_track_kart_mesh_and_active_camera() -> void:
 	var sandbox: Node = packed.instantiate()
 	add_child_autofree(sandbox)
 
-	var kart: CharacterBody3D = sandbox.get_node("PlaceholderKart") as CharacterBody3D
-	var kart_mesh: MeshInstance3D = sandbox.get_node("PlaceholderKart/Body") as MeshInstance3D
-	var camera: Camera3D = sandbox.get_node("Camera3D") as Camera3D
+	var kart: CharacterBody3D = sandbox.get_node("Kart") as CharacterBody3D
+	var kart_mesh: MeshInstance3D = sandbox.get_node("Kart/Visuals/Body") as MeshInstance3D
+	var camera: Camera3D = sandbox.get_node("RaceCamera") as Camera3D
 
 	assert_not_null(sandbox.get_node_or_null("TestLoop/RacingLine"))
 	assert_not_null(kart)
@@ -38,3 +38,22 @@ func test_debug_overlay_autoload_is_visible_in_the_sandbox_bootstrap() -> void:
 
 	assert_not_null(overlay)
 	assert_true(overlay.visible)
+
+
+func test_sandbox_resets_kart_to_grid_slot_on_r_key() -> void:
+	var packed: PackedScene = load(SANDBOX_PATH) as PackedScene
+	var sandbox: Node = packed.instantiate()
+	add_child_autofree(sandbox)
+	await wait_physics_frames(1)
+
+	var kart: KartController = sandbox.get_node("Kart") as KartController
+	var grid_slot: Marker3D = sandbox.get_node("TestLoop/StartGrid/Grid01") as Marker3D
+	kart.global_position += Vector3(5.0, 0.0, 5.0)
+
+	var reset_event: InputEventKey = InputEventKey.new()
+	reset_event.physical_keycode = KEY_R
+	reset_event.pressed = true
+	sandbox._unhandled_input(reset_event)
+
+	assert_almost_eq(kart.global_position.x, grid_slot.global_position.x, 0.01)
+	assert_almost_eq(kart.global_position.z, grid_slot.global_position.z, 0.01)

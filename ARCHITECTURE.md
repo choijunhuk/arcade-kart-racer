@@ -40,19 +40,21 @@ major boundary or dependency direction.
   `core/autoload/debug_overlay.gd`: F3 overlay, FPS/physics tick display,
   callable watches, and runtime sliders.
 
-The Phase 0 scene graph is intentionally small:
+The scene graph remains small in Phase 1:
 
 ```text
 scenes/main.tscn
 └── Main (Node)
-    └── KartSandbox (instanced scenes/test/kart_sandbox.tscn)
+    └── KartSandbox (instanced scenes/test/kart_sandbox.tscn)  [kart_sandbox.gd]
         ├── TestLoop (instanced track/tracks/test_loop/test_loop.tscn)
-        ├── PlaceholderKart (CharacterBody3D)
-        └── Camera3D
+        ├── Kart (instanced kart/kart.tscn)          [kart_controller.gd]
+        └── RaceCamera (instanced camera/race_camera.tscn)
 ```
 
-The sandbox provides a visual smoke test only. The placeholder kart has a mesh
-and collision shape but no movement code.
+Phase 0's sandbox was a visual smoke test with a stationary placeholder kart.
+Phase 1's sandbox drives: it wires a `PlayerInputProvider` to the kart,
+targets the camera at it, resets it to the first grid slot with `R`, and
+registers `DebugOverlay` watches/sliders for the §9.10 tuning parameters.
 
 ## Domain ownership and dependency direction
 
@@ -64,10 +66,77 @@ scene-tree queries or gameplay orchestration.
 
 ### Kart
 
-Future kart code lives in `kart/`. It may read terrain information from
-`track/` and request item use through an explicit `items/` API. It must not
-reference `race/`, `ai/`, or `ui/` directly. Phase 0 provides only
-`kart/kart_state.gd`, whose enum is the stable state vocabulary.
+Kart code lives in `kart/`. It may read terrain information from `track/` and
+request item use through an explicit `items/` API. It must not reference
+`race/`, `ai/`, or `ui/` directly. Phase 0 provided only `kart/kart_state.gd`;
+Phase 1 adds the drivable controller, physics, and visuals.
+
+#### Node tree (`kart/kart.tscn`, spec §6.3)
+
+```text
+Kart (CharacterBody3D, layer 2 / mask 1)  [kart_controller.gd]
+├── CollisionShape3D          # BoxShape3D 1.6 x 0.6 x 2.2
+├── GroundRays (Node3D)       # RayCast3D x 5: RayFL, RayFR, RayRL, RayRR, RayCenter (mask 1)
+├── KartPhysics (Node)        [kart_physics.gd]
+└── Visuals (Node3D)          [kart_visuals.gd]
+    ├── Body (MeshInstance3D, BoxMesh)
+    ├── Driver (MeshInstance3D, CapsuleMesh)
+    └── WheelFL / WheelFR / WheelRL / WheelRR (Node3D pivot + static-tilt Mesh child)
+```
+
+`DriftController`, `BoostController`, `HitReactor`, `TerrainSensor`,
+`ItemSlot`, and `KartAudio` are Phase 2/3 child slots and are intentionally
+absent — `KartController` only ever calls its own neutral stub methods for
+their steps (see below), so their later addition as real sibling nodes is a
+pure addition, not a rewrite.
+
+#### Tick order (`KartController._physics_process`, spec §9.3)
+
+Steps 1, 3, 6, 8 are real; steps 2, 4, 5, 7 are stubs returning neutral
+values until their owning component exists, each marked `# TODO(phase-N)`:
+
+```text
+1. frame   = input_provider.get_frame()          [real] zero-framed while HIT/RESPAWNING/FROZEN
+2. terrain = _sample_terrain()                   [stub -> phase-2 TerrainSensor] neutral multipliers
+3. ground  = KartPhysics.probe_ground()          [real] 5-ray average, excludes >max_climb_angle hits
+4. drift   = _update_drift(frame, ground)         [stub -> phase-3 DriftController] never drifting
+5. boost   = _update_boost(delta)                [stub -> phase-3 BoostController] x1 multipliers
+6. KartPhysics.integrate(frame, terrain, ground, drift, boost, delta)  [real]
+7. _update_hit_reactor(delta)                    [stub -> phase-2 HitReactor] no-op
+8. _update_state(ground) -> state_changed signal [real] GROUNDED <-> AIRBORNE only this phase
+```
+
+`KartVisuals` and `RaceCamera` read only `KartController`'s public API
+(`get_speed`, `get_speed_ratio`, `get_forward`, `get_velocity` — inherited
+from `CharacterBody3D` — `is_grounded`, `get_ground_normal`, `get_state`,
+`get_kart_data`) inside `_process()`, never `_physics_process()`, and never
+write back into physics state (coding rule 6).
+
+#### Physics model (`kart/kart_physics.gd`)
+
+- Longitudinal `speed` and lateral `lateral` are scalars in the kart's own
+  frame; world `velocity` is reassembled every tick from
+  `forward * speed + right * lateral + up * vertical_speed` before
+  `move_and_slide()`.
+- The kart's actual `Node3D` basis only ever yaws (`rotate(ground_normal or
+  Vector3.UP, yaw_delta)`); it never pitches or rolls, so it structurally
+  cannot flip (spec §9.7). Visual roll/pitch/bob live entirely in
+  `KartVisuals` as a cosmetic offset on the `Visuals` sub-node.
+- `CharacterBody3D.up_direction` is a separate, continuously-slerped value
+  (ground normal when grounded, world up when airborne) used only for
+  `move_and_slide()`'s own floor/wall classification — decoupled from the
+  yaw-only visible basis.
+- Wall response is factored into a pure static function,
+  `KartPhysics.compute_wall_response(incidence_degrees, tuning) ->
+  WallResponse`, so graze/head-on/interpolated speed-and-bounce math is
+  unit-testable without a scene tree (spec §9.8).
+
+#### Camera (`camera/race_camera.gd`, spec §16)
+
+`RaceCamera` extends `Camera3D` directly rather than being a kart child, and
+reads only the target's public API. Phase 1 implements spring-follow
+position, velocity-direction look, and speed-squared FOV; drift offset,
+shake, and look-back are Phase 3/8.
 
 ### Race
 
@@ -136,14 +205,20 @@ res://
 │   │   ├── player_input_provider.gd
 │   │   └── input_actions.gd
 │   └── math/.gitkeep
-├── kart/kart_state.gd
+├── kart/
+│   ├── kart.tscn
+│   ├── kart_controller.gd
+│   ├── kart_physics.gd
+│   ├── kart_state.gd
+│   └── kart_visuals.gd
+├── camera/race_camera.gd, race_camera.tscn
 ├── race/race_state.gd
 ├── track/
 │   ├── track.gd
 │   ├── racing_line.gd
 │   ├── track_validator.gd
 │   ├── track_template.tscn
-│   └── tracks/test_loop/test_loop.tscn
+│   └── tracks/{test_loop,test_loop_hills}/*.tscn
 ├── items/
 │   ├── base/
 │   └── instances/{rocket_dart,hunter_drone,spike_mine,nitro_can,
@@ -224,8 +299,8 @@ Phase-later warnings rather than false failures.
 - Unit tests: `tools/run_tests.sh` runs GUT over `tests/` recursively.
 - Simulation: `tools/run_sim.sh` is a successful Phase 0 placeholder and states
   that simulation begins in Phase 6.
-- Track contract: `tools/validate_tracks.sh` runs
-  `track/track_validator.gd` headlessly against `test_loop.tscn`.
+- Track contract: `tools/validate_tracks.sh` runs `track/track_validator.gd`
+  headlessly against both `test_loop.tscn` and `test_loop_hills.tscn`.
 - Parse/import: `/opt/homebrew/bin/godot --headless --path . --import` runs
   before the final parse check; generated `*.uid` files are committed.
 
@@ -255,3 +330,60 @@ Phase-later warnings rather than false failures.
   keep Godot's system-certificate default.
 - Existing vendored GUT 9.6.1 is used unchanged and enabled through
   `project.godot`; no dependency download step is introduced.
+
+### Phase 1
+
+- `PhysicsTuning` gained three fields Phase 0 did not anticipate exactly:
+  `hover_snap_speed`, `up_align_speed_grounded`, `up_align_speed_airborne`.
+  All other Phase 1 physics constants (ground/air/wall/drift groups) were
+  already present in Phase 0's schema, confirming the schema was authored
+  ahead of need; these three fill the one real gap (hover/up-alignment rate).
+- Hover height is enforced as a direct proportional correction
+  (`height_error * hover_snap_speed`, clamped) rather than letting
+  `CharacterBody3D`'s own floor collision support the kart's weight. This
+  keeps the "hover" feel exact and tunable independent of collision-shape
+  geometry, matching §9.7's "hover snap" language.
+- Up-vector alignment reuses a hand-written spherical interpolation
+  (`KartPhysics._slerp_up_vector`) instead of `Vector3.slerp()`. Godot's
+  built-in implementation asserts on a degenerate rotation axis whenever the
+  two up vectors are (near-)parallel or (near-)antiparallel — both happen
+  constantly here (flat ground repeats the same normal every tick). The
+  hand-written version special-cases both without changing the interpolated
+  result for the general case.
+- `KartController.get_velocity()` was dropped from the public API list in
+  favor of `CharacterBody3D`'s own native `get_velocity()` — GDScript treats
+  overriding it as a fatal parse error. The inherited method returns the same
+  `velocity` property Phase 1 would have exposed anyway.
+- `DebugOverlayService` gained `remove_slider()` alongside its existing
+  `unwatch()`. Phase 0's watch/slider API had no counterpart for sliders, so
+  a scene that registers sliders and is later freed (the sandbox, repeatedly
+  instantiated across tests) left stale getter/setter closures that the
+  overlay's `_process()` called on freed objects every frame afterward.
+- The scripted lap-following test driver (`tests/support/scripted_input_provider.gd`)
+  eases off the throttle in proportion to its steering command instead of
+  holding full throttle everywhere. Cornering at a constant full throttle
+  round the placeholder racing line clipped walls hard enough to trip the
+  DoD's 10 m line-deviation budget; slowing for corners is what any real
+  driver (human or AI) would do and is not a physics tuning change.
+- `track/tracks/test_loop_hills/test_loop_hills.tscn` adds its ramp and
+  banked-corner geometry as additional collision/mesh overlays on top of the
+  existing flat floor rather than editing the shared floor slab or the
+  existing curve pieces. Raycasts and `move_and_slide()` naturally prefer
+  whichever surface is higher/closer, so overlay geometry does not require
+  cutting the base mesh. Both ramp segments are authored longer than their
+  visible span with their low ends dipped below y=0 on purpose, burying the
+  box's end-cap face under the pre-existing flat floor instead of exposing
+  a vertical face a kart could clip as a false "wall".
+- The banked corner is a `# PLACEHOLDER` fixed-roll overlay approximating
+  banking, not geometry aligned to the curve's own tangent frame at every
+  point along it. TODO(phase-4): replace with tangent-aligned banked
+  geometry once `RacingLine` carries authored per-track curve data.
+- `tools/run_tests.sh` now runs with `--fixed-fps 240`. GUT's
+  `wait_physics_frames()` used by the new kart integration tests advances
+  real engine frames; without decoupling from wall-clock time, a 90
+  simulated-second lap test would take roughly 90 real seconds. Godot's
+  physics tick rate stays governed by `physics/common/physics_ticks_per_second`
+  (60) regardless of this flag — it only lets the engine advance faster than
+  real time, not more physics ticks per simulated second.
+- `tools/validate_tracks.sh` now validates both `test_loop.tscn` and
+  `test_loop_hills.tscn` in one run instead of only the default track.

@@ -1,0 +1,364 @@
+[gd_scene load_steps=21 format=3]
+
+[ext_resource type="Script" path="res://track/track.gd" id="1_track"]
+[ext_resource type="Script" path="res://track/racing_line.gd" id="2_line"]
+
+[sub_resource type="StandardMaterial3D" id="Material_road"]
+albedo_color = Color(0.28, 0.3, 0.34, 1)
+roughness = 0.92
+
+[sub_resource type="StandardMaterial3D" id="Material_wall"]
+albedo_color = Color(0.95, 0.35, 0.08, 1)
+roughness = 0.75
+
+[sub_resource type="BoxMesh" id="Mesh_road_straight"]
+material = SubResource("Material_road")
+size = Vector3(60, 0.5, 14)
+
+[sub_resource type="BoxMesh" id="Mesh_road_short"]
+material = SubResource("Material_road")
+size = Vector3(16.155, 0.5, 14)
+
+[sub_resource type="BoxMesh" id="Mesh_road_curve"]
+material = SubResource("Material_road")
+size = Vector3(17.464, 0.5, 14)
+
+[sub_resource type="BoxShape3D" id="Shape_ground"]
+size = Vector3(120, 0.5, 60)
+
+[sub_resource type="BoxMesh" id="Mesh_wall_x"]
+material = SubResource("Material_wall")
+size = Vector3(120, 2, 1)
+
+[sub_resource type="BoxMesh" id="Mesh_wall_z"]
+material = SubResource("Material_wall")
+size = Vector3(1, 2, 60)
+
+[sub_resource type="BoxMesh" id="Mesh_inner_x"]
+material = SubResource("Material_wall")
+size = Vector3(60, 2, 1)
+
+[sub_resource type="BoxMesh" id="Mesh_inner_z"]
+material = SubResource("Material_wall")
+size = Vector3(1, 2, 30)
+
+[sub_resource type="BoxShape3D" id="Shape_wall_x"]
+size = Vector3(120, 2, 1)
+
+[sub_resource type="BoxShape3D" id="Shape_wall_z"]
+size = Vector3(1, 2, 60)
+
+[sub_resource type="BoxShape3D" id="Shape_inner_x"]
+size = Vector3(60, 2, 1)
+
+[sub_resource type="BoxShape3D" id="Shape_inner_z"]
+size = Vector3(1, 2, 30)
+
+[sub_resource type="BoxShape3D" id="Shape_checkpoint_x"]
+size = Vector3(2, 3, 14)
+
+[sub_resource type="BoxShape3D" id="Shape_checkpoint_z"]
+size = Vector3(14, 3, 2)
+
+[sub_resource type="StandardMaterial3D" id="Material_ramp"]
+albedo_color = Color(0.32, 0.34, 0.4, 1)
+roughness = 0.9
+
+[sub_resource type="BoxMesh" id="Mesh_ramp"]
+material = SubResource("Material_ramp")
+size = Vector3(16, 0.5, 14)
+
+[sub_resource type="BoxShape3D" id="Shape_ramp"]
+size = Vector3(16, 0.5, 14)
+
+[sub_resource type="StandardMaterial3D" id="Material_bank"]
+albedo_color = Color(0.3, 0.32, 0.38, 1)
+roughness = 0.9
+
+[sub_resource type="BoxMesh" id="Mesh_bank"]
+material = SubResource("Material_bank")
+size = Vector3(17.464, 0.5, 14)
+
+[sub_resource type="BoxShape3D" id="Shape_bank"]
+size = Vector3(17.464, 0.5, 14)
+
+[sub_resource type="Environment" id="Environment_world"]
+background_mode = 1
+background_color = Color(0.35, 0.55, 0.75, 1)
+ambient_light_source = 3
+ambient_light_color = Color(0.75, 0.8, 0.9, 1)
+ambient_light_energy = 0.65
+
+[node name="TestLoopHills" type="Node3D"]
+script = ExtResource("1_track")
+
+[node name="Geometry" type="StaticBody3D" parent="."]
+collision_layer = 1
+collision_mask = 0
+
+[node name="GroundCollision" type="CollisionShape3D" parent="Geometry"]
+position = Vector3(0, -0.25, 0)
+shape = SubResource("Shape_ground")
+
+[node name="RoadBottom" type="MeshInstance3D" parent="Geometry"]
+position = Vector3(0, -0.25, 22)
+mesh = SubResource("Mesh_road_straight")
+
+[node name="RoadBottomRightA" type="MeshInstance3D" parent="Geometry"]
+position = Vector3(37.5, -0.25, 19)
+rotation = Vector3(0, 0.380506, 0)
+mesh = SubResource("Mesh_road_short")
+
+[node name="RoadBottomRightB" type="MeshInstance3D" parent="Geometry"]
+position = Vector3(48.5, -0.25, 8)
+rotation = Vector3(0, 1.158386, 0)
+mesh = SubResource("Mesh_road_curve")
+
+[node name="RoadTopRightB" type="MeshInstance3D" parent="Geometry"]
+position = Vector3(48.5, -0.25, -8)
+rotation = Vector3(0, 1.983207, 0)
+mesh = SubResource("Mesh_road_curve")
+
+[node name="RoadTopRightA" type="MeshInstance3D" parent="Geometry"]
+position = Vector3(37.5, -0.25, -19)
+rotation = Vector3(0, 2.761086, 0)
+mesh = SubResource("Mesh_road_short")
+
+[node name="RoadTop" type="MeshInstance3D" parent="Geometry"]
+position = Vector3(0, -0.25, -22)
+rotation = Vector3(0, 3.141593, 0)
+mesh = SubResource("Mesh_road_straight")
+
+[node name="RoadTopLeftA" type="MeshInstance3D" parent="Geometry"]
+position = Vector3(-37.5, -0.25, -19)
+rotation = Vector3(0, -2.761086, 0)
+mesh = SubResource("Mesh_road_short")
+
+[node name="RoadTopLeftB" type="MeshInstance3D" parent="Geometry"]
+position = Vector3(-48.5, -0.25, -8)
+rotation = Vector3(0, -1.983207, 0)
+mesh = SubResource("Mesh_road_curve")
+
+[node name="RoadBottomLeftB" type="MeshInstance3D" parent="Geometry"]
+position = Vector3(-48.5, -0.25, 8)
+rotation = Vector3(0, -1.158386, 0)
+mesh = SubResource("Mesh_road_curve")
+
+[node name="RoadBottomLeftA" type="MeshInstance3D" parent="Geometry"]
+position = Vector3(-37.5, -0.25, 19)
+rotation = Vector3(0, -0.380506, 0)
+mesh = SubResource("Mesh_road_short")
+
+[node name="RampUp" type="MeshInstance3D" parent="Geometry"]
+# Placed well clear of StartGrid (x in [-28,-2]) so karts start on flat
+# ground and drive INTO the climb instead of spawning underneath it. The
+# box is longer than its visible span and its low end sits below y=0 on
+# purpose: that buries the end cap under the pre-existing flat collision
+# floor instead of exposing a wall-like vertical face a kart could clip.
+position = Vector3(7, 1.3291, 22)
+rotation_degrees = Vector3(0, 0, 15)
+mesh = SubResource("Mesh_ramp")
+
+[node name="RampUpCollision" type="CollisionShape3D" parent="Geometry"]
+position = Vector3(7, 1.3291, 22)
+rotation_degrees = Vector3(0, 0, 15)
+shape = SubResource("Shape_ramp")
+
+[node name="RampDown" type="MeshInstance3D" parent="Geometry"]
+position = Vector3(23, 1.3291, 22)
+rotation_degrees = Vector3(0, 0, -15)
+mesh = SubResource("Mesh_ramp")
+
+[node name="RampDownCollision" type="CollisionShape3D" parent="Geometry"]
+position = Vector3(23, 1.3291, 22)
+rotation_degrees = Vector3(0, 0, -15)
+shape = SubResource("Shape_ramp")
+
+[node name="BankedCornerOverlay" type="MeshInstance3D" parent="Geometry"]
+# PLACEHOLDER (Phase 4 replaces with curve-aligned banked geometry): a fixed
+# world-space roll approximates banking on top of the existing flat curve
+# collision instead of true tangent-aligned banked geometry.
+position = Vector3(48.5, -0.2, -8)
+rotation_degrees = Vector3(0, 113.6236, 8)
+mesh = SubResource("Mesh_bank")
+
+[node name="BankedCornerOverlayCollision" type="CollisionShape3D" parent="Geometry"]
+position = Vector3(48.5, -0.2, -8)
+rotation_degrees = Vector3(0, 113.6236, 8)
+shape = SubResource("Shape_bank")
+
+[node name="OuterNorth" type="MeshInstance3D" parent="Geometry"]
+position = Vector3(0, 1, -30)
+mesh = SubResource("Mesh_wall_x")
+
+[node name="OuterNorthCollision" type="CollisionShape3D" parent="Geometry"]
+position = Vector3(0, 1, -30)
+shape = SubResource("Shape_wall_x")
+
+[node name="OuterSouth" type="MeshInstance3D" parent="Geometry"]
+position = Vector3(0, 1, 30)
+mesh = SubResource("Mesh_wall_x")
+
+[node name="OuterSouthCollision" type="CollisionShape3D" parent="Geometry"]
+position = Vector3(0, 1, 30)
+shape = SubResource("Shape_wall_x")
+
+[node name="OuterEast" type="MeshInstance3D" parent="Geometry"]
+position = Vector3(60, 1, 0)
+mesh = SubResource("Mesh_wall_z")
+
+[node name="OuterEastCollision" type="CollisionShape3D" parent="Geometry"]
+position = Vector3(60, 1, 0)
+shape = SubResource("Shape_wall_z")
+
+[node name="OuterWest" type="MeshInstance3D" parent="Geometry"]
+position = Vector3(-60, 1, 0)
+mesh = SubResource("Mesh_wall_z")
+
+[node name="OuterWestCollision" type="CollisionShape3D" parent="Geometry"]
+position = Vector3(-60, 1, 0)
+shape = SubResource("Shape_wall_z")
+
+[node name="InnerNorth" type="MeshInstance3D" parent="Geometry"]
+position = Vector3(0, 1, -14.5)
+mesh = SubResource("Mesh_inner_x")
+
+[node name="InnerNorthCollision" type="CollisionShape3D" parent="Geometry"]
+position = Vector3(0, 1, -14.5)
+shape = SubResource("Shape_inner_x")
+
+[node name="InnerSouth" type="MeshInstance3D" parent="Geometry"]
+position = Vector3(0, 1, 14.5)
+mesh = SubResource("Mesh_inner_x")
+
+[node name="InnerSouthCollision" type="CollisionShape3D" parent="Geometry"]
+position = Vector3(0, 1, 14.5)
+shape = SubResource("Shape_inner_x")
+
+[node name="InnerEast" type="MeshInstance3D" parent="Geometry"]
+position = Vector3(30, 1, 0)
+mesh = SubResource("Mesh_inner_z")
+
+[node name="InnerEastCollision" type="CollisionShape3D" parent="Geometry"]
+position = Vector3(30, 1, 0)
+shape = SubResource("Shape_inner_z")
+
+[node name="InnerWest" type="MeshInstance3D" parent="Geometry"]
+position = Vector3(-30, 1, 0)
+mesh = SubResource("Mesh_inner_z")
+
+[node name="InnerWestCollision" type="CollisionShape3D" parent="Geometry"]
+position = Vector3(-30, 1, 0)
+shape = SubResource("Shape_inner_z")
+
+[node name="Environment" type="Node3D" parent="."]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="Environment"]
+environment = SubResource("Environment_world")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="Environment"]
+rotation_degrees = Vector3(-58, -28, 0)
+light_energy = 1.15
+shadow_enabled = true
+
+[node name="RacingLine" type="Path3D" parent="."]
+script = ExtResource("2_line")
+
+[node name="Checkpoints" type="Node3D" parent="."]
+
+[node name="Checkpoint00" type="Area3D" parent="Checkpoints"]
+position = Vector3(0, 1, 22)
+collision_layer = 16
+collision_mask = 2
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Checkpoints/Checkpoint00"]
+shape = SubResource("Shape_checkpoint_x")
+
+[node name="RespawnPoint" type="Marker3D" parent="Checkpoints/Checkpoint00"]
+position = Vector3(0, 0, 0)
+rotation_degrees = Vector3(0, -90, 0)
+
+[node name="Checkpoint01" type="Area3D" parent="Checkpoints"]
+position = Vector3(52, 1, 0)
+collision_layer = 16
+collision_mask = 2
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Checkpoints/Checkpoint01"]
+shape = SubResource("Shape_checkpoint_z")
+
+[node name="RespawnPoint" type="Marker3D" parent="Checkpoints/Checkpoint01"]
+position = Vector3(0, 0, 0)
+rotation_degrees = Vector3(0, 180, 0)
+
+[node name="Checkpoint02" type="Area3D" parent="Checkpoints"]
+position = Vector3(0, 1, -22)
+collision_layer = 16
+collision_mask = 2
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Checkpoints/Checkpoint02"]
+shape = SubResource("Shape_checkpoint_x")
+
+[node name="RespawnPoint" type="Marker3D" parent="Checkpoints/Checkpoint02"]
+position = Vector3(0, 0, 0)
+rotation_degrees = Vector3(0, 90, 0)
+
+[node name="Checkpoint03" type="Area3D" parent="Checkpoints"]
+position = Vector3(-52, 1, 0)
+collision_layer = 16
+collision_mask = 2
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Checkpoints/Checkpoint03"]
+shape = SubResource("Shape_checkpoint_z")
+
+[node name="RespawnPoint" type="Marker3D" parent="Checkpoints/Checkpoint03"]
+position = Vector3(0, 0, 0)
+
+[node name="StartGrid" type="Node3D" parent="."]
+
+[node name="Grid01" type="Marker3D" parent="StartGrid"]
+position = Vector3(-2, 0.5, 20)
+rotation_degrees = Vector3(0, -90, 0)
+
+[node name="Grid02" type="Marker3D" parent="StartGrid"]
+position = Vector3(-6, 0.5, 24)
+rotation_degrees = Vector3(0, -90, 0)
+
+[node name="Grid03" type="Marker3D" parent="StartGrid"]
+position = Vector3(-10, 0.5, 20)
+rotation_degrees = Vector3(0, -90, 0)
+
+[node name="Grid04" type="Marker3D" parent="StartGrid"]
+position = Vector3(-14, 0.5, 24)
+rotation_degrees = Vector3(0, -90, 0)
+
+[node name="Grid05" type="Marker3D" parent="StartGrid"]
+position = Vector3(-18, 0.5, 20)
+rotation_degrees = Vector3(0, -90, 0)
+
+[node name="Grid06" type="Marker3D" parent="StartGrid"]
+position = Vector3(-22, 0.5, 24)
+rotation_degrees = Vector3(0, -90, 0)
+
+[node name="Grid07" type="Marker3D" parent="StartGrid"]
+position = Vector3(-26, 0.5, 20)
+rotation_degrees = Vector3(0, -90, 0)
+
+[node name="Grid08" type="Marker3D" parent="StartGrid"]
+position = Vector3(-28, 0.5, 24)
+rotation_degrees = Vector3(0, -90, 0)
+
+[node name="ItemBoxes" type="Node3D" parent="."]
+
+[node name="BoostPads" type="Node3D" parent="."]
+
+[node name="JumpPads" type="Node3D" parent="."]
+
+[node name="OffroadZones" type="Node3D" parent="."]
+
+[node name="Hazards" type="Node3D" parent="."]
+
+[node name="KillZones" type="Node3D" parent="."]
+
+[node name="MovingObstacles" type="Node3D" parent="."]
+
+[node name="Shortcuts" type="Node3D" parent="."]
