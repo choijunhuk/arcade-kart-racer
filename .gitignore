@@ -1,0 +1,15 @@
+# Godot
+.godot/
+*.import
+export_presets.cfg
+export/
+*.tmp
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# tooling state
+.omc/
+.claude/settings.local.json
