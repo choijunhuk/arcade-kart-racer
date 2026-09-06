@@ -135,26 +135,24 @@ res://
 │   │   ├── input_provider.gd
 │   │   ├── player_input_provider.gd
 │   │   └── input_actions.gd
-│   ├── math/
-│   ├── scene_loader.gd
-│   └── object_pool.gd
-├── kart/
-├── race/
+│   └── math/.gitkeep
+├── kart/kart_state.gd
+├── race/race_state.gd
 ├── track/
 │   ├── track.gd
+│   ├── racing_line.gd
 │   ├── track_validator.gd
 │   ├── track_template.tscn
-│   ├── elements/
 │   └── tracks/test_loop/test_loop.tscn
 ├── items/
 │   ├── base/
 │   └── instances/{rocket_dart,hunter_drone,spike_mine,nitro_can,
 │                  aegis_bubble,pulse_blast,storm_beacon}/
-├── ai/
-├── camera/
+├── ai/.gitkeep
+├── camera/.gitkeep
 ├── ui/{theme,hud,menus,results,components}/
 ├── audio/placeholder/
-├── effects/
+├── effects/.gitkeep
 ├── data/
 │   ├── schemas/
 │   ├── karts/
@@ -217,9 +215,9 @@ A track root uses `track/track.gd` and requires these direct children:
 Runtime `_ready()` validation reports missing required nodes with `push_error`.
 The headless validator additionally checks the Phase 0 facts it can prove:
 checkpoint count, grid count and proximity to the racing line, respawn marker
-presence, and racing-line closure. Checks requiring item boxes, kill-zone
-coverage, raycast ground proof, or production racing-line offset metadata are
-reported as Phase-later warnings rather than false failures.
+presence and ground contact, increasing checkpoint offsets, and racing-line
+closure. Checks requiring item boxes or kill-zone coverage are reported as
+Phase-later warnings rather than false failures.
 
 ## Testing and verification
 
@@ -247,7 +245,13 @@ reported as Phase-later warnings rather than false failures.
   skeleton without Phase 10 content or playback policy.
 - The greybox oval is assembled from static primitive segments rather than a
   procedural mesh, making the `.tscn` inspectable and editable without tools.
+- The Phase 0 racing line is constructed through `Curve3D.add_point()` from a
+  typed point list because hand-authoring Godot's private packed curve payload
+  produced invalid control-point data; authored metadata replaces it in Phase 4.
 - The Phase 0 validator treats Phase 4-only requirements as explicit warnings,
   preventing scaffolding from pretending to provide item/kill-zone guarantees.
+- macOS uses `/etc/ssl/cert.pem` through a platform-specific project override
+  so sandboxed headless runs do not require keychain access; other platforms
+  keep Godot's system-certificate default.
 - Existing vendored GUT 9.6.1 is used unchanged and enabled through
   `project.godot`; no dependency download step is introduced.
