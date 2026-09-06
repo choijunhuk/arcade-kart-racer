@@ -104,9 +104,6 @@ pointer/emulate_touch_from_mouse=false
 3d_physics/layer_8="kill_zone"
 3d_physics/layer_9="shortcut_marker"
 
-[network]
-
-tls/certificate_bundle_override.macos="/etc/ssl/cert.pem"
 
 [physics]
 
