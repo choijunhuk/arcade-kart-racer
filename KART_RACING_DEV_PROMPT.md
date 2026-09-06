@@ -353,7 +353,7 @@ res://
 │   ├── hit_flash.gdshader
 │   └── impact_effect.tscn
 ├── data/
-│   ├── schemas/ (kart_data.gd, driver_data.gd, item_data.gd, track_data.gd, ai_difficulty_profile.gd, physics_tuning.gd, item_table_data.gd, terrain_data.gd)
+│   ├── schemas/ (kart_data.gd, driver_data.gd, item_data.gd, ai_item_use_profile.gd, track_data.gd, ai_difficulty_profile.gd, physics_tuning.gd, feel_tuning.gd, item_table_data.gd, terrain_data.gd)
 │   ├── karts/ (*.tres)
 │   ├── drivers/ (*.tres)
 │   ├── items/ (*.tres)
@@ -401,7 +401,7 @@ res://
 | `Track` | track/ | 필수 노드 조회 API, 트랙 메타, 검증 | 게임플레이 판정 |
 | `RacingLine` | track/ | `Curve3D` 베이크, `offset_at(pos)`, `curvature_at(offset)`, `tangent_at`, `sample(offset)` | AI 판단 |
 | `ItemManager` | items/ | 룰렛, 확률표 조회, 아이템 인스턴스 생성/풀, 사용 처리, 활성 발사체 목록 | 개별 아이템 행동 |
-| `ItemBase` | items/base | 공통 인터페이스: `activate(owner)`, `tick(dt)`, `on_hit(target)`, `expire()` | — |
+| `ItemBase` | items/base | 공통 인터페이스: `setup(data, owner_kart)`, `activate(input_frame)`, `tick(dt)`, `on_hit(target)`, `expire()` | — |
 | `AIController` | ai/ | 틱 레이트, 하위 모듈 조합, `InputFrame` 생성 | 물리 |
 | `AINavigator` | ai/ | 목표 지점(룩어헤드), 레인 오프셋, 지름길 선택 | 조향 계산 |
 | `AIDriver` | ai/ | 조향 PD, 목표 속도, 브레이크, 드리프트 시작/해제 | 아이템 |
@@ -826,7 +826,7 @@ Track (Node3D) [track.gd]
 - 드리프트 오프셋: `drift_dir` 반대쪽으로 `drift_side_offset`(0.7m) + 약간 롤(2°).
 - 셰이크: 트라우마 모델. `trauma ∈ [0,1]`, 흔들림 = `trauma²` × 노이즈. 소스: 벽 정면(0.5), 착지(수직 속도 비례 0.2~0.5), 피격(0.6), 폭발 근접(거리 감쇠). 감쇠 `trauma_decay`(1.5/s). 최대 회전 흔들림 2°, 위치 0.15m — **가독성 우선**.
 - 뒤돌아보기: `look_back` 입력 시 카메라를 앞쪽으로 반전(0.15s 보간).
-- 카운트다운/결과 연출용 `CinematicCamera`는 선택(Phase 9).
+- 카운트다운/결과 연출용 `CinematicCamera`는 선택(Phase 8 카메라 작업에 포함, 시간 부족 시 Phase 13으로 이월).
 - 충돌: 카메라-벽 간 `SpringArm3D` 또는 레이캐스트로 클리핑 방지.
 
 ---
@@ -887,7 +887,7 @@ Track (Node3D) [track.gd]
 - SFX 풀: `AudioStreamPlayer3D` 16개 풀, 우선순위 기반 재사용. 이름 → 스트림은 `SfxLibrary` Resource.
 - 카테고리: 부스트, 충돌(벽/카트), 피격, 아이템 발사/명중/획득/룰렛, 점프/착지, 카운트다운, 순위 변동, 완주.
 - BGM: 메뉴/레이스/결과 3곡. 최종 랩에 피치 +3% 또는 레이어 추가(옵션). 크로스페이드 전환.
-- 플레이스홀더: `AudioStreamGenerator`로 합성한 톤 또는 CC0 샘플. 실제 에셋 교체는 Phase 13.
+- 플레이스홀더: Phase 10까지는 `AudioStreamGenerator`로 합성한 톤 또는 CC0 샘플로 전 카테고리를 채운다. 최종 오디오 에셋(BGM 3곡 포함) 교체는 Phase 13에서 비주얼과 함께 진행한다.
 
 ---
 
@@ -910,18 +910,34 @@ class_name KartData extends Resource
 @export var body_color: Color
 
 class_name DriverData extends Resource
-@export var id, display_name, portrait: Texture2D, mesh_scene
-@export var stat_mods: Dictionary   # {"max_speed": +0.03, "handling": -0.05} 소폭 보정만
+@export var id: StringName
+@export var display_name: String
+@export var portrait: Texture2D
+@export var mesh_scene: PackedScene
+@export var stat_mods: Dictionary = {}   # {"max_speed": 0.03, "handling": -0.05} 소폭 보정만
 @export var voice_set: StringName
 
 class_name ItemData extends Resource
-@export var id, display_name, icon, scene: PackedScene, category: ItemCategory
-@export var power, duration, cooldown, lifetime: float
-@export var max_bounces: int
-@export var ai_use_profile: AIItemUseProfile   # 하위 Resource
+@export var id: StringName
+@export var display_name: String
+@export var icon: Texture2D
+@export var scene: PackedScene
+@export var category: ItemCategory
+@export var power: float = 1.0
+@export var duration: float = 0.0
+@export var cooldown: float = 0.3
+@export var lifetime: float = 6.0
+@export var max_bounces: int = 0
+@export var ai_use_profile: AIItemUseProfile   # 하위 Resource (ai_item_use_profile.gd)
 
 class_name TrackData extends Resource
-@export var id, display_name, scene, laps_default, preview, bgm, minimap_line_points: PackedVector2Array
+@export var id: StringName
+@export var display_name: String
+@export var scene: PackedScene
+@export var laps_default: int = 3
+@export var preview: Texture2D
+@export var bgm: AudioStream
+@export var minimap_line_points: PackedVector2Array
 
 class_name AIDifficultyProfile extends Resource   # 13.6 항목 전부
 
@@ -1001,7 +1017,7 @@ var tick: int
 **DoD**: 7종 모두 획득·사용·명중·소멸·쿨다운 동작. AI가 아이템을 상황에 맞게 사용. 12.4 시뮬 통계 출력, 1위 피격이 레이스당 평균 3회 이하, 8위 카트의 순위 상승 평균 ≥ 1.5. 유닛 테스트: 확률표 보간, 연속 방지, 실드 흡수, 반사 횟수, 리더 타깃 선택. **사용자 판정: "아이템전이 짜증보다 재미가 크다."**
 
 ### Phase 8 — 카메라 & Game Feel
-**작업**: `RaceCamera` 완성(스프링, FOV, 셰이크 트라우마, 뒤돌아보기, 클리핑), 17장 표 전체 구현, 스피드 라인 셰이더, 히트 스톱, UI 펀치 애니, 서스펜션 bob, 파티클 상한.
+**작업**: `RaceCamera` 완성(스프링, FOV, 셰이크 트라우마, 뒤돌아보기, 클리핑), `CinematicCamera`(선택), 17장 표 전체 구현, 스피드 라인 셰이더, 히트 스톱, UI 펀치 애니, 서스펜션 bob, 파티클 상한.
 **DoD**: 17장 항목별 체크리스트 전부 데모 가능. 셰이크·FOV 설정 0%에서도 플레이 가능. 8대 주행 시 60fps(개발 머신 기준, DebugOverlay로 확인).
 
 ### Phase 9 — UI
@@ -1021,7 +1037,7 @@ var tick: int
 **DoD**: 모든 트랙 검증 + AI 시뮬 통과. Grand Prix 4트랙 완주 → 종합 순위. 고스트 재생 오차 없음(결정론 확인).
 
 ### Phase 13 — 폴리시 & 최적화 & 에셋 교체
-**작업**: CC0 에셋으로 카트/드라이버/트랙 비주얼 교체(플레이스홀더 목록을 DEVLOG에 관리), LOD, 파티클 품질 옵션, 오브젝트 풀 점검, 로딩 화면, 익스포트 프리셋(Windows/macOS/Linux), 빌드 스크립트.
+**작업**: CC0 에셋으로 카트/드라이버/트랙 비주얼 및 오디오(SFX/BGM) 교체(플레이스홀더 목록을 DEVLOG에 관리), LOD, 파티클 품질 옵션, 오브젝트 풀 점검, 로딩 화면, 익스포트 프리셋(Windows/macOS/Linux), 빌드 스크립트.
 **DoD**: 익스포트 빌드 3플랫폼 실행. 저사양 옵션에서 12대 카트 60fps. Placeholder 잔존 목록 0 또는 명시.
 
 ### Phase 14 — 로컬 멀티플레이 (분할 화면)
