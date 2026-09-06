@@ -21,6 +21,7 @@ func _validate_requested_track() -> void:
 		return
 	var track: Node = (resource as PackedScene).instantiate()
 	root.add_child(track)
+	await physics_frame
 	var errors: PackedStringArray = _collect_errors(track)
 	_print_phase_later_warnings(track)
 	if not errors.is_empty():
@@ -47,6 +48,8 @@ func _collect_errors(track: Node) -> PackedStringArray:
 	_validate_checkpoint_contract(checkpoints, errors)
 	_validate_grid_contract(start_grid, racing_line, errors)
 	_validate_racing_line(racing_line, errors)
+	_validate_checkpoint_offsets(checkpoints, racing_line, errors)
+	_validate_respawn_ground(checkpoints, track, errors)
 	return errors
 
 
@@ -92,6 +95,38 @@ func _validate_racing_line(racing_line: Path3D, errors: PackedStringArray) -> vo
 		errors.append("RacingLine must close within %.1fm" % CLOSED_LINE_DISTANCE)
 
 
+func _validate_checkpoint_offsets(checkpoints: Node, racing_line: Path3D, errors: PackedStringArray) -> void:
+	if checkpoints == null or racing_line == null or racing_line.curve == null:
+		return
+	var previous_offset: float = -1.0
+	for checkpoint: Node in checkpoints.get_children():
+		if not checkpoint is Node3D:
+			continue
+		var local_position: Vector3 = racing_line.to_local((checkpoint as Node3D).global_position)
+		var offset: float = racing_line.curve.get_closest_offset(local_position)
+		if offset <= previous_offset:
+			errors.append("Checkpoint offsets must increase in child order at %s" % checkpoint.name)
+		previous_offset = offset
+
+
+func _validate_respawn_ground(checkpoints: Node, track: Node, errors: PackedStringArray) -> void:
+	if checkpoints == null or not track is Node3D:
+		return
+	var world: World3D = (track as Node3D).get_world_3d()
+	var space_state: PhysicsDirectSpaceState3D = world.direct_space_state
+	for checkpoint: Node in checkpoints.get_children():
+		var respawn: Marker3D = checkpoint.get_node_or_null("RespawnPoint") as Marker3D
+		if respawn == null:
+			continue
+		var query: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(
+			respawn.global_position + Vector3.UP,
+			respawn.global_position + Vector3.DOWN * 5.0,
+			1,
+		)
+		if space_state.intersect_ray(query).is_empty():
+			errors.append("RespawnPoint for %s has no world ground below it" % checkpoint.name)
+
+
 func _print_phase_later_warnings(track: Node) -> void:
 	var item_boxes: Node = track.get_node_or_null("ItemBoxes")
 	if item_boxes == null or item_boxes.get_child_count() == 0:
@@ -99,4 +134,3 @@ func _print_phase_later_warnings(track: Node) -> void:
 	var kill_zones: Node = track.get_node_or_null("KillZones")
 	if kill_zones == null or kill_zones.get_child_count() == 0:
 		print("WARNING: Kill-zone coverage check skipped until Phase 4")
-	print("WARNING: Respawn ground raycast and monotonic offset checks skipped until Phase 4 metadata exists")
