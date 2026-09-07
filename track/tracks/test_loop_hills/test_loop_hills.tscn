@@ -1,11 +1,13 @@
-[gd_scene load_steps=27 format=3]
+[gd_scene load_steps=29 format=3]
 
 [ext_resource type="Script" path="res://track/track.gd" id="1_track"]
 [ext_resource type="Script" path="res://track/racing_line.gd" id="2_line"]
+[ext_resource type="Script" path="res://track/elements/checkpoint.gd" id="checkpoint_script"]
 [ext_resource type="PackedScene" path="res://track/elements/offroad_zone.tscn" id="3_offroad"]
 [ext_resource type="PackedScene" path="res://track/elements/kill_zone.tscn" id="4_kill"]
 [ext_resource type="Resource" path="res://data/terrain/dirt.tres" id="5_dirt"]
 [ext_resource type="PackedScene" path="res://track/elements/jump_pad.tscn" id="6_jump"]
+[ext_resource type="PackedScene" path="res://track/elements/item_box.tscn" id="item_box"]
 
 [sub_resource type="StandardMaterial3D" id="Material_road"]
 albedo_color = Color(0.28, 0.3, 0.34, 1)
@@ -291,6 +293,7 @@ script = ExtResource("2_line")
 position = Vector3(0, 1, 22)
 collision_layer = 16
 collision_mask = 2
+script = ExtResource("checkpoint_script")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Checkpoints/Checkpoint00"]
 shape = SubResource("Shape_checkpoint_x")
@@ -303,6 +306,7 @@ rotation_degrees = Vector3(0, -90, 0)
 position = Vector3(52, 1, 0)
 collision_layer = 16
 collision_mask = 2
+script = ExtResource("checkpoint_script")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Checkpoints/Checkpoint01"]
 shape = SubResource("Shape_checkpoint_z")
@@ -315,6 +319,7 @@ rotation_degrees = Vector3(0, 180, 0)
 position = Vector3(0, 1, -22)
 collision_layer = 16
 collision_mask = 2
+script = ExtResource("checkpoint_script")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Checkpoints/Checkpoint02"]
 shape = SubResource("Shape_checkpoint_x")
@@ -327,6 +332,7 @@ rotation_degrees = Vector3(0, 90, 0)
 position = Vector3(-52, 1, 0)
 collision_layer = 16
 collision_mask = 2
+script = ExtResource("checkpoint_script")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Checkpoints/Checkpoint03"]
 shape = SubResource("Shape_checkpoint_z")
@@ -369,6 +375,24 @@ position = Vector3(-28, 0.5, 24)
 rotation_degrees = Vector3(0, -90, 0)
 
 [node name="ItemBoxes" type="Node3D" parent="."]
+
+[node name="ItemBox00" parent="ItemBoxes" instance=ExtResource("item_box")]
+position = Vector3(-30, 0.6, 22)
+
+[node name="ItemBox01" parent="ItemBoxes" instance=ExtResource("item_box")]
+position = Vector3(45, 0.6, 16)
+
+[node name="ItemBox02" parent="ItemBoxes" instance=ExtResource("item_box")]
+position = Vector3(45, 0.6, -16)
+
+[node name="ItemBox03" parent="ItemBoxes" instance=ExtResource("item_box")]
+position = Vector3(30, 0.6, -22)
+
+[node name="ItemBox04" parent="ItemBoxes" instance=ExtResource("item_box")]
+position = Vector3(-45, 0.6, -16)
+
+[node name="ItemBox05" parent="ItemBoxes" instance=ExtResource("item_box")]
+position = Vector3(-45, 0.6, 16)
 
 [node name="BoostPads" type="Node3D" parent="."]
 
