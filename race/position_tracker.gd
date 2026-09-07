@@ -13,7 +13,7 @@ class KartRecord extends RefCounted:
 	var progress: float = 0.0
 	var cached_offset: float = -1.0
 	var position: int = 0
-	var active_shortcut: Shortcut = null
+	var active_shortcut: TrackShortcut = null
 
 
 var _lap_tracker: LapTracker
@@ -45,8 +45,8 @@ func setup(track: TrackRoot, lap_tracker: LapTracker) -> void:
 	if shortcuts == null:
 		return
 	for child: Node in shortcuts.get_children():
-		if child is Shortcut:
-			var shortcut: Shortcut = child as Shortcut
+		if child is TrackShortcut:
+			var shortcut: TrackShortcut = child as TrackShortcut
 			shortcut.kart_entered.connect(_on_shortcut_entered.bind(shortcut))
 			shortcut.kart_exited.connect(_on_shortcut_exited.bind(shortcut))
 
@@ -188,7 +188,7 @@ func _apply_ranking(new_ranking: Array[int]) -> void:
 		record.position = new_position
 
 
-func _on_shortcut_entered(body: Node3D, shortcut: Shortcut) -> void:
+func _on_shortcut_entered(body: Node3D, shortcut: TrackShortcut) -> void:
 	var kart: KartController = body as KartController
 	if kart == null:
 		return
@@ -197,7 +197,7 @@ func _on_shortcut_entered(body: Node3D, shortcut: Shortcut) -> void:
 		record.active_shortcut = shortcut
 
 
-func _on_shortcut_exited(body: Node3D, shortcut: Shortcut) -> void:
+func _on_shortcut_exited(body: Node3D, shortcut: TrackShortcut) -> void:
 	var kart: KartController = body as KartController
 	if kart == null:
 		return

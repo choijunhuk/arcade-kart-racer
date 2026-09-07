@@ -1,4 +1,4 @@
-class_name Shortcut
+class_name TrackShortcut
 extends Node3D
 
 ## Track element: an alternate route off the main RacingLine. `TriggerArea`
