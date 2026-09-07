@@ -23,6 +23,7 @@ func _ready() -> void:
 	_out_dir = args[0] if args.size() > 0 else DEFAULT_OUT_DIR
 	var seconds: float = float(args[1]) if args.size() > 1 else DEFAULT_SECONDS
 	var interval: float = float(args[2]) if args.size() > 2 else DEFAULT_INTERVAL
+	var drift_on_corners: bool = args.size() > 3 and args[3] == "drift"
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	_total_ticks = int(seconds * Engine.physics_ticks_per_second)
 	_interval_ticks = maxi(1, int(interval * Engine.physics_ticks_per_second))
@@ -31,7 +32,9 @@ func _ready() -> void:
 	add_child(sandbox)
 	_kart = sandbox.get_node("Kart") as KartController
 	var racing_line: Path3D = sandbox.get_node("TestLoop/RacingLine") as Path3D
-	_kart.set_input_provider(ScriptedInputProvider.new(_kart, racing_line))
+	var provider: ScriptedInputProvider = ScriptedInputProvider.new(_kart, racing_line)
+	provider.set_drift_on_corners(drift_on_corners)
+	_kart.set_input_provider(provider)
 
 
 func _physics_process(_delta: float) -> void:

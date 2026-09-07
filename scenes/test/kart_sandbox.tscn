@@ -1,4 +1,4 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scenes/test/kart_sandbox.gd" id="1_sandbox"]
 [ext_resource type="PackedScene" path="res://track/tracks/test_loop/test_loop.tscn" id="2_track"]
@@ -6,6 +6,7 @@
 [ext_resource type="PackedScene" path="res://camera/race_camera.tscn" id="4_camera"]
 [ext_resource type="Script" path="res://race/kart_collision_resolver.gd" id="6_collision"]
 [ext_resource type="Script" path="res://race/respawn_system.gd" id="7_respawn"]
+[ext_resource type="PackedScene" path="res://ui/hud/drift_meter.tscn" id="8_meter"]
 
 [node name="KartSandbox" type="Node3D"]
 script = ExtResource("1_sandbox")
@@ -25,9 +26,13 @@ script = ExtResource("6_collision")
 [node name="RespawnSystem" type="Node" parent="."]
 script = ExtResource("7_respawn")
 
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="DriftMeter" parent="HUD" instance=ExtResource("8_meter")]
+
 [node name="SandboxLabel" type="Label" parent="."]
 offset_left = 20.0
 offset_top = 840.0
 offset_right = 640.0
 offset_bottom = 880.0
-text = "PHASE 2 — WASD drive | R reset | T track | 1/2/3 weight | B spawn bump dummies"
+text = "PHASE 3 — WASD drive | Shift drift/trick | R reset | T track | 4 hairpin | 1/2/3 weight | B dummies"
