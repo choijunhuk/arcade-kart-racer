@@ -5,12 +5,12 @@ Mario Kart에서 *시스템과 플레이 감각*만 영감을 받은 **완전 �
 
 ## 이 레포의 현재 상태
 
-**Phase 1 — 기본 카트 컨트롤러 완료.**
+**Phase 2 — 아케이드 물리 심화 완료.**
 
-현재 메인 씬은 실제로 주행 가능한 카트(`kart/kart.tscn`), 그레이박스
-타원 트랙, 스프링 추적 카메라, F3 디버그 오버레이가 있는 샌드박스를
-연다. 드리프트/부스트, 레이스 흐름, 아이템, AI는 이후 Phase 범위이며
-아직 구현하지 않았다.
+현재 메인 씬은 실제로 주행 가능한 카트(`kart/kart.tscn`), 전환 가능한
+두 테스트 트랙, 지형 감속, 슬립스트림, 무게 기반 카트 충돌, 피격 반응,
+낙하/리스폰, 스프링 추적 카메라와 F3 디버그 오버레이가 있는 샌드박스를
+연다. 드리프트/일반 부스트는 Phase 3, 레이스 흐름·아이템·AI는 이후 범위다.
 
 - [`KART_RACING_DEV_PROMPT.md`](KART_RACING_DEV_PROMPT.md) — 개발 프롬프트 전체 (아키텍처, 물리, 드리프트, 아이템, AI, Phase 0~15, DoD, 작업 규칙)
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — 실제 경로와 시스템 경계
@@ -29,9 +29,10 @@ Mario Kart에서 *시스템과 플레이 감각*만 영감을 받은 **완전 �
 /opt/homebrew/bin/godot --path . scenes/test/kart_sandbox.tscn
 ```
 
-조작: 가속 `W`/RT, 브레이크·후진 `S`/LT, 조향 `A`/`D`/좌스틱, 드리프트
-`Space`/RB(Phase 3까지는 입력만 받고 효과 없음), `R`로 그리드 1번 슬롯
-리셋. F3으로 디버그 오버레이(속도/상태/접지/슬라이더)를 켜고 끈다.
+조작: 가속 `W`/RT, 브레이크·후진 `S`/LT, 조향 `A`/`D`/좌스틱,
+`R` 리셋, `T` 평지/언덕 트랙 전환, `1`/`2`/`3` light/medium/heavy 전환,
+`B` 충돌용 더미 카트 3대 생성. `Space`/RB 드리프트는 Phase 3까지 효과가
+없다. F3으로 terrain/slipstream/hit/invulnerable/air_time 포함 값을 본다.
 
 ## 검증
 

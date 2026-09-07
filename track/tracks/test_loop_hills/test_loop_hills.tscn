@@ -1,7 +1,10 @@
-[gd_scene load_steps=21 format=3]
+[gd_scene load_steps=26 format=3]
 
 [ext_resource type="Script" path="res://track/track.gd" id="1_track"]
 [ext_resource type="Script" path="res://track/racing_line.gd" id="2_line"]
+[ext_resource type="PackedScene" path="res://track/elements/offroad_zone.tscn" id="3_offroad"]
+[ext_resource type="PackedScene" path="res://track/elements/kill_zone.tscn" id="4_kill"]
+[ext_resource type="Resource" path="res://data/terrain/dirt.tres" id="5_dirt"]
 
 [sub_resource type="StandardMaterial3D" id="Material_road"]
 albedo_color = Color(0.28, 0.3, 0.34, 1)
@@ -47,6 +50,13 @@ size = Vector3(120, 2, 1)
 
 [sub_resource type="BoxShape3D" id="Shape_wall_z"]
 size = Vector3(1, 2, 60)
+
+[sub_resource type="BoxMesh" id="Mesh_wall_z_gap"]
+material = SubResource("Material_wall")
+size = Vector3(1, 2, 20)
+
+[sub_resource type="BoxShape3D" id="Shape_wall_z_gap"]
+size = Vector3(1, 2, 20)
 
 [sub_resource type="BoxShape3D" id="Shape_inner_x"]
 size = Vector3(60, 2, 1)
@@ -155,23 +165,21 @@ mesh = SubResource("Mesh_road_short")
 # box is longer than its visible span and its low end sits below y=0 on
 # purpose: that buries the end cap under the pre-existing flat collision
 # floor instead of exposing a wall-like vertical face a kart could clip.
-position = Vector3(7, 1.3291, 22)
-rotation_degrees = Vector3(0, 0, 15)
+position = Vector3(7, 0.625, 22)
+rotation_degrees = Vector3(0, 0, 5.3558)
 mesh = SubResource("Mesh_ramp")
 
 [node name="RampUpCollision" type="CollisionShape3D" parent="Geometry"]
-position = Vector3(7, 1.3291, 22)
-rotation_degrees = Vector3(0, 0, 15)
+position = Vector3(7, 0.625, 22)
+rotation_degrees = Vector3(0, 0, 5.3558)
 shape = SubResource("Shape_ramp")
 
-[node name="RampDown" type="MeshInstance3D" parent="Geometry"]
-position = Vector3(23, 1.3291, 22)
-rotation_degrees = Vector3(0, 0, -15)
+[node name="LedgePlatform" type="MeshInstance3D" parent="Geometry"]
+position = Vector3(23, 1.25, 22)
 mesh = SubResource("Mesh_ramp")
 
-[node name="RampDownCollision" type="CollisionShape3D" parent="Geometry"]
-position = Vector3(23, 1.3291, 22)
-rotation_degrees = Vector3(0, 0, -15)
+[node name="LedgePlatformCollision" type="CollisionShape3D" parent="Geometry"]
+position = Vector3(23, 1.25, 22)
 shape = SubResource("Shape_ramp")
 
 [node name="BankedCornerOverlay" type="MeshInstance3D" parent="Geometry"]
@@ -203,13 +211,21 @@ mesh = SubResource("Mesh_wall_x")
 position = Vector3(0, 1, 30)
 shape = SubResource("Shape_wall_x")
 
-[node name="OuterEast" type="MeshInstance3D" parent="Geometry"]
-position = Vector3(60, 1, 0)
-mesh = SubResource("Mesh_wall_z")
+[node name="OuterEastNorth" type="MeshInstance3D" parent="Geometry"]
+position = Vector3(60, 1, -20)
+mesh = SubResource("Mesh_wall_z_gap")
 
-[node name="OuterEastCollision" type="CollisionShape3D" parent="Geometry"]
-position = Vector3(60, 1, 0)
-shape = SubResource("Shape_wall_z")
+[node name="OuterEastNorthCollision" type="CollisionShape3D" parent="Geometry"]
+position = Vector3(60, 1, -20)
+shape = SubResource("Shape_wall_z_gap")
+
+[node name="OuterEastSouth" type="MeshInstance3D" parent="Geometry"]
+position = Vector3(60, 1, 20)
+mesh = SubResource("Mesh_wall_z_gap")
+
+[node name="OuterEastSouthCollision" type="CollisionShape3D" parent="Geometry"]
+position = Vector3(60, 1, 20)
+shape = SubResource("Shape_wall_z_gap")
 
 [node name="OuterWest" type="MeshInstance3D" parent="Geometry"]
 position = Vector3(-60, 1, 0)
@@ -355,9 +371,19 @@ rotation_degrees = Vector3(0, -90, 0)
 
 [node name="OffroadZones" type="Node3D" parent="."]
 
+[node name="DirtCorner" parent="OffroadZones" instance=ExtResource("3_offroad")]
+position = Vector3(-43, 0, 14)
+rotation_degrees = Vector3(0, -35, 0)
+scale = Vector3(16, 1, 8)
+terrain = ExtResource("5_dirt")
+
 [node name="Hazards" type="Node3D" parent="."]
 
 [node name="KillZones" type="Node3D" parent="."]
+
+[node name="FallPlane" parent="KillZones" instance=ExtResource("4_kill")]
+position = Vector3(0, -5, 0)
+scale = Vector3(150, 1, 90)
 
 [node name="MovingObstacles" type="Node3D" parent="."]
 

@@ -1,6 +1,6 @@
 # Arcade Kart Racer Architecture
 
-This document is the repository-specific architecture contract for Phase 0. It
+This document is the repository-specific architecture contract through Phase 2. It
 translates sections 6–8 of `KART_RACING_DEV_PROMPT.md` into the concrete paths
 used by this project. Later phases must update this document before changing a
 major boundary or dependency direction.
@@ -19,8 +19,8 @@ major boundary or dependency direction.
    player, AI, replay, network peer, or test double.
 6. Scenes assemble nodes. Scripts own one focused behavior and stay below 400
    lines unless a documented exception is necessary.
-7. Phase 0 establishes contracts and executable greyboxes only. Kart physics,
-   drift, race flow, items, and AI behavior remain outside this phase.
+7. Phase delivery is additive: Phase 2 owns advanced arcade physics while drift,
+   race flow, items, and AI remain behind their later-phase seams.
 
 ## Runtime composition
 
@@ -40,21 +40,23 @@ major boundary or dependency direction.
   `core/autoload/debug_overlay.gd`: F3 overlay, FPS/physics tick display,
   callable watches, and runtime sliders.
 
-The scene graph remains small in Phase 1:
+The scene graph remains small in Phase 2:
 
 ```text
 scenes/main.tscn
 └── Main (Node)
     └── KartSandbox (instanced scenes/test/kart_sandbox.tscn)  [kart_sandbox.gd]
-        ├── TestLoop (instanced track/tracks/test_loop/test_loop.tscn)
+        ├── TestLoop or TestLoopHills (switchable with T)
         ├── Kart (instanced kart/kart.tscn)          [kart_controller.gd]
-        └── RaceCamera (instanced camera/race_camera.tscn)
+        ├── RaceCamera (instanced camera/race_camera.tscn)
+        ├── KartCollisionResolver                    [kart_collision_resolver.gd]
+        └── RespawnSystem                            [respawn_system.gd]
 ```
 
-Phase 0's sandbox was a visual smoke test with a stationary placeholder kart.
-Phase 1's sandbox drives: it wires a `PlayerInputProvider` to the kart,
-targets the camera at it, resets it to the first grid slot with `R`, and
-registers `DebugOverlay` watches/sliders for the §9.10 tuning parameters.
+The sandbox wires a `PlayerInputProvider`, camera, collision resolver, and
+respawn system. `R` resets, `T` swaps the two test tracks, `1/2/3` selects the
+weight class, and `B` creates three input-neutral collision targets. Debug
+watches expose terrain, slipstream, hit, invulnerability, and air time.
 
 ## Domain ownership and dependency direction
 
@@ -68,49 +70,54 @@ scene-tree queries or gameplay orchestration.
 
 Kart code lives in `kart/`. It may read terrain information from `track/` and
 request item use through an explicit `items/` API. It must not reference
-`race/`, `ai/`, or `ui/` directly. Phase 0 provided only `kart/kart_state.gd`;
-Phase 1 adds the drivable controller, physics, and visuals.
+`race/`, `ai/`, or `ui/` directly. Phase 2 fills the terrain, hit, slipstream,
+contact, and air/landing seams while leaving drift and general boost stacking
+for Phase 3.
 
 #### Node tree (`kart/kart.tscn`, spec §6.3)
 
 ```text
 Kart (CharacterBody3D, layer 2 / mask 1)  [kart_controller.gd]
 ├── CollisionShape3D          # BoxShape3D 1.6 x 0.6 x 2.2
+├── BumpArea                  # Area3D, layer/mask 3; kart contact only
+├── TerrainProbe              # Area3D, layer 0 / mask 5; OffroadZone overlap
 ├── GroundRays (Node3D)       # RayCast3D x 5: RayFL, RayFR, RayRL, RayRR, RayCenter (mask 1)
 ├── KartPhysics (Node)        [kart_physics.gd]
+├── TerrainSensor (Node)      [terrain_sensor.gd]
+├── SlipstreamSensor (Node)   [slipstream_sensor.gd]
+│   └── ShapeCast3D           # mask 2, forward slipstream_range
+├── HitReactor (Node)         [hit_reactor.gd]
 └── Visuals (Node3D)          [kart_visuals.gd]
     ├── Body (MeshInstance3D, BoxMesh)
     ├── Driver (MeshInstance3D, CapsuleMesh)
     └── WheelFL / WheelFR / WheelRL / WheelRR (Node3D pivot + static-tilt Mesh child)
 ```
 
-`DriftController`, `BoostController`, `HitReactor`, `TerrainSensor`,
-`ItemSlot`, and `KartAudio` are Phase 2/3 child slots and are intentionally
-absent — `KartController` only ever calls its own neutral stub methods for
-their steps (see below), so their later addition as real sibling nodes is a
-pure addition, not a rewrite.
+`DriftController` and `BoostController` remain Phase 3 slots; `ItemSlot` and
+`KartAudio` remain later slots. Phase 2's slipstream exit bonus deliberately
+travels through `KartPhysics.BoostResult` so BoostController can assume that
+ownership without changing longitudinal physics.
 
 #### Tick order (`KartController._physics_process`, spec §9.3)
 
-Steps 1, 3, 6, 8 are real; steps 2, 4, 5, 7 are stubs returning neutral
-values until their owning component exists, each marked `# TODO(phase-N)`:
+Every Phase 2 step is real except drift; boost is a narrow slipstream-only
+adapter until Phase 3:
 
 ```text
-1. frame   = input_provider.get_frame()          [real] zero-framed while HIT/RESPAWNING/FROZEN
-2. terrain = _sample_terrain()                   [stub -> phase-2 TerrainSensor] neutral multipliers
+1. frame   = input_provider.get_frame()          [real] hit-filtered; zero while RESPAWNING/FROZEN
+2. terrain = _sample_terrain()                   [real] zone > collider metadata > asphalt
 3. ground  = KartPhysics.probe_ground()          [real] 5-ray average, excludes >max_climb_angle hits
 4. drift   = _update_drift(frame, ground)         [stub -> phase-3 DriftController] never drifting
-5. boost   = _update_boost(delta)                [stub -> phase-3 BoostController] x1 multipliers
+5. boost   = _update_boost(delta)                [phase-2] slipstream active/exit multipliers
 6. KartPhysics.integrate(frame, terrain, ground, drift, boost, delta)  [real]
-7. _update_hit_reactor(delta)                    [stub -> phase-2 HitReactor] no-op
-8. _update_state(ground) -> state_changed signal [real] GROUNDED <-> AIRBORNE only this phase
+7. _update_hit_reactor(delta)                    [real] reaction/invulnerability timers
+8. _update_state(ground)                         [real] hit/respawn priority + airborne grace
 ```
 
 `KartVisuals` and `RaceCamera` read only `KartController`'s public API
-(`get_speed`, `get_speed_ratio`, `get_forward`, `get_velocity` — inherited
-from `CharacterBody3D` — `is_grounded`, `get_ground_normal`, `get_state`,
-`get_kart_data`) inside `_process()`, never `_physics_process()`, and never
-write back into physics state (coding rule 6).
+(`get_speed`, `get_lateral_speed`, `get_air_time`, `get_forward`, hit state and
+progress, plus inherited `get_velocity`) inside `_process()`, never
+`_physics_process()`, and never write back into physics state (coding rule 6).
 
 #### Physics model (`kart/kart_physics.gd`)
 
@@ -130,6 +137,17 @@ write back into physics state (coding rule 6).
   `KartPhysics.compute_wall_response(incidence_degrees, tuning) ->
   WallResponse`, so graze/head-on/interpolated speed-and-bounce math is
   unit-testable without a scene tree (spec §9.8).
+- `TerrainSensor` resolves an overlapping `OffroadZone` before ground-collider
+  `terrain` metadata and asphalt fallback. `KartData.offroad_resistance`
+  lerps speed, grip, and drag penalties toward neutral values.
+- `SlipstreamSensor` uses a forward `ShapeCast3D`, a same-direction dot gate,
+  deterministic charge time, and a timed exit multiplier. It never creates a
+  general-purpose boost stack before Phase 3.
+- Airborne state requires more than two consecutive failed ground probes.
+  Landing speed loss is capped and large travel-heading misalignment retains
+  only a tuned fraction of lateral speed.
+- Wall incidence is measured from pre-slide velocity; a continuous wall
+  contact receives one impact response rather than compounding loss per tick.
 
 #### Camera (`camera/race_camera.gd`, spec §16)
 
@@ -141,16 +159,18 @@ shake, and look-back are Phase 3/8.
 ### Race
 
 Future race orchestration lives in `race/`. `RaceManager` will own only the
-race state machine and composition. Lap tracking, position tracking, respawn,
-collision resolution, countdown, and results remain separate nodes/scripts.
-Phase 0 provides only `race/race_state.gd`.
+race state machine and composition. Phase 2 adds `KartCollisionResolver` and
+`RespawnSystem` as separate nodes. The resolver handles BumpArea pairs without
+HIT; respawn runs FADE -> teleport/protect -> FROZEN from physics ticks. A
+caller-supplied transform callable keeps track lookup out of the kart domain.
 
 ### Track
 
 Track scenes live below `track/tracks/`; reusable elements live below
-`track/elements/`. `track/track.gd` exposes and validates required child nodes
-without referencing karts. `track/track_validator.gd` is a headless command
-entrypoint used by `tools/validate_tracks.sh`.
+`track/elements/`. `OffroadZone` declares `TerrainData`; `KillZone` emits typed
+kart entry for `RespawnSystem`. Both test tracks have y=-5 kill planes. The flat
+loop has two grass patches; hills has dirt, a 1.5 m drop, and an east-wall gap.
+`track/track.gd` still validates structure without referencing karts.
 
 ### Items and AI
 
@@ -303,6 +323,8 @@ Phase-later warnings rather than false failures.
   headlessly against both `test_loop.tscn` and `test_loop_hills.tscn`.
 - Parse/import: `/opt/homebrew/bin/godot --headless --path . --import` runs
   before the final parse check; generated `*.uid` files are committed.
+- Phase 2 integration tests exercise mass contact, terrain cap/recovery, wall
+  BUMP/recovery, ledge airborne/landing, and kill-zone respawn using real scenes.
 
 ## Decision log
 
@@ -387,3 +409,21 @@ Phase-later warnings rather than false failures.
   real time, not more physics ticks per simulated second.
 - `tools/validate_tracks.sh` now validates both `test_loop.tscn` and
   `test_loop_hills.tscn` in one run instead of only the default track.
+
+### Phase 2
+
+- Terrain identity travels in `TerrainSample` as the particle/audio hook; no
+  presentation system is pulled forward from later phases.
+- Slipstream exit stays in `BoostResult` and is marked for Phase 3 routing
+  through `BoostController`; no parallel boost stack exists.
+- Wall angles use pre-`move_and_slide()` velocity because the post-slide vector
+  has already lost its normal component. Continuous contact is latched so a
+  head-on penalty is applied once per impact rather than every physics tick.
+- Hit physics remains scalar and deterministic; spin/flip/squash are transforms
+  on `KartVisuals` only. BUMP weakens control, SpinOut/Tumble disable it, and
+  Squash retains control under a speed cap.
+- Respawn timing uses physics-tick counters, never coroutine timers. The
+  StartGrid locator is injected by the sandbox and will be replaced by
+  checkpoint RespawnPoints in Phase 4.
+- The macOS TLS certificate bundle override points to `/etc/ssl/cert.pem` so
+  sandboxed headless runs do not attempt restricted Keychain access.

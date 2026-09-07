@@ -17,12 +17,14 @@ class GroundProbe extends RefCounted:
 	var average_distance: float = -1.0
 
 
-## Neutral terrain sample. TODO(phase-2): replace with `TerrainSensor` output
-## (speed/grip/drag multipliers per surface type).
+## TerrainSensor output consumed by longitudinal and lateral integration.
 class TerrainSample extends RefCounted:
 	var speed_mult: float = 1.0
 	var grip_mult: float = 1.0
 	var drag_mult: float = 1.0
+	var terrain_id: StringName = &"asphalt"
+	## TODO(phase-3): BoostController supplies this hook for boost-pad/item boosts.
+	var ignores_offroad: bool = false
 
 
 ## Neutral drift result. TODO(phase-3): replace with `DriftController` output
@@ -62,6 +64,9 @@ var _kart_data: KartData
 var _vertical_speed: float = 0.0
 var _current_up: Vector3 = Vector3.UP
 var _was_grounded: bool = true
+var _wall_contact_active: bool = false
+
+signal wall_head_on()
 
 
 ## Wires the physics component to its owning body, ground rays, and data.
@@ -131,8 +136,9 @@ func integrate(
 	var forward: Vector3 = -_body.global_transform.basis.z
 	var right: Vector3 = _body.global_transform.basis.x
 	_body.velocity = forward * speed + right * lateral + Vector3.UP * _vertical_speed
+	var incoming_velocity: Vector3 = _body.velocity
 	_body.move_and_slide()
-	_resolve_wall_collisions(dt)
+	_resolve_wall_collisions(dt, incoming_velocity)
 
 
 func _effective_max_speed(terrain: TerrainSample, boost: BoostResult) -> float:
@@ -225,29 +231,38 @@ static func _slerp_up_vector(from: Vector3, to: Vector3, weight: float) -> Vecto
 
 ## Reduces speed on the first tick a landing is detected, capped by
 ## `landing_speed_loss_cap` (spec §9.7).
-## TODO(phase-2): landing alignment — remove part of `lateral` when the landing
-## heading deviates from travel by more than `landing_align_threshold_degrees`.
 func _apply_landing_loss(ground: GroundProbe) -> void:
 	if _was_grounded or not ground.grounded:
 		return
 	var loss: float = clampf(absf(_vertical_speed) * _tuning.landing_speed_loss, 0.0, _tuning.landing_speed_loss_cap)
 	speed *= (1.0 - loss)
+	lateral = compute_landing_lateral(
+		lateral, speed, _tuning.landing_align_threshold_degrees,
+		_tuning.landing_lateral_retention,
+	)
 
 
-func _resolve_wall_collisions(dt: float) -> void:
+func _resolve_wall_collisions(dt: float, incoming_velocity: Vector3) -> void:
+	var found_wall: bool = false
 	for index: int in _body.get_slide_collision_count():
 		var collision: KinematicCollision3D = _body.get_slide_collision(index)
 		var normal: Vector3 = collision.get_normal()
 		if absf(normal.dot(Vector3.UP)) >= _tuning.wall_normal_threshold:
 			continue
-		var travel_dir: Vector3 = _body.velocity.normalized() if _body.velocity.length() > 0.01 else -_body.global_transform.basis.z
-		var incidence_degrees: float = rad_to_deg(travel_dir.angle_to(-normal))
+		found_wall = true
+		_body.global_position += normal * _tuning.wall_push_out * dt
+		if _wall_contact_active:
+			continue
+		var travel_dir: Vector3 = incoming_velocity.normalized() if incoming_velocity.length() > 0.01 else -_body.global_transform.basis.z
+		var incidence_degrees: float = rad_to_deg(asin(clampf(absf(travel_dir.dot(normal)), 0.0, 1.0)))
 		var response: WallResponse = compute_wall_response(incidence_degrees, _tuning)
 		speed *= response.speed_mult
 		lateral *= response.speed_mult
-		_body.global_position += normal * _tuning.wall_push_out * dt
 		if response.bounce_mult > 0.0:
 			_body.global_position += normal * response.bounce_mult * _tuning.wall_bounce_push
+		if incidence_degrees >= _tuning.wall_head_on_angle_degrees:
+			wall_head_on.emit()
+	_wall_contact_active = found_wall
 
 
 ## Pure wall-incidence response (spec §9.8): graze below `wall_graze_angle_degrees`,
@@ -268,3 +283,52 @@ static func compute_wall_response(incidence_degrees: float, tuning: PhysicsTunin
 		response.speed_mult = lerpf(tuning.wall_graze_loss, tuning.wall_head_on_loss, t)
 		response.bounce_mult = lerpf(0.0, tuning.wall_bounce, t)
 	return response
+
+
+## Pure landing correction: large travel/heading misalignment retains only a
+## tunable fraction of lateral velocity; aligned landings keep their slide.
+static func compute_landing_lateral(
+	lateral_speed: float, forward_speed: float, threshold_degrees: float,
+	retention: float,
+) -> float:
+	var angle_degrees: float = rad_to_deg(atan2(absf(lateral_speed), maxf(absf(forward_speed), 0.001)))
+	if angle_degrees <= threshold_degrees:
+		return lateral_speed
+	return lateral_speed * clampf(retention, 0.0, 1.0)
+
+
+## Adds a world-space arcade impulse to the local scalar velocity model.
+func apply_world_delta_velocity(delta_velocity: Vector3) -> void:
+	var forward: Vector3 = -_body.global_transform.basis.z
+	var right: Vector3 = _body.global_transform.basis.x
+	speed += delta_velocity.dot(forward)
+	lateral += delta_velocity.dot(right)
+	_vertical_speed += delta_velocity.y
+
+
+## Applies a one-shot multiplier to forward and lateral motion.
+func scale_speed(factor: float) -> void:
+	speed *= factor
+	lateral *= factor
+
+
+## Caps forward speed against a fraction of the kart's base maximum.
+func cap_speed(max_speed_factor: float) -> void:
+	var cap: float = _kart_data.max_speed * max_speed_factor
+	speed = clampf(speed, -cap, cap)
+
+
+## Clears all local and CharacterBody velocity components for respawn.
+func reset_motion() -> void:
+	speed = 0.0
+	lateral = 0.0
+	_vertical_speed = 0.0
+	air_time = 0.0
+	_body.velocity = Vector3.ZERO
+	_current_up = Vector3.UP
+	_was_grounded = true
+
+
+## Rebinds per-kart handling and mass data after sandbox swaps.
+func set_kart_data(kart_data: KartData) -> void:
+	_kart_data = kart_data

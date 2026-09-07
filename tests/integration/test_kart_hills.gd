@@ -34,6 +34,8 @@ func test_kart_climbs_the_ramp_without_exceeding_the_landing_loss_cap() -> void:
 	var previous_speed: float = kart.get_speed()
 	var was_grounded: bool = kart.is_grounded()
 	var worst_landing_loss_ratio: float = 0.0
+	var saw_airborne: bool = false
+	var saw_landing_after_airborne: bool = false
 	var total_ticks: int = int(SIMULATION_SECONDS * TICKS_PER_SECOND)
 
 	for tick: int in range(total_ticks):
@@ -42,14 +44,19 @@ func test_kart_climbs_the_ramp_without_exceeding_the_landing_loss_cap() -> void:
 		min_y = minf(min_y, kart.global_position.y)
 		var current_speed: float = kart.get_speed()
 		var grounded: bool = kart.is_grounded()
+		saw_airborne = saw_airborne or kart.get_state() == KartState.AIRBORNE
 		if grounded and not was_grounded and previous_speed > 0.1 and current_speed < previous_speed:
 			var loss_ratio: float = (previous_speed - current_speed) / previous_speed
 			worst_landing_loss_ratio = maxf(worst_landing_loss_ratio, loss_ratio)
+		if saw_airborne and grounded:
+			saw_landing_after_airborne = true
 		was_grounded = grounded
 		previous_speed = current_speed
 
 	assert_gte(max_height, MIN_CLIMB_HEIGHT, "kart never climbed the ramp")
 	assert_gte(min_y, MIN_Y, "kart fell through the hills track")
+	assert_true(saw_airborne, "ledge never produced AIRBORNE state")
+	assert_true(saw_landing_after_airborne, "kart never returned to ground after the ledge")
 	assert_lte(
 		worst_landing_loss_ratio,
 		tuning.landing_speed_loss_cap + 0.05,
