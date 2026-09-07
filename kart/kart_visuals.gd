@@ -38,6 +38,7 @@ func _process(delta: float) -> void:
 	_update_body_roll_and_pitch(delta, lateral_estimate)
 	_update_wheels(delta, lateral_estimate)
 	_update_suspension_bob(delta)
+	_update_hit_visual(delta)
 	_previous_speed = _controller.get_speed()
 
 
@@ -87,3 +88,17 @@ func _update_suspension_bob(delta: float) -> void:
 	_bob_velocity += acceleration * delta
 	_bob_offset += _bob_velocity * delta
 	position.y = _base_local_y + _bob_offset
+
+
+func _update_hit_visual(_delta: float) -> void:
+	var hit_state: int = _controller.get_hit_state()
+	var progress: float = _controller.get_hit_progress()
+	rotation = Vector3.ZERO
+	scale = Vector3.ONE
+	match hit_state:
+		HitReactor.HitType.SPIN_OUT:
+			rotation.y = TAU * progress
+		HitReactor.HitType.TUMBLE:
+			rotation.x = TAU * progress
+		HitReactor.HitType.SQUASH:
+			scale.y = _controller.tuning.hit_squash_visual_scale

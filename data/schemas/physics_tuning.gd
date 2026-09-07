@@ -68,6 +68,7 @@ extends Resource
 @export_range(0.0, 1.0) var hit_tumble_speed_factor: float = 0.0
 @export var hit_squash_duration: float = 4.0
 @export_range(0.0, 1.0) var hit_squash_speed_cap_factor: float = 0.55
+@export_range(0.1, 1.0) var hit_squash_visual_scale: float = 0.5
 @export var hit_invulnerability_duration: float = 1.2
 
 @export_group("Respawn")
