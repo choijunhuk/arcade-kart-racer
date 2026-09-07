@@ -35,6 +35,9 @@ extends Resource
 @export var landing_speed_loss: float = 0.03
 @export var landing_speed_loss_cap: float = 0.25
 @export var landing_align_threshold_degrees: float = 35.0
+@export var hover_snap_speed: float = 10.0
+@export var up_align_speed_grounded: float = 15.0
+@export var up_align_speed_airborne: float = 3.0
 
 @export_group("Walls and Kart Contact")
 @export var wall_normal_threshold: float = 0.55
@@ -43,6 +46,8 @@ extends Resource
 @export var wall_graze_loss: float = 0.92
 @export var wall_head_on_loss: float = 0.35
 @export var wall_bounce: float = 0.25
+## Metres of positional push-back per unit of bounce on a wall hit.
+@export var wall_bounce_push: float = 0.1
 @export var wall_push_out: float = 1.5
 @export var separation_push: float = 0.25
 

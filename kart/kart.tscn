@@ -1,0 +1,111 @@
+[gd_scene load_steps=12 format=3]
+
+[ext_resource type="Script" path="res://kart/kart_controller.gd" id="1_controller"]
+[ext_resource type="Script" path="res://kart/kart_physics.gd" id="2_physics"]
+[ext_resource type="Script" path="res://kart/kart_visuals.gd" id="3_visuals"]
+
+[sub_resource type="BoxShape3D" id="Shape_body"]
+size = Vector3(1.6, 0.6, 2.2)
+
+[sub_resource type="StandardMaterial3D" id="Material_body"]
+albedo_color = Color(0.1, 0.85, 0.95, 1)
+metallic = 0.25
+roughness = 0.35
+
+[sub_resource type="BoxMesh" id="Mesh_body"]
+material = SubResource("Material_body")
+size = Vector3(1.6, 0.5, 2.2)
+
+[sub_resource type="StandardMaterial3D" id="Material_driver"]
+albedo_color = Color(1, 0.78, 0.18, 1)
+
+[sub_resource type="CapsuleMesh" id="Mesh_driver"]
+material = SubResource("Material_driver")
+radius = 0.32
+height = 0.8
+
+[sub_resource type="StandardMaterial3D" id="Material_wheel"]
+albedo_color = Color(0.08, 0.08, 0.1, 1)
+roughness = 0.8
+
+[sub_resource type="CylinderMesh" id="Mesh_wheel"]
+material = SubResource("Material_wheel")
+top_radius = 0.28
+bottom_radius = 0.28
+height = 0.24
+
+[node name="Kart" type="CharacterBody3D"]
+collision_layer = 2
+collision_mask = 1
+script = ExtResource("1_controller")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("Shape_body")
+
+[node name="GroundRays" type="Node3D" parent="."]
+
+[node name="RayFL" type="RayCast3D" parent="GroundRays"]
+position = Vector3(-0.7, 0, -0.85)
+target_position = Vector3(0, -0.8, 0)
+collision_mask = 1
+
+[node name="RayFR" type="RayCast3D" parent="GroundRays"]
+position = Vector3(0.7, 0, -0.85)
+target_position = Vector3(0, -0.8, 0)
+collision_mask = 1
+
+[node name="RayRL" type="RayCast3D" parent="GroundRays"]
+position = Vector3(-0.7, 0, 0.85)
+target_position = Vector3(0, -0.8, 0)
+collision_mask = 1
+
+[node name="RayRR" type="RayCast3D" parent="GroundRays"]
+position = Vector3(0.7, 0, 0.85)
+target_position = Vector3(0, -0.8, 0)
+collision_mask = 1
+
+[node name="RayCenter" type="RayCast3D" parent="GroundRays"]
+position = Vector3(0, 0, 0)
+target_position = Vector3(0, -0.8, 0)
+collision_mask = 1
+
+[node name="KartPhysics" type="Node" parent="."]
+script = ExtResource("2_physics")
+
+[node name="Visuals" type="Node3D" parent="."]
+script = ExtResource("3_visuals")
+
+[node name="Body" type="MeshInstance3D" parent="Visuals"]
+mesh = SubResource("Mesh_body")
+
+[node name="Driver" type="MeshInstance3D" parent="Visuals"]
+position = Vector3(0, 0.55, 0.15)
+mesh = SubResource("Mesh_driver")
+
+[node name="WheelFL" type="Node3D" parent="Visuals"]
+position = Vector3(-0.75, -0.1, -0.85)
+
+[node name="Mesh" type="MeshInstance3D" parent="Visuals/WheelFL"]
+rotation_degrees = Vector3(0, 0, 90)
+mesh = SubResource("Mesh_wheel")
+
+[node name="WheelFR" type="Node3D" parent="Visuals"]
+position = Vector3(0.75, -0.1, -0.85)
+
+[node name="Mesh" type="MeshInstance3D" parent="Visuals/WheelFR"]
+rotation_degrees = Vector3(0, 0, 90)
+mesh = SubResource("Mesh_wheel")
+
+[node name="WheelRL" type="Node3D" parent="Visuals"]
+position = Vector3(-0.75, -0.1, 0.85)
+
+[node name="Mesh" type="MeshInstance3D" parent="Visuals/WheelRL"]
+rotation_degrees = Vector3(0, 0, 90)
+mesh = SubResource("Mesh_wheel")
+
+[node name="WheelRR" type="Node3D" parent="Visuals"]
+position = Vector3(0.75, -0.1, 0.85)
+
+[node name="Mesh" type="MeshInstance3D" parent="Visuals/WheelRR"]
+rotation_degrees = Vector3(0, 0, 90)
+mesh = SubResource("Mesh_wheel")

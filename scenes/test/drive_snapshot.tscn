@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://drive_snapshot_scene"]
+
+[ext_resource type="Script" path="res://scenes/test/drive_snapshot.gd" id="1_script"]
+
+[node name="DriveSnapshot" type="Node"]
+script = ExtResource("1_script")
