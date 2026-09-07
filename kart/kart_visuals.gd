@@ -22,6 +22,8 @@ var _bob_offset: float = 0.0
 var _bob_velocity: float = 0.0
 var _base_local_y: float = 0.0
 var _previous_speed: float = 0.0
+var _drift_yaw: float = 0.0
+var _trick_spin: float = 0.0
 
 
 func _ready() -> void:
@@ -39,6 +41,7 @@ func _process(delta: float) -> void:
 	_update_wheels(delta, lateral_estimate)
 	_update_suspension_bob(delta)
 	_update_hit_visual(delta)
+	_update_trick_visual(delta)
 	_previous_speed = _controller.get_speed()
 
 
@@ -66,7 +69,9 @@ func _update_body_roll_and_pitch(delta: float, lateral_speed: float) -> void:
 		pitch_degrees = feel_tuning.acceleration_pitch_degrees
 	elif acceleration < 0.0:
 		pitch_degrees = -feel_tuning.braking_pitch_degrees
-	_body_mesh.rotation = Vector3(deg_to_rad(pitch_degrees), 0.0, deg_to_rad(roll_degrees))
+	var target_yaw: float = deg_to_rad(_controller.get_drift_visual_angle_degrees())
+	_drift_yaw = lerpf(_drift_yaw, target_yaw, clampf(feel_tuning.feedback_lerp_speed * delta, 0.0, 1.0))
+	_body_mesh.rotation = Vector3(deg_to_rad(pitch_degrees), _drift_yaw, deg_to_rad(roll_degrees))
 
 
 func _update_wheels(delta: float, lateral_speed: float) -> void:
@@ -102,3 +107,13 @@ func _update_hit_visual(_delta: float) -> void:
 			rotation.x = TAU * progress
 		HitReactor.HitType.SQUASH:
 			scale.y = _controller.tuning.hit_squash_visual_scale
+
+
+func _update_trick_visual(delta: float) -> void:
+	if _controller.get_hit_state() >= 0:
+		return
+	if _controller.is_trick_armed():
+		_trick_spin = fposmod(_trick_spin + feel_tuning.trick_spin_speed * delta, TAU)
+	else:
+		_trick_spin = lerpf(_trick_spin, 0.0, clampf(feel_tuning.feedback_lerp_speed * delta, 0.0, 1.0))
+	rotation.y = _trick_spin

@@ -35,3 +35,13 @@ extends Resource
 @export var hit_flash_count: int = 2
 @export var hit_stop_duration: float = 0.05
 @export var hit_stop_time_scale: float = 0.3
+@export var drift_tier_cyan: Color = Color(0.1, 0.9, 1.0)
+@export var drift_tier_amber: Color = Color(1.0, 0.62, 0.1)
+@export var drift_tier_magenta: Color = Color(1.0, 0.1, 0.72)
+@export var feedback_lerp_speed: float = 10.0
+@export var boost_fov_spring_stiffness: float = 40.0
+@export var boost_fov_spring_damping: float = 10.0
+@export var trick_spin_speed: float = 9.0
+@export var skid_mark_max_segments: int = 96
+@export var skid_mark_half_width: float = 0.65
+@export var skid_mark_min_spacing: float = 0.18
