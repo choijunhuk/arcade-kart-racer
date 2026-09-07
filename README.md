@@ -5,12 +5,14 @@ Mario Kart에서 *시스템과 플레이 감각*만 영감을 받은 **완전 �
 
 ## 이 레포의 현재 상태
 
-**Phase 2 — 아케이드 물리 심화 완료.**
+**Phase 3 — 드리프트 & 부스트 완료.**
 
 현재 메인 씬은 실제로 주행 가능한 카트(`kart/kart.tscn`), 전환 가능한
-두 테스트 트랙, 지형 감속, 슬립스트림, 무게 기반 카트 충돌, 피격 반응,
-낙하/리스폰, 스프링 추적 카메라와 F3 디버그 오버레이가 있는 샌드박스를
-연다. 드리프트/일반 부스트는 Phase 3, 레이스 흐름·아이템·AI는 이후 범위다.
+세 테스트 트랙(평지/언덕/헤어핀), 지형 감속, 슬립스트림, 무게 기반 카트
+충돌, 피격 반응, 낙하/리스폰, 미니 터보 드리프트, 통합 부스트 스택,
+부스트 패드/점프대/트릭, 스프링 추적 카메라(드리프트 오프셋 + 부스트
+FOV 킥), 드리프트 미터 HUD와 F3 디버그 오버레이가 있는 샌드박스를 연다.
+레이스 흐름(체크포인트/랩)·아이템·AI는 이후 범위다.
 
 - [`KART_RACING_DEV_PROMPT.md`](KART_RACING_DEV_PROMPT.md) — 개발 프롬프트 전체 (아키텍처, 물리, 드리프트, 아이템, AI, Phase 0~15, DoD, 작업 규칙)
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — 실제 경로와 시스템 경계
@@ -30,9 +32,11 @@ Mario Kart에서 *시스템과 플레이 감각*만 영감을 받은 **완전 �
 ```
 
 조작: 가속 `W`/RT, 브레이크·후진 `S`/LT, 조향 `A`/`D`/좌스틱,
-`R` 리셋, `T` 평지/언덕 트랙 전환, `1`/`2`/`3` light/medium/heavy 전환,
-`B` 충돌용 더미 카트 3대 생성. `Space`/RB 드리프트는 Phase 3까지 효과가
-없다. F3으로 terrain/slipstream/hit/invulnerable/air_time 포함 값을 본다.
+`Space`/RB 드리프트(유지 후 놓으면 도달한 티어만큼 미니 터보 부스트),
+`R` 리셋, `T` 트랙 순환(평지→언덕→헤어핀), `4` 헤어핀 트랙 바로 선택,
+`1`/`2`/`3` light/medium/heavy 전환, `B` 충돌용 더미 카트 3대 생성.
+F3으로 terrain/slipstream/hit/invulnerable/air_time과 함께
+drift_state/drift_charge/drift_tier/boost/trick_armed을 본다.
 
 ## 검증
 
@@ -46,7 +50,7 @@ HOME=$PWD/.tmp-home /opt/homebrew/bin/godot --headless --path . --quit
 # GUT 전체 테스트
 HOME=$PWD/.tmp-home tools/run_tests.sh
 
-# 트랙 구조 검증 (test_loop + test_loop_hills)
+# 트랙 구조 검증 (test_loop + test_loop_hills + test_hairpin)
 HOME=$PWD/.tmp-home tools/validate_tracks.sh
 
 # Phase 6 전까지 성공 메시지만 출력하는 시뮬레이션 자리표시자
