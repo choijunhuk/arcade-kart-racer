@@ -568,3 +568,4 @@ Phase 1에서 `KartController`, `KartPhysics`, `KartVisuals`, 플레이어 입�
 ### 사용자에게 필요한 결정 (있다면)
 
 없음. Phase 0 승인 여부만 필요하다.
+- Phase 8 polish: skid marks render as detached quads, should be a continuous strip (seen in Phase 3 hairpin snapshot).
