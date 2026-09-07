@@ -1,5 +1,108 @@
 # Development Log
 
+## Phase 2 보고 — 아케이드 물리 심화
+
+### 구현된 기능
+
+- `TerrainSensor` + `OffroadZone`: Area 우선, collider `terrain` metadata,
+  asphalt fallback 순서와 카트별 offroad resistance를 적용했다.
+- `SlipstreamSensor`: layer 2 전방 ShapeCast, 동일 방향 판정, 1.5초 차지,
+  활성 최고속 1.08배, 이탈 보너스 0.8초를 구현했다.
+- `KartCollisionResolver`: BumpArea 쌍당 1회 처리, 질량비 임펄스, 측면
+  횡속도 교환/yaw, 후방 추돌 push, 위치 분리를 구현했다. HIT는 발생하지 않는다.
+- `HitReactor`: BUMP/SPIN_OUT/TUMBLE/SQUASH 지속시간·속도·조작 규칙,
+  1.2초 무적, EventBus 이벤트, wall head-on BUMP, 시각 spin/flip/flatten을 구현했다.
+- 공중/착지: 2틱 초과 접지 실패 후 AIRBORNE, air steer, air_time API,
+  착지 속도손실 상한 및 큰 진행방향 오차의 lateral 제거를 구현했다.
+- `KillZone` + `RespawnSystem`: 0.4초 fade 대기, StartGrid 뒤쪽 지점 이동,
+  속도 0/1초 무적/0.6초 freeze, 5초 stuck 감지를 물리 틱으로 구현했다.
+- 두 트랙에 kill plane을, 평지 트랙에 grass 2곳을, hills에 dirt·동쪽
+  탈출 gap·1.5m ledge를 배치했다.
+- 샌드박스에 `T`, `1/2/3`, `B` 조작과 collision/respawn 조립,
+  Phase 2 debug watch를 추가했다. 기존 3종 KartData는 §9.11 수치를 이미 만족했다.
+
+### 생성/수정된 파일
+
+- 신규: `kart/terrain_sensor.gd`, `kart/slipstream_sensor.gd`,
+  `kart/hit_reactor.gd`, `race/kart_collision_resolver.gd`,
+  `race/respawn_system.gd`, `track/elements/offroad_zone.{gd,tscn}`,
+  `track/elements/kill_zone.{gd,tscn}`, Phase 2 unit/integration tests와 UID.
+- 수정: `kart/kart_controller.gd`, `kart/kart_physics.gd`,
+  `kart/kart_visuals.gd`, `kart/kart.tscn`, `PhysicsTuning`, 양 테스트 트랙,
+  샌드박스, `project.godot`, 문서와 기존 회귀 테스트.
+
+### 핵심 설계 결정과 이유
+
+- terrain/slipstream/landing/impulse 계산을 순수 정적 함수로 분리해 장면
+  프레임 순서와 무관하게 수학 계약을 검증한다.
+- Phase 3 `BoostController`를 앞당기지 않고 slipstream만 기존
+  `BoostResult` seam으로 전달한다.
+- 벽 입사각은 `move_and_slide()` 전 속도로 계산한다. 이후 속도는 이미 벽
+  평행 성분으로 투영되어 정면 충돌 정보를 잃기 때문이다.
+- respawn 위치는 callable로 주입해 Kart가 Race/Track을 직접 참조하지 않는다.
+  Phase 4까지는 RacingLine offset 기준 뒤쪽 StartGrid를 사용한다.
+- hit 회전/뒤집힘/납작해짐은 `KartVisuals` 전용이며 물리 basis는 yaw-only다.
+
+### 실행 방법
+
+```sh
+/opt/homebrew/bin/godot --path . scenes/test/kart_sandbox.tscn
+```
+
+### 테스트 방법 및 결과 (run_tests / run_sim / validate_tracks 실제 출력 요약)
+
+- `godot --headless --path . --import` — exit 0, 신규 UID 생성/추적.
+- `godot --headless --path . --quit` — exit 0, ERROR/SCRIPT ERROR 없음.
+- `tools/run_tests.sh` — GUT 9.6.1, 16 scripts, **62 tests / 62 passing**,
+  417 assertions, 0 failures.
+- `tools/validate_tracks.sh` — `test_loop`, `test_loop_hills` 모두 PASS.
+- `tools/run_sim.sh` — Phase 6 전 성공 placeholder, exit 0.
+- 최대 production GDScript 332줄로 400줄 제한 이내.
+
+### 현재 문제점 / 알려진 버그
+
+- 자동 테스트는 물리·상태 전이를 검증하지만 주행 감각과 시각 변형은
+  headless 환경에서 사람 눈으로 판정할 수 없어 아래 플레이 확인이 필요하다.
+- hills의 banked corner는 Phase 1의 fixed-roll placeholder다.
+
+### TODO / PLACEHOLDER 목록
+
+- TODO(phase-3): `DriftController`와 일반 `BoostController`; slipstream exit
+  보너스 이관 및 boost의 offroad 무시 훅 연결.
+- TODO(phase-4): authored RacingLine/checkpoints/RespawnPoint 기반 리스폰,
+  banked geometry 정렬, item-box 및 kill-zone coverage validator 완성.
+- PLACEHOLDER: `tools/run_sim.sh` AI 레이스는 Phase 6에서 구현.
+
+### 다음 Phase 계획
+
+Phase 3에서 드리프트 상태 머신, 차지/미니 터보, 통합 BoostController,
+BoostPad/JumpPad/트릭과 관련 연출을 구현한다. 사용자 승인 전 시작하지 않는다.
+
+### 사용자에게 필요한 결정 (있다면)
+
+없음. 아래 절차로 Phase 2의 충돌·지형·공중·복귀 감각을 확인하면 된다.
+
+### 플레이 지시
+
+```text
+1. 실행 후 W/A/S/D로 주행하고 F3을 켠다.
+2. test_loop의 초록 grass patch를 안쪽으로 가로질러 terrain=grass와 감속,
+   asphalt 복귀 뒤 자연스러운 재가속을 확인한다.
+3. B로 light/medium/heavy 더미 3대를 앞에 세운 뒤 부딪힌다. 1/2/3으로
+   플레이어 무게를 바꿔 heavy는 덜 밀리고 light는 더 밀리는지 비교한다.
+4. 더미 뒤를 같은 방향으로 1.5초 이상 달려 slipstream=true와 추가 최고속,
+   빠져나온 뒤 약 0.8초의 짧은 보너스를 확인한다.
+5. 벽을 스치기/정면으로 각각 충돌해 정면만 BUMP/HIT가 잠깐 표시되고,
+   카트가 벽에 고정되지 않고 조작을 회복하는지 확인한다.
+6. T로 hills로 바꾸고 남쪽 직선의 ramp→1.5m ledge를 넘어 AIRBORNE과
+   안정된 착지를 확인한다. 동쪽 벽 중앙 gap으로 이탈해 3초 안에 grid로
+   돌아오고 speed=0인지 확인한다.
+7. 기대 감각: offroad는 분명하지만 답답하지 않고, heavy/light 몸싸움 차이가
+   읽히며, 낙하와 벽 충돌 후 흐름이 빠르게 이어져야 한다.
+```
+
+---
+
 ## Phase 1 보고 — 기본 카트 컨트롤러
 
 ### 구현된 기능
