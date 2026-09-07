@@ -13,6 +13,8 @@ class GroundProbe extends RefCounted:
 	var normal: Vector3 = Vector3.UP
 	var hit_count: int = 0
 	var center_distance: float = -1.0
+	## Mean hit distance over every colliding ray; fallback when the center ray misses.
+	var average_distance: float = -1.0
 
 
 ## Neutral terrain sample. TODO(phase-2): replace with `TerrainSensor` output
@@ -79,6 +81,7 @@ func setup(body: CharacterBody3D, ground_rays: Array[RayCast3D], tuning: Physics
 func probe_ground() -> GroundProbe:
 	var probe: GroundProbe = GroundProbe.new()
 	var normal_sum: Vector3 = Vector3.ZERO
+	var distance_sum: float = 0.0
 	var max_climb_rad: float = deg_to_rad(_tuning.max_climb_angle_degrees)
 	for index: int in _rays.size():
 		var ray: RayCast3D = _rays[index]
@@ -90,9 +93,13 @@ func probe_ground() -> GroundProbe:
 			continue
 		probe.hit_count += 1
 		normal_sum += normal
+		var hit_distance: float = ray.global_position.distance_to(ray.get_collision_point())
+		distance_sum += hit_distance
 		if index == CENTER_RAY_INDEX:
-			probe.center_distance = ray.global_position.distance_to(ray.get_collision_point())
+			probe.center_distance = hit_distance
 	probe.grounded = probe.hit_count >= _tuning.min_grounded_rays
+	if probe.hit_count > 0:
+		probe.average_distance = distance_sum / float(probe.hit_count)
 	if probe.hit_count > 0 and normal_sum.length() > 0.001:
 		probe.normal = normal_sum.normalized()
 	grounded = probe.grounded
@@ -168,7 +175,8 @@ func _integrate_steering(input: InputFrame, ground: GroundProbe, dt: float) -> f
 
 func _integrate_vertical(ground: GroundProbe, dt: float) -> void:
 	if ground.grounded:
-		var target_distance: float = ground.center_distance if ground.center_distance >= 0.0 else _tuning.hover_height
+		# Prefer the center ray; when it misses (crest, tilted landing) degrade to the mean of the hitting rays.
+		var target_distance: float = ground.center_distance if ground.center_distance >= 0.0 else ground.average_distance
 		var height_error: float = _tuning.hover_height - target_distance
 		_vertical_speed = clampf(height_error * _tuning.hover_snap_speed, -_tuning.hover_snap_speed, _tuning.hover_snap_speed)
 		air_time = 0.0
@@ -217,6 +225,8 @@ static func _slerp_up_vector(from: Vector3, to: Vector3, weight: float) -> Vecto
 
 ## Reduces speed on the first tick a landing is detected, capped by
 ## `landing_speed_loss_cap` (spec §9.7).
+## TODO(phase-2): landing alignment — remove part of `lateral` when the landing
+## heading deviates from travel by more than `landing_align_threshold_degrees`.
 func _apply_landing_loss(ground: GroundProbe) -> void:
 	if _was_grounded or not ground.grounded:
 		return
@@ -237,7 +247,7 @@ func _resolve_wall_collisions(dt: float) -> void:
 		lateral *= response.speed_mult
 		_body.global_position += normal * _tuning.wall_push_out * dt
 		if response.bounce_mult > 0.0:
-			_body.global_position += normal * response.bounce_mult * 0.1
+			_body.global_position += normal * response.bounce_mult * _tuning.wall_bounce_push
 
 
 ## Pure wall-incidence response (spec §9.8): graze below `wall_graze_angle_degrees`,
