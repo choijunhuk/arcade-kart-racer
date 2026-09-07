@@ -92,15 +92,59 @@ func test_low_yaw_rate_applies_straight_drift_suppression() -> void:
 	assert_almost_eq(float(_controller.call("get_charge")), _tuning.base_charge_rate * _tuning.low_turn_quality_mult, EPSILON)
 
 
-func test_aligned_steer_earns_charge_bonus_and_kart_drift_factor() -> void:
+func test_aligned_steer_earns_charge_bonus_and_kart_drift_charge_mult() -> void:
 	if not _require_controller():
 		return
-	_kart_data.drift_factor = 1.15
+	_kart_data.drift_charge_mult = 1.15
 	_controller.call("configure", _tuning, _kart_data)
 	_enter_hold(1.0)
 	_step(_frame(1.0, true), 18.0, true, 0.0, 1.0, false, 1.0)
 	var expected: float = _tuning.base_charge_rate * (1.0 + _tuning.steer_alignment_bonus) * 1.15
 	assert_almost_eq(float(_controller.call("get_charge")), expected, EPSILON)
+
+
+func test_drift_charge_mult_reaches_tier_one_sooner_while_drift_factor_alone_does_not() -> void:
+	if not _require_controller():
+		return
+	var script: GDScript = load(CONTROLLER_PATH) as GDScript
+	var light_data: KartData = _kart_data.duplicate(true) as KartData
+	light_data.drift_charge_mult = 1.15
+	var heavy_data: KartData = _kart_data.duplicate(true) as KartData
+	heavy_data.drift_charge_mult = 0.85
+	var factor_only_data: KartData = _kart_data.duplicate(true) as KartData
+	factor_only_data.drift_charge_mult = 1.0
+	factor_only_data.drift_factor = 5.0
+
+	var light_controller: Node = script.new() as Node
+	add_child_autofree(light_controller)
+	light_controller.call("configure", _tuning, light_data)
+	var heavy_controller: Node = script.new() as Node
+	add_child_autofree(heavy_controller)
+	heavy_controller.call("configure", _tuning, heavy_data)
+	var factor_controller: Node = script.new() as Node
+	add_child_autofree(factor_controller)
+	factor_controller.call("configure", _tuning, factor_only_data)
+
+	# steer = 0.0 removes the alignment bonus and yaw_rate = 1.0 avoids the
+	# low-turn-quality penalty, isolating drift_charge_mult as the only
+	# remaining factor in the charge rate.
+	var tier_one_seconds: float = _tuning.mini_turbo_tiers[0].charge_seconds
+	var elapsed: float = tier_one_seconds / 1.15
+
+	_enter_hold(1.0, light_controller)
+	_charge_for(elapsed, 0.0, 1.0, light_controller)
+	_enter_hold(1.0, heavy_controller)
+	_charge_for(elapsed, 0.0, 1.0, heavy_controller)
+	_enter_hold(1.0, factor_controller)
+	_charge_for(elapsed, 0.0, 1.0, factor_controller)
+
+	assert_eq(int(light_controller.call("get_tier")), 1)
+	assert_eq(int(heavy_controller.call("get_tier")), 0)
+	assert_gt(float(light_controller.call("get_charge")), float(heavy_controller.call("get_charge")))
+	# drift_factor alone (turn radius / steer influence only) must not change
+	# charge timing: with drift_charge_mult back at the default 1.0, charge
+	# tracks elapsed time exactly regardless of drift_factor.
+	assert_almost_eq(float(factor_controller.call("get_charge")), elapsed, EPSILON)
 
 
 func test_opposite_steer_halts_charge_then_cancels_without_decreasing() -> void:
@@ -186,20 +230,21 @@ func _frame(steer: float, held: bool, pressed: bool = false) -> InputFrame:
 	return frame
 
 
-func _step(frame: InputFrame, speed: float, grounded: bool, air_time: float, yaw_rate: float, is_hit: bool, dt: float) -> KartPhysics.DriftResult:
-	return _controller.call("step", frame, speed, grounded, air_time, yaw_rate, is_hit, dt) as KartPhysics.DriftResult
+func _step(frame: InputFrame, speed: float, grounded: bool, air_time: float, yaw_rate: float, is_hit: bool, dt: float, controller: Node = null) -> KartPhysics.DriftResult:
+	var target: Node = controller if controller != null else _controller
+	return target.call("step", frame, speed, grounded, air_time, yaw_rate, is_hit, dt) as KartPhysics.DriftResult
 
 
-func _enter_hold(direction: float) -> void:
-	_step(_frame(direction, true, true), 18.0, true, 0.0, 0.0, false, DT)
-	_step(_frame(direction, true), 18.0, true, 0.0, direction, false, _tuning.drift_hop_duration)
+func _enter_hold(direction: float, controller: Node = null) -> void:
+	_step(_frame(direction, true, true), 18.0, true, 0.0, 0.0, false, DT, controller)
+	_step(_frame(direction, true), 18.0, true, 0.0, direction, false, _tuning.drift_hop_duration, controller)
 
 
-func _charge_for(seconds: float, steer: float, yaw_rate: float) -> void:
+func _charge_for(seconds: float, steer: float, yaw_rate: float, controller: Node = null) -> void:
 	var remaining: float = seconds
 	while remaining > 0.0:
 		var step_dt: float = minf(DT, remaining)
-		_step(_frame(steer, true), 18.0, true, 0.0, yaw_rate, false, step_dt)
+		_step(_frame(steer, true), 18.0, true, 0.0, yaw_rate, false, step_dt, controller)
 		remaining -= step_dt
 
 

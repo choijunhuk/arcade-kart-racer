@@ -115,6 +115,18 @@ func get_charge_ratio() -> float:
 	return clampf(_charge / _tuning.mini_turbo_tiers.back().charge_seconds, 0.0, 1.0)
 
 
+## Returns the tier-derived unsigned body yaw angle in degrees, or zero
+## outside an active drift hold.
+func get_visual_angle_degrees() -> float:
+	if _state != DriftState.HOLD:
+		return 0.0
+	if _tier > 0 and _tier <= _tuning.drift_visual_angles_degrees.size():
+		return _tuning.drift_visual_angles_degrees[_tier - 1]
+	if not _tuning.drift_visual_angles_degrees.is_empty():
+		return _tuning.drift_visual_angles_degrees[0]
+	return 0.0
+
+
 func _try_begin_hop(frame: InputFrame, speed: float, grounded: bool) -> void:
 	if _cooldown_remaining > 0.0 or not frame.drift_pressed or not grounded:
 		return
@@ -165,7 +177,7 @@ func _accumulate_charge(steer: float, yaw_rate: float, dt: float) -> void:
 	var turn_quality: float = 1.0 if absf(yaw_rate) >= _tuning.min_drift_yaw_rate else _tuning.low_turn_quality_mult
 	var rate: float = _tuning.base_charge_rate
 	rate *= 1.0 + _tuning.steer_alignment_bonus * alignment
-	rate *= turn_quality * _kart_data.drift_factor
+	rate *= turn_quality * _kart_data.drift_charge_mult
 	_charge += rate * dt
 	_update_tier()
 
@@ -242,10 +254,7 @@ func _build_result() -> KartPhysics.DriftResult:
 	result.steer_influence = _tuning.drift_steer_influence
 	result.grip = _tuning.drift_grip
 	result.speed_retention = _tuning.drift_speed_retention
-	if _tier > 0 and _tier <= _tuning.drift_visual_angles_degrees.size():
-		result.visual_angle_degrees = _tuning.drift_visual_angles_degrees[_tier - 1]
-	elif not _tuning.drift_visual_angles_degrees.is_empty():
-		result.visual_angle_degrees = _tuning.drift_visual_angles_degrees[0]
+	result.visual_angle_degrees = get_visual_angle_degrees()
 	return result
 
 

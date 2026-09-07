@@ -560,3 +560,5 @@ Phase-later warnings rather than false failures.
   straights run close and parallel, so a kart's closest point on the curve
   can be genuinely ambiguous between them; distance-plus-return sidesteps
   that ambiguity entirely.
+- HOP→NONE also on button release during hop: a tap is a hop, not a drift;
+  avoids zero-charge releases.

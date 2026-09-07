@@ -78,6 +78,28 @@ func test_kart_feedback_uses_no_more_than_six_particle_nodes() -> void:
 	assert_gte(particle_count, 1)
 
 
+func test_drift_effects_spark_and_smoke_materials_are_independent() -> void:
+	var kart: KartController = KART_SCENE.instantiate() as KartController
+	add_child_autofree(kart)
+	await wait_physics_frames(1)
+	var drift_effects: Node = kart.get_node("DriftEffects")
+	var spark_left: GPUParticles3D = drift_effects.get_node("SparkLeft") as GPUParticles3D
+	var spark_right: GPUParticles3D = drift_effects.get_node("SparkRight") as GPUParticles3D
+	var smoke_left: GPUParticles3D = drift_effects.get_node("SmokeLeft") as GPUParticles3D
+	var smoke_right: GPUParticles3D = drift_effects.get_node("SmokeRight") as GPUParticles3D
+
+	assert_ne(spark_left.process_material, smoke_left.process_material)
+	assert_eq(spark_left.process_material, spark_right.process_material)
+	assert_eq(smoke_left.process_material, smoke_right.process_material)
+
+	var smoke_color_before: Color = (smoke_left.process_material as ParticleProcessMaterial).color
+	drift_effects.call("_on_tier_changed", 1)
+	var tier_one_color: Color = (drift_effects.tuning as FeelTuning).drift_tier_cyan
+
+	assert_eq((spark_left.process_material as ParticleProcessMaterial).color, tier_one_color)
+	assert_eq((smoke_left.process_material as ParticleProcessMaterial).color, smoke_color_before)
+
+
 func test_sandbox_contains_phase3_drift_meter() -> void:
 	var sandbox: Node = (load("res://scenes/test/kart_sandbox.tscn") as PackedScene).instantiate()
 	add_child_autofree(sandbox)

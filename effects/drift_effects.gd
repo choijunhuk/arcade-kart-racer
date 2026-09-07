@@ -7,6 +7,9 @@ extends Node3D
 @onready var _sparks: Array[GPUParticles3D] = [$SparkLeft, $SparkRight]
 @onready var _smoke: Array[GPUParticles3D] = [$SmokeLeft, $SmokeRight]
 
+var _cached_terrain_id: StringName = &""
+var _cached_terrain_color: Color = Color(0.65, 0.65, 0.65, 0.7)
+
 
 func _ready() -> void:
 	var controller: DriftController = _kart.get_node("DriftController") as DriftController
@@ -53,10 +56,16 @@ func _tier_color(tier: int) -> Color:
 
 
 func _terrain_particle_color() -> Color:
-	var path: String = "res://data/terrain/%s.tres" % String(_kart.get_terrain_id())
+	var terrain_id: StringName = _kart.get_terrain_id()
+	if terrain_id == _cached_terrain_id:
+		return _cached_terrain_color
+	_cached_terrain_id = terrain_id
+	var path: String = "res://data/terrain/%s.tres" % String(terrain_id)
 	if ResourceLoader.exists(path):
-		return (load(path) as TerrainData).particle_color
-	return Color(0.65, 0.65, 0.65, 0.7)
+		_cached_terrain_color = (load(path) as TerrainData).particle_color
+	else:
+		_cached_terrain_color = Color(0.65, 0.65, 0.65, 0.7)
+	return _cached_terrain_color
 
 
 func _set_smoke_color(color: Color) -> void:

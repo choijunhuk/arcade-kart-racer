@@ -223,8 +223,7 @@ func is_trick_armed() -> bool:
 
 ## Returns the tier-derived body yaw request in degrees.
 func get_drift_visual_angle_degrees() -> float:
-	var result: KartPhysics.DriftResult = drift_controller._build_result()
-	return result.visual_angle_degrees * float(drift_controller.get_direction())
+	return drift_controller.get_visual_angle_degrees() * float(drift_controller.get_direction())
 
 
 ## Returns whether any boost currently affects physics.
