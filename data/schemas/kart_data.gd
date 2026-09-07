@@ -14,6 +14,8 @@ enum WeightClass {
 @export var acceleration: float = 14.0
 @export var handling: float = 1.0
 @export var drift_factor: float = 1.0
+## Mini-turbo charge rate multiplier; lighter karts charge faster (spec §10.3).
+@export var drift_charge_mult: float = 1.0
 @export var weight: float = 1.0
 @export var traction: float = 1.0
 @export var boost_power: float = 1.0

@@ -1,5 +1,179 @@
 # Development Log
 
+## Phase 3 보고 — 드리프트 & 부스트
+
+### 구현된 기능
+
+- `DriftController`: NONE→HOP→HOLD→RELEASE 상태 머신. hop은
+  `KartPhysics.hop()`을 통한 수직 임펄스, 방향은 hop 종료 시 조향 부호로
+  잠금, HOLD 중 저속(0.4초)·HIT·공중(0.5초 초과)·강한 반대 조향(0.3초) 취소,
+  종료 후 0.35초 쿨다운을 구현했다. 차지는 `base_charge_rate`,
+  `steer_alignment_bonus`, yaw rate 기반 `turn_quality`(< `min_drift_yaw_rate`
+  일 때 `low_turn_quality_mult`), `KartData.drift_factor`로 결정되며 절대
+  감소하지 않는다. `PhysicsTuning.mini_turbo_tiers`에 1.0s/1.18×/0.8s(cyan),
+  2.2s/1.25×/1.4s(amber), 3.6s/1.33×/2.2s(magenta) 3티어를 채웠다.
+  공중에서 `trick_min_air_time` 이상 체공 중 드리프트 버튼을 누르면 트릭이
+  arm되고, 착지 시 `trick_boost`를 요청한다.
+- 드리프트 물리: HOLD 중 yaw rate는
+  `dir * (drift_base_turn + steer*dir*drift_steer_influence) * drift_factor`
+  로 방향을 절대 뒤집지 않으며, 접지력은 `drift_grip`으로 대체되고 속도는
+  `drift_speed_retention`을 `pow(retention, dt)`로 프레임독립적으로 적용한다.
+- `BoostController`: 단일 비가산 부스트 슬롯. `request(spec, source)`는
+  더 강한 `speed_mult`면 교체, 약하거나 같으면 `max_boost_duration`까지
+  잔여시간을 연장한다. `ignores_offroad`는 `TerrainSensor.sample()`로
+  전달되어 지형 페널티를 우회한다. Phase 2의 slipstream 이탈 임시
+  멀티플라이어를 `BoostController.request()` 경로로 완전히 이관했다
+  (slipstream 활성 중 배수는 `SlipstreamSensor` 소유로 유지). 순수 함수
+  `evaluate_start_input(frame, countdown_phase)`로 §11 시작 부스트/휠스핀
+  판정을 Phase 5가 재사용할 수 있게 분리했다(카운트다운 UI는 미구현).
+- `BoostPad`(layer 5 Area3D)는 카트 진입 시
+  `boost_controller.request(tuning.boost_pad_boost, &"boost_pad")`를 호출한다.
+  `JumpPad`는 `KartPhysics.launch(local_velocity)`로 카트를 AIRBORNE으로
+  전환한다. `test_loop`에 부스트 패드 2개, `test_loop_hills`에 점프대 1개와
+  착지 구역을 배치했다. 반경 18 m 180도 헤어핀 2개와 고속 S커브를 가진
+  신규 그레이박스 트랙 `track/tracks/test_hairpin/`을 추가했다(검증 통과).
+- 연출: `DriftEffects`(타이어 스파크 — 티어별 cyan/amber/magenta, 지형색
+  타이어 연기), `BoostEffects`(배기 파티클), `SkidMark`(링버퍼 스트립
+  메시)를 신호 구독만으로 구현했다(물리 쓰기 없음, 카트당 파티클 노드
+  ≤6개). `KartVisuals`는 드리프트 시각 요 오프셋과 트릭 스핀을 적용한다.
+  `RaceCamera`는 드리프트 반대 방향 사이드 오프셋과 부스트 FOV 스프링킥을
+  추가했다.
+- `ui/hud/drift_meter.gd`(+tscn): 차지 바 + 티어 색 Control, 읽기 전용
+  `DriftController` API만 구독한다. 샌드박스 HUD CanvasLayer 자식으로 추가.
+- 샌드박스: 드리프트/부스트/트릭 상태 디버그 워치 5종을 추가했고, 키 `4`로
+  `test_hairpin` 트랙을 선택할 수 있다. `ScriptedInputProvider`에 곡률
+  기반 "코너에서 드리프트" 선택 모드를 추가했다(기존 레이스라인 추종
+  기본값은 그대로 유지).
+
+### 생성/수정된 파일
+
+- 신규: `kart/drift_controller.gd`, `kart/boost_controller.gd`,
+  `effects/drift_effects.{gd,tscn}`, `effects/boost_effects.{gd,tscn}`,
+  `effects/skid_mark.gd`, `track/elements/boost_pad.{gd,tscn}`,
+  `track/elements/jump_pad.{gd,tscn}`, `track/tracks/test_hairpin/*`,
+  `ui/hud/drift_meter.{gd,tscn}`, Phase 3 unit/integration 테스트와 UID.
+- 수정: `kart/kart_controller.gd`, `kart/kart_physics.gd`,
+  `kart/kart_visuals.gd`, `kart/kart.tscn`, `kart/slipstream_sensor.gd`,
+  `camera/race_camera.gd`, `data/schemas/physics_tuning.gd`,
+  `data/schemas/feel_tuning.gd`, `data/tuning/physics_default.tres`,
+  `data/tuning/feel_default.tres`, `scenes/test/kart_sandbox.{gd,tscn}`,
+  `scenes/test/drive_snapshot.gd`, `tests/support/scripted_input_provider.gd`,
+  `track/tracks/test_loop/test_loop.tscn`,
+  `track/tracks/test_loop_hills/test_loop_hills.tscn`,
+  `tools/validate_tracks.sh`, 기존 회귀 테스트, 문서.
+
+### 핵심 설계 결정과 이유
+
+- `DriftController`/`BoostController`는 `configure(tuning, kart_data)` +
+  명시적 `step()`/`request()` API로 씬 트리 없이도 단위 테스트가
+  가능하다. `KartController`는 결과 오브젝트(`DriftResult`/`BoostResult`)만
+  `KartPhysics.integrate()`에 전달하고 물리 쓰기는 `KartPhysics`가 전담한다.
+- 미니 터보 차지율은 `steer=0.0`일 때 정확히 `base_charge_rate`
+  (=1.0/초)와 같도록 설계해, §10.4의 1.0s/2.2s/3.6s 티어 표가 "초"라는
+  이름 그대로 정렬 없는 순수 유지 시간과 일치하는 것을 단위 테스트로
+  고정했다. 이 계약 때문에 정렬 보너스나 기본 차지율은 헤어핀
+  자동주행 테스트를 통과시키기 위해 임의로 올리지 않았다.
+- `track/tracks/test_hairpin/hairpin_racing_line.gd`의 헤어핀은 단일
+  꼭짓점(스파이크)이 아니라 30도 간격 다중 점으로 구성한 진짜 원호다.
+  단일 꼭짓점 근사는 3점 유한차분 곡률 추정이 짧은 스파이크만 보고하여
+  드리프트에 필요한 지속 곡률 신호를 주지 못했다.
+- `ScriptedInputProvider`의 곡률 기반 드리프트 모드는 헤어핀
+  진입/유지/탈출에 세 가지 보강이 필요했다: (1) 진입 임계값보다 훨씬 낮은
+  이탈 임계값(히스테리시스)으로 코너 중간의 곡률 미세 하강이 조기
+  해제를 유발하지 않게 하고, (2) 순수 추적 조향은 `drift_min_steer`에
+  거의 도달하지 못하므로 코너가 충분히 날카로울 때 조향 크기를
+  최소값까지 "플릭"하며, hop이 끝나기 전에 되돌리면 매 틱 최소 조향
+  검사에 걸려 즉시 취소되므로 HOP 전체 구간에서 플릭을 유지하고,
+  (3) HOLD 중에는 잠근 방향으로 조향을 클램프(부스트하지 않음)해 자연
+  진동이 반대 조향 취소를 유발하지 않게 했다. (2)에 필요한 최소 조향은
+  `PhysicsTuning.drift_min_steer`를 테스트 지원 코드에 문서화된 상수로
+  미러링한 것이며 게임플레이 튜닝 자체는 건드리지 않았다.
+- 곡률이 높은 다가오는 코너에서는 드리프트 모드 여부와 무관하게
+  `safe_speed = sqrt(대표_그립 * 반경)`으로 미리 감속한다(순수 추종
+  로직만으로는 18 m 반경 코너를 일반 접지력으로 버틸 수 없어 크게
+  슬라이드했다). 단, 실제 HOLD 중에는 이 감속을 끄고
+  `DriftController`의 자체 `drift_speed_retention`에 맡긴다 — 겹치면
+  차지 시간이 굶주리고 저속 취소로 즉시 드리프트가 끊겼다.
+- `test_phase3_hairpin.gd`의 한 바퀴 완료 판정은 `Curve3D.get_closest_offset()`
+  델타가 아니라 누적 월드 거리 + 시작점 반경 복귀로 측정한다. 이 트랙의
+  두 직선은 서로 가깝고 평행해 커브 오프셋이 모호해질 수 있다.
+
+### 실행 방법
+
+```sh
+/opt/homebrew/bin/godot --path . scenes/test/kart_sandbox.tscn
+```
+
+### 테스트 방법 및 결과 (run_tests / validate_tracks 실제 출력 요약)
+
+- `godot --headless --path . --import` — exit 0, 신규 UID 생성/추적.
+- `godot --headless --path . --quit` — exit 0, ERROR/SCRIPT ERROR 없음
+  (dummy renderer의 RID 누수 한 줄은 무해함).
+- `tools/run_tests.sh` — GUT 9.6.1, 21 scripts, **101 tests / 101 passing**
+  (Phase 2 종료 시점 62개 대비 39개 신규), 518 assertions, 0 failures.
+- `tools/validate_tracks.sh` — `test_loop`, `test_loop_hills`,
+  `test_hairpin` 모두 PASS.
+- 최대 production GDScript 395줄(`kart/kart_physics.gd`)로 400줄 제한 이내.
+
+### 현재 문제점 / 알려진 버그
+
+- `test_hairpin`의 접지 지오메트리는 벽이 없는 평탄한 그레이박스라
+  일반(비드리프트) 상태로 헤어핀을 고속 진입하면 슬라이드가 크다;
+  `ScriptedInputProvider`는 이를 곡률 기반 예측 제동으로 보정하지만
+  실제 플레이어 대상 카메라/HUD 경고는 Phase 8/9 범위다.
+- 시각 연출(스파크 색, 스키드 마크 폭 등)은 headless 환경에서 사람 눈
+  검증이 불가능하다 — 아래 플레이 지시로 창 모드에서 확인이 필요하다.
+
+### TODO / PLACEHOLDER 목록
+
+- TODO(phase-4): authored RacingLine/checkpoints/RespawnPoint 기반 리스폰,
+  banked geometry 정렬, item-box 및 kill-zone coverage validator 완성
+  (Phase 2 보고에서 이월).
+- TODO(phase-5): `BoostController.evaluate_start_input()`을 실제 카운트다운
+  UI/입력과 연결.
+- TODO(phase-9): `ui/hud/drift_meter`를 실제 레이스 HUD로 교체.
+
+### 다음 Phase 계획
+
+Phase 4에서 체크포인트/랩 진행, 아이템, AI 드라이버를 구현한다. 사용자
+승인 전 시작하지 않는다.
+
+### 사용자에게 필요한 결정 (있다면)
+
+없음. 아래 절차로 Phase 3의 드리프트 티어, 반대 조향, 부스트, 트릭 감각을
+확인하면 된다.
+
+### 플레이 지시
+
+```text
+1. 실행 후 F3으로 디버그 오버레이를 켜서 drift_state/drift_charge/
+   drift_tier/boost/trick_armed을 확인할 수 있게 한다.
+2. 아무 트랙에서나 코너 진입 직전 Space/RB를 눌러 살짝 hop한 뒤 계속
+   눌러 유지한다 — 카트가 사이드로 미끄러지며 도는지, 방향이 조향과
+   반대로는 절대 뒤집히지 않는지 확인한다.
+3. 드리프트를 1초 이상 유지해 타이어 스파크가 cyan(티어1)으로 바뀌는지,
+   더 오래 유지하면 2.2초/3.6초에서 amber/magenta로 바뀌는지 확인한다.
+   Space/RB를 떼면 도달한 티어에 비례한 부스트가 걸리는지 본다.
+4. 드리프트 중 조향을 반대로 세게 꺾어 0.3초 이상 유지하면 드리프트가
+   취소되고(부스트 없이) 짧은 쿨다운 뒤에만 다시 시작할 수 있는지 확인한다.
+5. 저속에서 드리프트를 시도해(속도가 `drift_cancel_speed` 아래로
+   떨어지도록 감속하며 유지) 자동으로 취소되는지 확인한다.
+6. `4`로 test_hairpin을 연다. 첫 번째 18 m 헤어핀에서 드리프트를 걸어
+   빠져나가고, 뒤이은 S커브에서는 짧게 좌우로 드리프트를 끊어 스네이킹이
+   과도한 차지를 만들지 않는지 확인한다.
+7. `T`로 test_loop_hills를 열어 점프대를 넘는다 — 착지 전 체공 중
+   Space/RB를 눌러 트릭을 arm하고, 착지 순간 자동으로 트릭 부스트가
+   걸리며 짧은 스핀 연출이 나오는지 확인한다.
+8. 부스트 패드가 있는 test_loop 뒷직선을 지나 최고속을 순간적으로
+   넘어서고, 부스트가 끝난 뒤 `overspeed_decay`로 서서히 정상 최고속으로
+   돌아오는지 확인한다.
+9. 기대 감각: 드리프트가 느슨하지 않고 의도적인 입력에 반응하며, 티어가
+   오를수록 확실한 보상감이 있어야 한다. 반대 조향과 저속 취소는
+   즉각적이고 예측 가능해야 한다.
+```
+
+---
+
 ## Phase 2 보고 — 아케이드 물리 심화
 
 ### 구현된 기능
@@ -394,3 +568,4 @@ Phase 1에서 `KartController`, `KartPhysics`, `KartVisuals`, 플레이어 입�
 ### 사용자에게 필요한 결정 (있다면)
 
 없음. Phase 0 승인 여부만 필요하다.
+- Phase 8 polish: skid marks render as detached quads, should be a continuous strip (seen in Phase 3 hairpin snapshot).

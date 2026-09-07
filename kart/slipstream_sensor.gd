@@ -2,8 +2,7 @@ class_name SlipstreamSensor
 extends Node
 
 ## Detects a same-direction kart ahead and advances deterministic charge/exit
-## timers. The exit bonus temporarily feeds KartPhysics.BoostResult until the
-## Phase 3 BoostController owns all boost sources.
+## timers. KartController routes the active-to-inactive edge into BoostController.
 
 class TimerResult extends RefCounted:
 	var charge_time: float = 0.0

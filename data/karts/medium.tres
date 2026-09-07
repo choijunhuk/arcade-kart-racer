@@ -11,6 +11,7 @@ max_speed = 28.0
 acceleration = 14.0
 handling = 1.0
 drift_factor = 1.0
+drift_charge_mult = 1.0
 weight = 1.0
 traction = 1.0
 boost_power = 1.0

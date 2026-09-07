@@ -1,0 +1,55 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://effects/drift_effects.gd" id="1_script"]
+[ext_resource type="Script" path="res://effects/skid_mark.gd" id="2_skid"]
+
+[sub_resource type="ParticleProcessMaterial" id="Particles_spark"]
+direction = Vector3(0, 1, 0)
+initial_velocity_min = 1.0
+initial_velocity_max = 2.0
+gravity = Vector3(0, -1, 0)
+color = Color(0.1, 0.9, 1, 1)
+
+[sub_resource type="ParticleProcessMaterial" id="Particles_smoke"]
+direction = Vector3(0, 1, 0)
+initial_velocity_min = 1.0
+initial_velocity_max = 2.0
+gravity = Vector3(0, -1, 0)
+color = Color(0.1, 0.9, 1, 1)
+
+[sub_resource type="QuadMesh" id="Mesh_particle"]
+size = Vector2(0.15, 0.15)
+
+[node name="DriftEffects" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="SparkLeft" type="GPUParticles3D" parent="."]
+position = Vector3(-0.65, -0.2, 0.9)
+emitting = false
+amount = 12
+lifetime = 0.35
+process_material = SubResource("Particles_spark")
+draw_pass_1 = SubResource("Mesh_particle")
+[node name="SparkRight" type="GPUParticles3D" parent="."]
+position = Vector3(0.65, -0.2, 0.9)
+emitting = false
+amount = 12
+lifetime = 0.35
+process_material = SubResource("Particles_spark")
+draw_pass_1 = SubResource("Mesh_particle")
+[node name="SmokeLeft" type="GPUParticles3D" parent="."]
+position = Vector3(-0.65, -0.2, 0.9)
+emitting = false
+amount = 10
+lifetime = 0.7
+process_material = SubResource("Particles_smoke")
+draw_pass_1 = SubResource("Mesh_particle")
+[node name="SmokeRight" type="GPUParticles3D" parent="."]
+position = Vector3(0.65, -0.2, 0.9)
+emitting = false
+amount = 10
+lifetime = 0.7
+process_material = SubResource("Particles_smoke")
+draw_pass_1 = SubResource("Mesh_particle")
+[node name="SkidMark" type="MeshInstance3D" parent="."]
+script = ExtResource("2_skid")

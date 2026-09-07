@@ -70,9 +70,8 @@ scene-tree queries or gameplay orchestration.
 
 Kart code lives in `kart/`. It may read terrain information from `track/` and
 request item use through an explicit `items/` API. It must not reference
-`race/`, `ai/`, or `ui/` directly. Phase 2 fills the terrain, hit, slipstream,
-contact, and air/landing seams while leaving drift and general boost stacking
-for Phase 3.
+`race/`, `ai/`, or `ui/` directly. Phase 3 fills the drift state machine and
+general boost stacking seams left neutral since Phase 0/2.
 
 #### Node tree (`kart/kart.tscn`, spec §6.3)
 
@@ -87,32 +86,92 @@ Kart (CharacterBody3D, layer 2 / mask 1)  [kart_controller.gd]
 ├── SlipstreamSensor (Node)   [slipstream_sensor.gd]
 │   └── ShapeCast3D           # mask 2, forward slipstream_range
 ├── HitReactor (Node)         [hit_reactor.gd]
+├── DriftController (Node)    [drift_controller.gd]
+├── BoostController (Node)    [boost_controller.gd]
+├── DriftEffects (Node3D)     [effects/drift_effects.gd] tier sparks + terrain-tinted smoke
+├── BoostEffects (Node3D)     [effects/boost_effects.gd] exhaust particles
 └── Visuals (Node3D)          [kart_visuals.gd]
     ├── Body (MeshInstance3D, BoxMesh)
     ├── Driver (MeshInstance3D, CapsuleMesh)
     └── WheelFL / WheelFR / WheelRL / WheelRR (Node3D pivot + static-tilt Mesh child)
 ```
 
-`DriftController` and `BoostController` remain Phase 3 slots; `ItemSlot` and
-`KartAudio` remain later slots. Phase 2's slipstream exit bonus deliberately
-travels through `KartPhysics.BoostResult` so BoostController can assume that
-ownership without changing longitudinal physics.
+`ItemSlot` and `KartAudio` remain later slots. `DriftController` and
+`BoostController` own their own gameplay state (see the Drift and Boost
+subsections below) and hand `KartPhysics` only the immutable
+`DriftResult`/`BoostResult` value objects each tick; `KartPhysics` remains the
+sole writer of motion. `DriftEffects`/`BoostEffects`/`SkidMark` subscribe to
+controller signals and read-only APIs only — no physics writes, capped at six
+`GPUParticles3D` nodes per kart (spec §17, coding rule 6).
+
+#### Drift (`kart/drift_controller.gd`, spec §10)
+
+`DriftController.step(frame, speed, grounded, air_time, yaw_rate, is_hit, dt)`
+drives a `NONE -> HOP -> HOLD -> RELEASE` state machine and returns one
+`KartPhysics.DriftResult` per tick:
+
+- **HOP** starts only when grounded, ungrounded-cooldown has elapsed, speed
+  exceeds `drift_min_speed`, and `|steer| >= drift_min_steer`; it requests a
+  vertical impulse via `hop_requested` (consumed by `KartPhysics.hop()`) and
+  locks `direction` from the steer sign once `drift_hop_duration` elapses.
+- **HOLD** accumulates charge every tick the driver still holds drift and
+  isn't opposite-steering hard: `rate = base_charge_rate * (1 +
+  steer_alignment_bonus * alignment) * turn_quality * KartData.drift_factor`,
+  where `alignment = max(0, steer * direction)` and `turn_quality` drops to
+  `low_turn_quality_mult` whenever `|yaw_rate| < min_drift_yaw_rate`. Charge
+  never decreases. Cancel paths: speed under `drift_cancel_speed` for
+  `drift_cancel_delay`, `HIT` state, airborne longer than
+  `drift_airborne_cancel_time`, or steer opposing `direction` past
+  `drift_min_steer` for `drift_opposite_cancel_delay` (a milder opposite
+  steer only widens the turn radius via `drift_steer_influence`, never
+  reverses `direction`).
+- **RELEASE** reads the highest `MiniTurboTier` whose `charge_seconds` the
+  accumulated charge has crossed, requests that tier's `BoostSpecData` via
+  `boost_requested`, and starts `drift_cooldown` before the next hop can begin.
+- Airborne tricks: while ungrounded with `air_time >= trick_min_air_time`, a
+  drift-button press arms a trick; landing while armed requests `trick_boost`
+  and clears the arm flag.
+- Signals (emitted locally and mirrored on `EventBus` with the owning kart):
+  `drift_started(direction)`, `drift_tier_changed(tier)`,
+  `drift_ended(released_tier)`.
+
+#### Boost (`kart/boost_controller.gd`, spec §11)
+
+`BoostController` owns one non-additive boost slot. `request(spec, source)`
+replaces the active spec when the new one's `speed_mult` is strictly
+stronger, or extends the remaining duration (capped at `max_boost_duration`)
+when it is equal or weaker. `step(dt)` decays `remaining` and returns the
+current `KartPhysics.BoostResult`, scaling `speed_mult`/`accel_mult` toward
+neutral by `KartData.boost_power`. `ignores_offroad` on the active spec flows
+into `TerrainSensor.sample(ignores_offroad)` so a boosted kart is not
+penalized by terrain it is powering through. `evaluate_start_input(frame,
+countdown_phase)` is a pure function (no controller state read or written)
+implementing the §11 start-boost window and early-throttle wheelspin outcome,
+kept for Phase 5's countdown UI to call. Boost sources currently in play:
+mini-turbo release (`DriftController`), slipstream exit (`SlipstreamSensor`
+via `KartController`), landing tricks (`DriftController`), and `BoostPad`.
+Signals: `boost_started(spec)`, `boost_ended()`, mirrored on `EventBus` with
+the owning kart.
 
 #### Tick order (`KartController._physics_process`, spec §9.3)
 
-Every Phase 2 step is real except drift; boost is a narrow slipstream-only
-adapter until Phase 3:
+Every step is real as of Phase 3:
 
 ```text
 1. frame   = input_provider.get_frame()          [real] hit-filtered; zero while RESPAWNING/FROZEN
-2. terrain = _sample_terrain()                   [real] zone > collider metadata > asphalt
+2. terrain = _sample_terrain(boost.ignores_offroad) [real] zone > collider metadata > asphalt
 3. ground  = KartPhysics.probe_ground()          [real] 5-ray average, excludes >max_climb_angle hits
-4. drift   = _update_drift(frame, ground)         [stub -> phase-3 DriftController] never drifting
-5. boost   = _update_boost(delta)                [phase-2] slipstream active/exit multipliers
+4. drift   = _update_drift(frame, ground)        [real] DriftController.step() -> DriftResult
+5. boost   = _update_boost(delta)                [real] slipstream active mult + BoostController.step()
 6. KartPhysics.integrate(frame, terrain, ground, drift, boost, delta)  [real]
 7. _update_hit_reactor(delta)                    [real] reaction/invulnerability timers
-8. _update_state(ground)                         [real] hit/respawn priority + airborne grace
+8. _update_state(ground)                         [real] hit/respawn priority, DRIFTING while HOLD, airborne grace
 ```
+
+`drift_controller.hop_requested` is connected to `KartPhysics.hop()` and
+`drift_controller.boost_requested` to `boost_controller.request()` once at
+`_ready()`, so a released mini-turbo or landed trick reaches the boost slot
+without `KartController` routing the spec by hand.
 
 `KartVisuals` and `RaceCamera` read only `KartController`'s public API
 (`get_speed`, `get_lateral_speed`, `get_air_time`, `get_forward`, hit state and
@@ -141,8 +200,13 @@ progress, plus inherited `get_velocity`) inside `_process()`, never
   `terrain` metadata and asphalt fallback. `KartData.offroad_resistance`
   lerps speed, grip, and drag penalties toward neutral values.
 - `SlipstreamSensor` uses a forward `ShapeCast3D`, a same-direction dot gate,
-  deterministic charge time, and a timed exit multiplier. It never creates a
-  general-purpose boost stack before Phase 3.
+  and deterministic charge time. Its active-window speed multiplier stays a
+  timed value owned locally in `KartController._update_boost()`; only the
+  exit bonus routes through `BoostController.request()`, since the active
+  multiplier is a continuous terrain-like effect rather than a stacked boost.
+- Drift yaw (`compute_drift_yaw_rate`) and grip/speed-retention are applied
+  only while `DriftResult.is_drifting` is true; the locked `drift_dir` can
+  never flip sign regardless of opposite steer (spec §10.2).
 - Airborne state requires more than two consecutive failed ground probes.
   Landing speed loss is capped and large travel-heading misalignment retains
   only a tuned fraction of lateral speed.
@@ -152,9 +216,10 @@ progress, plus inherited `get_velocity`) inside `_process()`, never
 #### Camera (`camera/race_camera.gd`, spec §16)
 
 `RaceCamera` extends `Camera3D` directly rather than being a kart child, and
-reads only the target's public API. Phase 1 implements spring-follow
-position, velocity-direction look, and speed-squared FOV; drift offset,
-shake, and look-back are Phase 3/8.
+reads only the target's public API. It implements spring-follow position,
+velocity-direction look, speed-squared FOV, a sideways offset opposite the
+active drift direction (lerped, from `get_drift_direction()`), and a
+spring-damped FOV kick while `is_boosting()`. Shake and look-back are Phase 8.
 
 ### Race
 
@@ -168,9 +233,17 @@ caller-supplied transform callable keeps track lookup out of the kart domain.
 
 Track scenes live below `track/tracks/`; reusable elements live below
 `track/elements/`. `OffroadZone` declares `TerrainData`; `KillZone` emits typed
-kart entry for `RespawnSystem`. Both test tracks have y=-5 kill planes. The flat
-loop has two grass patches; hills has dirt, a 1.5 m drop, and an east-wall gap.
-`track/track.gd` still validates structure without referencing karts.
+kart entry for `RespawnSystem`. Both flat/hills test tracks have y=-5 kill
+planes; the flat loop has two grass patches, hills has dirt, a 1.5 m drop, and
+an east-wall gap. `track/track.gd` still validates structure without
+referencing karts. `BoostPad` (layer 5 `Area3D`) and `JumpPad` narrow their
+kart interaction to `KartController.boost_controller.request()` and
+`KartController.launch()` respectively; neither owns kart state. `test_loop`
+carries two boost pads on its back straight, `test_loop_hills` carries one
+jump pad and a landing zone, and `track/tracks/test_hairpin/` is a third
+greybox track (a paperclip oval with two ~18 m radius hairpins built from
+evenly spaced arc points plus S-curve chicanes) sized so a drifted lap clears
+mini-turbo tier 2 and beats a non-drifted lap.
 
 ### Items and AI
 
@@ -427,3 +500,65 @@ Phase-later warnings rather than false failures.
   checkpoint RespawnPoints in Phase 4.
 - The macOS TLS certificate bundle override points to `/etc/ssl/cert.pem` so
   sandboxed headless runs do not attempt restricted Keychain access.
+
+### Phase 3
+
+- `DriftController`/`BoostController` are configured via `configure(tuning,
+  kart_data)` and driven with an explicit `step()`/`request()` API instead of
+  reading `KartController` directly, so both are unit-testable by feeding
+  fake frames/speeds without a scene tree — the same pattern Phase 1's
+  `KartPhysics` and Phase 2's `SlipstreamSensor` established.
+- Mini-turbo charge rate is pinned so `steer = 0.0` (no alignment bonus)
+  charges at exactly `base_charge_rate` (1.0/second), making
+  `MiniTurboTier.charge_seconds` literally seconds of full-quality holding.
+  This is asserted by a unit test and is a hard constraint on any future
+  tuning pass: `base_charge_rate` and `steer_alignment_bonus` must not change
+  without re-deriving the §10.4 tier table, since Phase 3's own hairpin
+  auto-drive proof depends on the exact 1.0s/2.2s/3.6s boundaries. This also
+  means the automated hairpin lap comparison could not be made to pass by
+  loosening those two gameplay values — only track geometry and the scripted
+  test driver were tuned (see below).
+- The Phase 2 slipstream *exit* bonus now routes through
+  `BoostController.request(tuning.slipstream_exit_boost, &"slipstream_exit")`
+  on the active-to-inactive edge, removing the old TODO. The slipstream
+  *active* window's own speed multiplier stays a separate, continuous
+  terrain-like effect applied directly in `KartController._update_boost()`
+  rather than a boost-stack entry, since a same-direction draft is ongoing
+  contact, not a discrete pickup.
+- `track/tracks/test_hairpin/hairpin_racing_line.gd` builds each ~18 m hairpin
+  from evenly spaced 30-degree arc points around a real circle rather than a
+  single sharp vertex. A single-vertex "hairpin" reads as a brief curvature
+  spike to any 3-point finite-difference curvature estimator (including the
+  sandbox's own scripted driver), not a sustained tight turn — too short a
+  signal to hold a drift through.
+- `tests/support/scripted_input_provider.gd`'s optional drift-on-corners mode
+  needed three additions beyond a bare curvature threshold to actually clear
+  mini-turbo tier 2 on that hairpin: (1) a lower exit threshold than the
+  entry threshold (hysteresis), so a mid-corner dip in sampled curvature
+  doesn't release the drift before the kart has actually exited the turn;
+  (2) a steer "flick" — pure line-tracking steer rarely reaches
+  `drift_min_steer` on its own, so once a turn is sharp enough to be worth
+  drifting the provider boosts steer magnitude toward the turn's locked
+  direction, sustained for the whole hop (a natural, gentler steer value on
+  even one intervening tick fails `DriftController`'s per-tick minimum-steer
+  hop check and cancels it); (3) during the hold, steer is clamped (never
+  boosted) to the locked direction's side so ordinary pursuit-steering noise
+  cannot cross zero and trip the opposite-steer cancel. None of this touches
+  `PhysicsTuning` — it is scripted-AI-only, calibrated against the fixed
+  1.0 charge/second constraint above.
+- The same provider brakes ahead of any upcoming turn tighter than
+  `sqrt(a representative grip constant * radius)` regardless of drift mode,
+  because pure line-tracking alone cannot hold an 18 m turn at cruising speed
+  on ordinary (non-drift) grip — it slides wide by tens of meters. This
+  braking is suspended for the ticks actually spent in `DriftState.HOLD`:
+  stacking it on top of `drift_speed_retention` starves charge time and
+  trips the low-speed cancel.
+- `tests/integration/test_phase3_hairpin.gd` measures lap completion by
+  cumulative world-space distance traveled plus a return within a radius of
+  the post-warmup start position, not `Curve3D.get_closest_offset()` deltas
+  like `test_kart_lap.gd` uses on the single-loop tracks. This track's two
+  straights run close and parallel, so a kart's closest point on the curve
+  can be genuinely ambiguous between them; distance-plus-return sidesteps
+  that ambiguity entirely.
+- HOP→NONE also on button release during hop: a tap is a hop, not a drift;
+  avoids zero-charge releases.

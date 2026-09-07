@@ -14,8 +14,9 @@ const DUMMY_LATERAL_OFFSET: float = 1.8
 const TRACK_SCENES: Array[PackedScene] = [
 	preload("res://track/tracks/test_loop/test_loop.tscn"),
 	preload("res://track/tracks/test_loop_hills/test_loop_hills.tscn"),
+	preload("res://track/tracks/test_hairpin/test_hairpin.tscn"),
 ]
-const TRACK_NODE_NAMES: Array[StringName] = [&"TestLoop", &"TestLoopHills"]
+const TRACK_NODE_NAMES: Array[StringName] = [&"TestLoop", &"TestLoopHills", &"TestHairpin"]
 const KART_SCENE: PackedScene = preload("res://kart/kart.tscn")
 const KART_DATA: Array[KartData] = [
 	preload("res://data/karts/light.tres"),
@@ -31,6 +32,7 @@ const KART_DATA: Array[KartData] = [
 const WATCH_NAMES: Array[StringName] = [
 	&"speed", &"speed_ratio", &"state", &"grounded", &"lateral", &"terrain",
 	&"slipstream", &"hit", &"invulnerable", &"air_time",
+	&"drift_state", &"drift_charge", &"drift_tier", &"boost", &"trick_armed",
 ]
 const SLIDER_NAMES: Array[StringName] = [
 	&"max_speed", &"acceleration", &"base_turn_rate", &"grip", &"drag", &"brake_force", &"gravity", &"hover_height",
@@ -51,6 +53,7 @@ func _ready() -> void:
 	_register_track_kill_zones()
 	_reset_to_grid()
 	_register_debug_overlay()
+	($HUD/DriftMeter as DriftMeter).set_controller(_kart.drift_controller)
 
 
 ## Prevents DebugOverlay from calling stale watch/slider callables that
@@ -80,6 +83,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				_swap_kart_data(1)
 			KEY_3:
 				_swap_kart_data(2)
+			KEY_4:
+				_select_track(2)
 			_:
 				return
 		get_viewport().set_input_as_handled()
@@ -93,7 +98,11 @@ func _reset_to_grid() -> void:
 
 
 func _switch_track() -> void:
-	_track_index = (_track_index + 1) % TRACK_SCENES.size()
+	_select_track((_track_index + 1) % TRACK_SCENES.size())
+
+
+func _select_track(index: int) -> void:
+	_track_index = index
 	remove_child(_track)
 	_track.queue_free()
 	_track = TRACK_SCENES[_track_index].instantiate() as TrackRoot
@@ -185,6 +194,11 @@ func _register_debug_overlay() -> void:
 	DebugOverlay.watch(&"hit", func() -> String: return _hit_name(_kart.get_hit_state()))
 	DebugOverlay.watch(&"invulnerable", func() -> bool: return _kart.is_invulnerable())
 	DebugOverlay.watch(&"air_time", func() -> String: return "%.2f" % _kart.get_air_time())
+	DebugOverlay.watch(&"drift_state", func() -> int: return _kart.get_drift_state())
+	DebugOverlay.watch(&"drift_charge", func() -> String: return "%.2f" % _kart.get_drift_charge())
+	DebugOverlay.watch(&"drift_tier", func() -> int: return _kart.get_drift_tier())
+	DebugOverlay.watch(&"boost", func() -> String: return "%s %.2f" % [_kart.get_boost_source(), _kart.get_boost_remaining()])
+	DebugOverlay.watch(&"trick_armed", func() -> bool: return _kart.is_trick_armed())
 
 	DebugOverlay.add_slider(&"max_speed", 5.0, 60.0,
 		func() -> float: return _kart.kart_data.max_speed,

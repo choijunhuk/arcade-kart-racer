@@ -1,9 +1,10 @@
-[gd_scene load_steps=20 format=3]
+[gd_scene load_steps=21 format=3]
 
 [ext_resource type="Script" path="res://track/track.gd" id="1_track"]
 [ext_resource type="Script" path="res://track/racing_line.gd" id="2_line"]
 [ext_resource type="PackedScene" path="res://track/elements/offroad_zone.tscn" id="3_offroad"]
 [ext_resource type="PackedScene" path="res://track/elements/kill_zone.tscn" id="4_kill"]
+[ext_resource type="PackedScene" path="res://track/elements/boost_pad.tscn" id="5_boost"]
 
 [sub_resource type="StandardMaterial3D" id="Material_road"]
 albedo_color = Color(0.28, 0.3, 0.34, 1)
@@ -292,6 +293,14 @@ rotation_degrees = Vector3(0, -90, 0)
 [node name="ItemBoxes" type="Node3D" parent="."]
 
 [node name="BoostPads" type="Node3D" parent="."]
+
+[node name="BackStraightBoostA" parent="BoostPads" instance=ExtResource("5_boost")]
+position = Vector3(10, 0.15, -22)
+rotation_degrees = Vector3(0, 90, 0)
+
+[node name="BackStraightBoostB" parent="BoostPads" instance=ExtResource("5_boost")]
+position = Vector3(-10, 0.15, -22)
+rotation_degrees = Vector3(0, 90, 0)
 
 [node name="JumpPads" type="Node3D" parent="."]
 

@@ -2,7 +2,7 @@ extends Node
 ## Windowed visual check (not headless): instantiates the kart sandbox,
 ## swaps the player input for ScriptedInputProvider (racing-line follower),
 ## drives for N seconds and saves PNG snapshots at fixed intervals.
-## usage: godot --path . res://scenes/test/drive_snapshot.tscn -- <out_dir> [seconds] [interval]
+## usage: godot --path . res://scenes/test/drive_snapshot.tscn -- <out_dir> [seconds] [interval] [drift|nodrift] [track_index]
 
 const SANDBOX_SCENE: String = "res://scenes/test/kart_sandbox.tscn"
 const DEFAULT_OUT_DIR: String = "/tmp/drive"
@@ -23,15 +23,21 @@ func _ready() -> void:
 	_out_dir = args[0] if args.size() > 0 else DEFAULT_OUT_DIR
 	var seconds: float = float(args[1]) if args.size() > 1 else DEFAULT_SECONDS
 	var interval: float = float(args[2]) if args.size() > 2 else DEFAULT_INTERVAL
+	var drift_on_corners: bool = args.size() > 3 and args[3] == "drift"
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	_total_ticks = int(seconds * Engine.physics_ticks_per_second)
 	_interval_ticks = maxi(1, int(interval * Engine.physics_ticks_per_second))
 
+	var track_index: int = int(args[4]) if args.size() > 4 else 0
 	var sandbox: Node = (load(SANDBOX_SCENE) as PackedScene).instantiate()
 	add_child(sandbox)
+	if track_index > 0:
+		sandbox.call("_select_track", track_index)
 	_kart = sandbox.get_node("Kart") as KartController
-	var racing_line: Path3D = sandbox.get_node("TestLoop/RacingLine") as Path3D
-	_kart.set_input_provider(ScriptedInputProvider.new(_kart, racing_line))
+	var racing_line: Path3D = sandbox.get_child(0).get_node("RacingLine") as Path3D
+	var provider: ScriptedInputProvider = ScriptedInputProvider.new(_kart, racing_line)
+	provider.set_drift_on_corners(drift_on_corners)
+	_kart.set_input_provider(provider)
 
 
 func _physics_process(_delta: float) -> void:

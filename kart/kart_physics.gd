@@ -23,23 +23,30 @@ class TerrainSample extends RefCounted:
 	var grip_mult: float = 1.0
 	var drag_mult: float = 1.0
 	var terrain_id: StringName = &"asphalt"
-	## TODO(phase-3): BoostController supplies this hook for boost-pad/item boosts.
+	## Set from the active `BoostController.BoostResult.ignores_offroad` flag
+	## (boost pads, items) so a boosted kart is not penalized by terrain.
 	var ignores_offroad: bool = false
 
 
-## Neutral drift result. TODO(phase-3): replace with `DriftController` output
-## (drift direction, visual angle, grip override).
+## Immutable-per-tick drift request produced by DriftController.
 class DriftResult extends RefCounted:
 	var is_drifting: bool = false
 	var drift_dir: float = 0.0
+	var steer_influence: float = 0.0
+	var grip: float = 0.0
+	var speed_retention: float = 1.0
+	var visual_angle_degrees: float = 0.0
 
 
-## Neutral boost result. TODO(phase-3): replace with `BoostController` output
-## (active speed/accel multipliers and offroad-ignore flag).
+## Immutable-per-tick boost request produced by BoostController.
 class BoostResult extends RefCounted:
+	var active: bool = false
 	var speed_mult: float = 1.0
 	var accel_mult: float = 1.0
 	var ignores_offroad: bool = false
+	var source: StringName = &""
+	var remaining: float = 0.0
+	var spec: BoostSpecData
 
 
 ## Pure wall-collision response: speed retained and outward bounce fraction.
@@ -56,6 +63,7 @@ var lateral: float = 0.0
 var grounded: bool = false
 var ground_normal: Vector3 = Vector3.UP
 var air_time: float = 0.0
+var last_yaw_rate: float = 0.0
 
 var _body: CharacterBody3D
 var _rays: Array[RayCast3D] = []
@@ -65,6 +73,7 @@ var _vertical_speed: float = 0.0
 var _current_up: Vector3 = Vector3.UP
 var _was_grounded: bool = true
 var _wall_contact_active: bool = false
+var _ground_ignore_ticks: int = 0
 
 signal wall_head_on()
 
@@ -85,6 +94,10 @@ func setup(body: CharacterBody3D, ground_rays: Array[RayCast3D], tuning: Physics
 ## a wall rather than driveable ground).
 func probe_ground() -> GroundProbe:
 	var probe: GroundProbe = GroundProbe.new()
+	if _ground_ignore_ticks > 0:
+		_ground_ignore_ticks -= 1
+		grounded = false
+		return probe
 	var normal_sum: Vector3 = Vector3.ZERO
 	var distance_sum: float = 0.0
 	var max_climb_rad: float = deg_to_rad(_tuning.max_climb_angle_degrees)
@@ -123,9 +136,12 @@ func integrate(
 	boost: BoostResult,
 	dt: float,
 ) -> void:
-	var effective_grip: float = _tuning.grip * _kart_data.traction * terrain.grip_mult
+	var effective_grip: float = _effective_grip(terrain, drift)
 	_integrate_longitudinal(input, terrain, boost, dt)
-	var yaw_delta: float = _integrate_steering(input, ground, dt)
+	if drift.is_drifting:
+		speed = apply_drift_speed_retention(speed, drift.speed_retention, dt)
+	var yaw_delta: float = _integrate_steering(input, ground, dt, drift)
+	last_yaw_rate = yaw_delta / dt if dt > 0.0 else 0.0
 	lateral += speed * sin(yaw_delta)
 	lateral *= exp(-effective_grip * dt)
 	_integrate_vertical(ground, dt)
@@ -164,19 +180,46 @@ func _integrate_longitudinal(input: InputFrame, terrain: TerrainSample, boost: B
 
 ## Applies speed-based steering around the ground normal and returns the yaw
 ## delta actually applied this tick (used to derive lateral slip).
-func _integrate_steering(input: InputFrame, ground: GroundProbe, dt: float) -> float:
+func _integrate_steering(
+	input: InputFrame, ground: GroundProbe, dt: float,
+	drift: DriftResult = null,
+) -> float:
 	if absf(speed) < _tuning.min_steer_speed:
 		return 0.0
-	var speed_ratio: float = clampf(absf(speed) / maxf(_kart_data.max_speed, 0.001), 0.0, 1.0)
-	var curve_mult: float = _tuning.steer_curve.sample(speed_ratio) if _tuning.steer_curve != null else 1.0
-	var direction_sign: float = signf(speed)
-	var yaw_rate: float = input.steer * _tuning.base_turn_rate * curve_mult * _kart_data.handling * direction_sign
+	var yaw_rate: float = 0.0
+	if drift != null and drift.is_drifting:
+		yaw_rate = compute_drift_yaw_rate(input.steer, drift.drift_dir, _tuning, _kart_data)
+	else:
+		var speed_ratio: float = clampf(absf(speed) / maxf(_kart_data.max_speed, 0.001), 0.0, 1.0)
+		var curve_mult: float = _tuning.steer_curve.sample(speed_ratio) if _tuning.steer_curve != null else 1.0
+		var direction_sign: float = signf(speed)
+		yaw_rate = input.steer * _tuning.base_turn_rate * curve_mult * _kart_data.handling * direction_sign
 	if not ground.grounded:
 		yaw_rate *= _tuning.air_steer_factor
 	var yaw_delta: float = yaw_rate * dt
 	var axis: Vector3 = ground.normal if ground.grounded else Vector3.UP
 	_body.rotate(axis, yaw_delta)
 	return yaw_delta
+
+
+## Computes locked-direction drift yaw; opposite steer may reach zero but never reverse it.
+static func compute_drift_yaw_rate(
+	steer: float, drift_dir: float, tuning: PhysicsTuning, kart_data: KartData,
+) -> float:
+	var radius_term: float = tuning.drift_base_turn + steer * drift_dir * tuning.drift_steer_influence
+	return drift_dir * maxf(0.0, radius_term) * kart_data.drift_factor
+
+
+## Returns the grip coefficient selected for this tick.
+func _effective_grip(terrain: TerrainSample, drift: DriftResult) -> float:
+	if drift.is_drifting:
+		return drift.grip
+	return _tuning.grip * _kart_data.traction * terrain.grip_mult
+
+
+## Converts a per-second retention ratio to a frame-rate-independent tick result.
+static func apply_drift_speed_retention(value: float, retention: float, dt: float) -> float:
+	return value * pow(clampf(retention, 0.0, 1.0), dt)
 
 
 func _integrate_vertical(ground: GroundProbe, dt: float) -> void:
@@ -324,6 +367,7 @@ func reset_motion() -> void:
 	lateral = 0.0
 	_vertical_speed = 0.0
 	air_time = 0.0
+	last_yaw_rate = 0.0
 	_body.velocity = Vector3.ZERO
 	_current_up = Vector3.UP
 	_was_grounded = true
@@ -332,3 +376,20 @@ func reset_motion() -> void:
 ## Rebinds per-kart handling and mass data after sandbox swaps.
 func set_kart_data(kart_data: KartData) -> void:
 	_kart_data = kart_data
+
+
+## Adds a small vertical drift-hop impulse without bypassing the scalar motion model.
+func hop(vertical_impulse: float) -> void:
+	_vertical_speed = maxf(_vertical_speed, vertical_impulse)
+	_ground_ignore_ticks = maxi(_ground_ignore_ticks, _tuning.airborne_grace_ticks + 1)
+	grounded = false
+
+
+## Replaces local motion with a launch vector where -Z is forward and +Y is up.
+func launch(local_velocity: Vector3) -> void:
+	lateral = local_velocity.x
+	_vertical_speed = local_velocity.y
+	speed = -local_velocity.z
+	_ground_ignore_ticks = _tuning.launch_ground_ignore_ticks
+	grounded = false
+	air_time = 0.0
