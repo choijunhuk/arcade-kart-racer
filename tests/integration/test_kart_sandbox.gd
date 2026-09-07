@@ -57,3 +57,57 @@ func test_sandbox_resets_kart_to_grid_slot_on_r_key() -> void:
 
 	assert_almost_eq(kart.global_position.x, grid_slot.global_position.x, 0.01)
 	assert_almost_eq(kart.global_position.z, grid_slot.global_position.z, 0.01)
+
+
+func test_sandbox_wires_collision_and_respawn_systems() -> void:
+	var sandbox: Node = (load(SANDBOX_PATH) as PackedScene).instantiate()
+	add_child_autofree(sandbox)
+
+	assert_not_null(sandbox.get_node_or_null("KartCollisionResolver"))
+	assert_not_null(sandbox.get_node_or_null("RespawnSystem"))
+
+
+func test_t_key_switches_to_hills_track() -> void:
+	var sandbox: Node = (load(SANDBOX_PATH) as PackedScene).instantiate()
+	add_child_autofree(sandbox)
+	await wait_physics_frames(1)
+
+	sandbox._unhandled_input(_key_event(KEY_T))
+	await wait_physics_frames(1)
+
+	assert_null(sandbox.get_node_or_null("TestLoop"))
+	assert_not_null(sandbox.get_node_or_null("TestLoopHills"))
+
+
+func test_number_keys_swap_light_medium_and_heavy_kart_data() -> void:
+	var sandbox: Node = (load(SANDBOX_PATH) as PackedScene).instantiate()
+	add_child_autofree(sandbox)
+	await wait_physics_frames(1)
+	var kart: KartController = sandbox.get_node("Kart") as KartController
+
+	sandbox._unhandled_input(_key_event(KEY_1))
+	assert_eq(kart.kart_data.id, &"light")
+	sandbox._unhandled_input(_key_event(KEY_2))
+	assert_eq(kart.kart_data.id, &"medium")
+	sandbox._unhandled_input(_key_event(KEY_3))
+	assert_eq(kart.kart_data.id, &"heavy")
+
+
+func test_b_key_spawns_three_registered_dummy_karts() -> void:
+	var sandbox: Node = (load(SANDBOX_PATH) as PackedScene).instantiate()
+	add_child_autofree(sandbox)
+	await wait_physics_frames(1)
+
+	sandbox._unhandled_input(_key_event(KEY_B))
+	await wait_physics_frames(1)
+
+	assert_not_null(sandbox.get_node_or_null("DummyKart1"))
+	assert_not_null(sandbox.get_node_or_null("DummyKart2"))
+	assert_not_null(sandbox.get_node_or_null("DummyKart3"))
+
+
+func _key_event(keycode: Key) -> InputEventKey:
+	var event: InputEventKey = InputEventKey.new()
+	event.physical_keycode = keycode
+	event.pressed = true
+	return event

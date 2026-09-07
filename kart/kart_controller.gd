@@ -159,6 +159,11 @@ func teleport_for_respawn(target: Transform3D) -> void:
 	_hit_reactor.grant_invulnerability(tuning.respawn_invulnerability_duration)
 
 
+## Clears momentum without changing state or granting invulnerability.
+func reset_motion_arcade() -> void:
+	_physics.reset_motion()
+
+
 ## Ends respawn freeze and returns state control to ground probing.
 func finish_respawn() -> void:
 	_respawning = false

@@ -35,15 +35,20 @@ func test_kart_recovers_from_a_head_on_wall_collision_without_flipping() -> void
 	var provider: _FullThrottleProvider = _FullThrottleProvider.new()
 	kart.set_input_provider(provider)
 
-	await wait_physics_frames(int(HEAD_ON_SECONDS * TICKS_PER_SECOND))
+	var saw_bump: bool = false
+	for tick: int in range(int(HEAD_ON_SECONDS * TICKS_PER_SECOND)):
+		await wait_physics_frames(1)
+		saw_bump = saw_bump or kart.get_hit_state() == HitReactor.HitType.BUMP
 
 	var up_dot: float = kart.global_transform.basis.y.dot(Vector3.UP)
 	assert_gt(up_dot, cos(deg_to_rad(MAX_TILT_DEGREES)), "kart body tilted as if it flipped")
+	assert_true(saw_bump, "head-on wall collision never triggered HitReactor.BUMP")
 
 	provider.steer = 1.0
 	await wait_physics_frames(int(RECOVERY_SECONDS * TICKS_PER_SECOND))
 
 	assert_gt(kart.get_speed(), MIN_RECOVERED_SPEED, "kart stayed stuck against the wall")
+	assert_ne(kart.get_state(), KartState.HIT, "BUMP reaction did not recover")
 
 
 func _build_floor() -> StaticBody3D:

@@ -1,9 +1,11 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scenes/test/kart_sandbox.gd" id="1_sandbox"]
 [ext_resource type="PackedScene" path="res://track/tracks/test_loop/test_loop.tscn" id="2_track"]
 [ext_resource type="PackedScene" path="res://kart/kart.tscn" id="3_kart"]
 [ext_resource type="PackedScene" path="res://camera/race_camera.tscn" id="4_camera"]
+[ext_resource type="Script" path="res://race/kart_collision_resolver.gd" id="6_collision"]
+[ext_resource type="Script" path="res://race/respawn_system.gd" id="7_respawn"]
 
 [node name="KartSandbox" type="Node3D"]
 script = ExtResource("1_sandbox")
@@ -17,9 +19,15 @@ rotation_degrees = Vector3(0, -90, 0)
 [node name="RaceCamera" parent="." instance=ExtResource("4_camera")]
 current = true
 
+[node name="KartCollisionResolver" type="Node" parent="."]
+script = ExtResource("6_collision")
+
+[node name="RespawnSystem" type="Node" parent="."]
+script = ExtResource("7_respawn")
+
 [node name="SandboxLabel" type="Label" parent="."]
 offset_left = 20.0
 offset_top = 840.0
 offset_right = 640.0
 offset_bottom = 880.0
-text = "PHASE 1 SANDBOX — WASD/pad drive, Space/RB drift(stub Phase3), R reset to grid"
+text = "PHASE 2 — WASD drive | R reset | T track | 1/2/3 weight | B spawn bump dummies"

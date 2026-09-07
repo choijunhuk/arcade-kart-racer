@@ -65,6 +65,7 @@ var _kart_data: KartData
 var _vertical_speed: float = 0.0
 var _current_up: Vector3 = Vector3.UP
 var _was_grounded: bool = true
+var _wall_contact_active: bool = false
 
 signal wall_head_on()
 
@@ -136,8 +137,9 @@ func integrate(
 	var forward: Vector3 = -_body.global_transform.basis.z
 	var right: Vector3 = _body.global_transform.basis.x
 	_body.velocity = forward * speed + right * lateral + Vector3.UP * _vertical_speed
+	var incoming_velocity: Vector3 = _body.velocity
 	_body.move_and_slide()
-	_resolve_wall_collisions(dt)
+	_resolve_wall_collisions(dt, incoming_velocity)
 
 
 func _effective_max_speed(terrain: TerrainSample, boost: BoostResult) -> float:
@@ -243,22 +245,27 @@ func _apply_landing_loss(ground: GroundProbe) -> void:
 	)
 
 
-func _resolve_wall_collisions(dt: float) -> void:
+func _resolve_wall_collisions(dt: float, incoming_velocity: Vector3) -> void:
+	var found_wall: bool = false
 	for index: int in _body.get_slide_collision_count():
 		var collision: KinematicCollision3D = _body.get_slide_collision(index)
 		var normal: Vector3 = collision.get_normal()
 		if absf(normal.dot(Vector3.UP)) >= _tuning.wall_normal_threshold:
 			continue
-		var travel_dir: Vector3 = _body.velocity.normalized() if _body.velocity.length() > 0.01 else -_body.global_transform.basis.z
-		var incidence_degrees: float = rad_to_deg(travel_dir.angle_to(-normal))
+		found_wall = true
+		_body.global_position += normal * _tuning.wall_push_out * dt
+		if _wall_contact_active:
+			continue
+		var travel_dir: Vector3 = incoming_velocity.normalized() if incoming_velocity.length() > 0.01 else -_body.global_transform.basis.z
+		var incidence_degrees: float = rad_to_deg(asin(clampf(absf(travel_dir.dot(normal)), 0.0, 1.0)))
 		var response: WallResponse = compute_wall_response(incidence_degrees, _tuning)
 		speed *= response.speed_mult
 		lateral *= response.speed_mult
-		_body.global_position += normal * _tuning.wall_push_out * dt
 		if response.bounce_mult > 0.0:
 			_body.global_position += normal * response.bounce_mult * _tuning.wall_bounce_push
 		if incidence_degrees >= _tuning.wall_head_on_angle_degrees:
 			wall_head_on.emit()
+	_wall_contact_active = found_wall
 
 
 ## Pure wall-incidence response (spec §9.8): graze below `wall_graze_angle_degrees`,
