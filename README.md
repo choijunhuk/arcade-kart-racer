@@ -60,3 +60,12 @@ tools/run_sim.sh
 - `main`은 항상 승인된 Phase까지만 포함.
 - 모든 변경은 PR로만 머지.
 - Phase 완료 보고는 `DEVLOG.md`에 누적한다.
+
+## 시각 검증 (윈도우 모드)
+
+```bash
+godot --path . res://scenes/test/drive_snapshot.tscn -- /tmp/drive 20 4   # 자동 주행 20초, 4초마다 PNG
+godot --path . -s tools/snapshot.gd -- res://scenes/test/kart_sandbox.tscn /tmp/shot.png 90
+```
+
+> 새로 클론한 뒤에는 먼저 `godot --headless --path . --import`를 한 번 실행해 class_name 캐시를 만들어야 한다.
