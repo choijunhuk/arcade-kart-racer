@@ -1,7 +1,9 @@
-[gd_scene load_steps=18 format=3]
+[gd_scene load_steps=20 format=3]
 
 [ext_resource type="Script" path="res://track/track.gd" id="1_track"]
 [ext_resource type="Script" path="res://track/racing_line.gd" id="2_line"]
+[ext_resource type="PackedScene" path="res://track/elements/offroad_zone.tscn" id="3_offroad"]
+[ext_resource type="PackedScene" path="res://track/elements/kill_zone.tscn" id="4_kill"]
 
 [sub_resource type="StandardMaterial3D" id="Material_road"]
 albedo_color = Color(0.28, 0.3, 0.34, 1)
@@ -295,9 +297,23 @@ rotation_degrees = Vector3(0, -90, 0)
 
 [node name="OffroadZones" type="Node3D" parent="."]
 
+[node name="GrassInsideEast" parent="OffroadZones" instance=ExtResource("3_offroad")]
+position = Vector3(40, 0, 14)
+rotation_degrees = Vector3(0, 45, 0)
+scale = Vector3(15, 1, 7)
+
+[node name="GrassInsideWest" parent="OffroadZones" instance=ExtResource("3_offroad")]
+position = Vector3(-40, 0, -14)
+rotation_degrees = Vector3(0, 45, 0)
+scale = Vector3(15, 1, 7)
+
 [node name="Hazards" type="Node3D" parent="."]
 
 [node name="KillZones" type="Node3D" parent="."]
+
+[node name="FallPlane" parent="KillZones" instance=ExtResource("4_kill")]
+position = Vector3(0, -5, 0)
+scale = Vector3(150, 1, 90)
 
 [node name="MovingObstacles" type="Node3D" parent="."]
 
