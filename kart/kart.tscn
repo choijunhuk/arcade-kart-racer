@@ -1,4 +1,4 @@
-[gd_scene load_steps=18 format=3]
+[gd_scene load_steps=24 format=3]
 
 [ext_resource type="Script" path="res://kart/kart_controller.gd" id="1_controller"]
 [ext_resource type="Script" path="res://kart/kart_physics.gd" id="2_physics"]
@@ -6,6 +6,10 @@
 [ext_resource type="Script" path="res://kart/terrain_sensor.gd" id="4_terrain"]
 [ext_resource type="Script" path="res://kart/slipstream_sensor.gd" id="5_slipstream"]
 [ext_resource type="Script" path="res://kart/hit_reactor.gd" id="6_hit"]
+[ext_resource type="Script" path="res://kart/drift_controller.gd" id="7_drift"]
+[ext_resource type="Script" path="res://kart/boost_controller.gd" id="8_boost"]
+[ext_resource type="PackedScene" path="res://effects/drift_effects.tscn" id="9_drift_fx"]
+[ext_resource type="PackedScene" path="res://effects/boost_effects.tscn" id="10_boost_fx"]
 
 [sub_resource type="BoxShape3D" id="Shape_body"]
 size = Vector3(1.6, 0.6, 2.2)
@@ -112,6 +116,16 @@ shape = SubResource("Shape_slipstream")
 
 [node name="HitReactor" type="Node" parent="."]
 script = ExtResource("6_hit")
+
+[node name="DriftController" type="Node" parent="."]
+script = ExtResource("7_drift")
+
+[node name="BoostController" type="Node" parent="."]
+script = ExtResource("8_boost")
+
+[node name="DriftEffects" parent="." instance=ExtResource("9_drift_fx")]
+
+[node name="BoostEffects" parent="." instance=ExtResource("10_boost_fx")]
 
 [node name="Visuals" type="Node3D" parent="."]
 script = ExtResource("3_visuals")

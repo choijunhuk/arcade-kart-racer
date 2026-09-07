@@ -41,6 +41,14 @@ func test_controller_phase2_read_api_starts_in_neutral_state() -> void:
 	assert_eq(kart.get_terrain_id(), &"asphalt")
 
 
+func test_kart_scene_contains_phase3_drift_and_boost_controllers() -> void:
+	var kart: KartController = KART_SCENE.instantiate() as KartController
+	add_child_autofree(kart)
+
+	assert_not_null(kart.get_node_or_null("DriftController") as DriftController)
+	assert_not_null(kart.get_node_or_null("BoostController") as BoostController)
+
+
 func _build_floor() -> StaticBody3D:
 	var body: StaticBody3D = StaticBody3D.new()
 	body.collision_layer = 1

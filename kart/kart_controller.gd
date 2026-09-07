@@ -17,6 +17,8 @@ signal state_changed(old_state: int, new_state: int)
 @onready var _slipstream_sensor: SlipstreamSensor = $SlipstreamSensor
 @onready var _slipstream_cast: ShapeCast3D = $SlipstreamSensor/ShapeCast3D
 @onready var _hit_reactor: HitReactor = $HitReactor
+@onready var drift_controller: DriftController = $DriftController
+@onready var boost_controller: BoostController = $BoostController
 
 var input_provider: InputProvider = InputProvider.new()
 var state: int = KartState.GROUNDED
@@ -36,12 +38,18 @@ func _ready() -> void:
 	_terrain_sensor.setup(_terrain_probe, rays, kart_data)
 	_slipstream_sensor.setup(_slipstream_cast, self, tuning)
 	_hit_reactor.setup(self, _physics, tuning)
+	drift_controller.configure(tuning, kart_data)
+	drift_controller.set_owner_kart(self)
+	boost_controller.configure(tuning, kart_data)
+	boost_controller.set_owner_kart(self)
+	drift_controller.hop_requested.connect(_physics.hop)
+	drift_controller.boost_requested.connect(boost_controller.request)
 	_physics.wall_head_on.connect(_on_wall_head_on)
 
 
 func _physics_process(delta: float) -> void:
 	var frame: InputFrame = _get_input_frame()
-	var terrain: KartPhysics.TerrainSample = _sample_terrain()
+	var terrain: KartPhysics.TerrainSample = _sample_terrain(boost_controller.get_result().ignores_offroad)
 	var ground: KartPhysics.GroundProbe = _physics.probe_ground()
 	var drift_result: KartPhysics.DriftResult = _update_drift(frame, ground)
 	var boost_result: KartPhysics.BoostResult = _update_boost(delta)
@@ -133,6 +141,8 @@ func set_kart_data(data: KartData) -> void:
 	kart_data = data
 	_physics.set_kart_data(data)
 	_terrain_sensor.set_kart_data(data)
+	drift_controller.configure(tuning, data)
+	boost_controller.configure(tuning, data)
 
 
 ## Converts a world velocity change into local speed/lateral components.
@@ -164,6 +174,64 @@ func reset_motion_arcade() -> void:
 	_physics.reset_motion()
 
 
+## Applies a local-space forward/up launch through KartPhysics ownership.
+func launch(local_velocity: Vector3) -> void:
+	_physics.launch(local_velocity)
+	_ungrounded_ticks = tuning.airborne_grace_ticks + 1
+	_set_state(KartState.AIRBORNE)
+
+
+## Requests a boost from a track or future item source.
+func request_boost(spec: BoostSpecData, source: StringName) -> void:
+	boost_controller.request(spec, source)
+
+
+## Returns drift visual state without exposing mutable controller internals.
+func get_drift_direction() -> int:
+	return drift_controller.get_direction()
+
+
+## Returns current drift charge seconds.
+func get_drift_charge() -> float:
+	return drift_controller.get_charge()
+
+
+## Returns current mini-turbo tier.
+func get_drift_tier() -> int:
+	return drift_controller.get_tier()
+
+
+## Returns current drift state enum.
+func get_drift_state() -> DriftController.DriftState:
+	return drift_controller.get_state()
+
+
+## Returns current boost source for HUD/debug observers.
+func get_boost_source() -> StringName:
+	return boost_controller.get_source()
+
+
+## Returns active boost seconds remaining.
+func get_boost_remaining() -> float:
+	return boost_controller.get_remaining()
+
+
+## Returns whether an airborne trick is armed.
+func is_trick_armed() -> bool:
+	return drift_controller.is_trick_armed()
+
+
+## Returns the tier-derived body yaw request in degrees.
+func get_drift_visual_angle_degrees() -> float:
+	var result: KartPhysics.DriftResult = drift_controller._build_result()
+	return result.visual_angle_degrees * float(drift_controller.get_direction())
+
+
+## Returns whether any boost currently affects physics.
+func is_boosting() -> bool:
+	return boost_controller.get_result().active
+
+
 ## Ends respawn freeze and returns state control to ground probing.
 func finish_respawn() -> void:
 	_respawning = false
@@ -184,26 +252,29 @@ func _get_input_frame() -> InputFrame:
 	return frame
 
 
-func _sample_terrain() -> KartPhysics.TerrainSample:
-	var sample: KartPhysics.TerrainSample = _terrain_sensor.sample()
+func _sample_terrain(ignores_offroad: bool = false) -> KartPhysics.TerrainSample:
+	var sample: KartPhysics.TerrainSample = _terrain_sensor.sample(ignores_offroad)
 	_current_terrain_id = sample.terrain_id
 	return sample
 
 
-## TODO(phase-3): DriftController is not implemented yet; drifting never
-## engages and no visual angle or grip override is produced.
-func _update_drift(_frame: InputFrame, _ground: KartPhysics.GroundProbe) -> KartPhysics.DriftResult:
-	return KartPhysics.DriftResult.new()
+func _update_drift(frame: InputFrame, ground: KartPhysics.GroundProbe) -> KartPhysics.DriftResult:
+	return drift_controller.step(
+		frame, _physics.speed, ground.grounded, _physics.air_time,
+		_physics.last_yaw_rate, _hit_reactor.is_active(), get_physics_process_delta_time(),
+	)
 
 
-## TODO(phase-3): route slipstream exit through BoostController once it owns
-## boost stacking. Phase 2 keeps the timed multiplier in BoostResult.
 func _update_boost(delta: float) -> KartPhysics.BoostResult:
+	var was_active: bool = _slipstream_active
 	var timer: SlipstreamSensor.TimerResult = _slipstream_sensor.tick(delta)
-	var result: KartPhysics.BoostResult = KartPhysics.BoostResult.new()
-	result.speed_mult = timer.speed_mult
-	result.accel_mult = timer.speed_mult
 	_slipstream_active = timer.active
+	if was_active and not timer.active:
+		boost_controller.request(tuning.slipstream_exit_boost, &"slipstream_exit")
+	var result: KartPhysics.BoostResult = boost_controller.step(delta)
+	if timer.active and timer.speed_mult > result.speed_mult:
+		result.speed_mult = timer.speed_mult
+		result.accel_mult = timer.speed_mult
 	return result
 
 
@@ -220,7 +291,10 @@ func _update_state(ground: KartPhysics.GroundProbe) -> void:
 		return
 	if ground.grounded:
 		_ungrounded_ticks = 0
-		_set_state(KartState.GROUNDED)
+		if drift_controller.get_state() == DriftController.DriftState.HOLD:
+			_set_state(KartState.DRIFTING)
+		else:
+			_set_state(KartState.GROUNDED)
 		return
 	_ungrounded_ticks += 1
 	if _ungrounded_ticks > tuning.airborne_grace_ticks:

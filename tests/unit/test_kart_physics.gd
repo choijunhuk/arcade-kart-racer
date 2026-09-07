@@ -9,8 +9,8 @@ var _dummy_body: CharacterBody3D
 
 
 func before_each() -> void:
-	_tuning = load("res://data/tuning/physics_default.tres") as PhysicsTuning
-	_kart_data = load("res://data/karts/medium.tres") as KartData
+	_tuning = (load("res://data/tuning/physics_default.tres") as PhysicsTuning).duplicate(true) as PhysicsTuning
+	_kart_data = (load("res://data/karts/medium.tres") as KartData).duplicate(true) as KartData
 	_physics = KartPhysics.new()
 	_dummy_body = CharacterBody3D.new()
 	_physics.setup(_dummy_body, [], _tuning, _kart_data)
@@ -98,6 +98,54 @@ func test_yaw_rate_shrinks_with_speed() -> void:
 	var high_speed_yaw: float = absf(_physics._integrate_steering(input, ground, DT))
 
 	assert_gt(low_speed_yaw, high_speed_yaw)
+
+
+func test_drift_yaw_uses_locked_direction_and_never_reverses_on_opposite_steer() -> void:
+	assert_true(_physics.has_method("compute_drift_yaw_rate"))
+	if not _physics.has_method("compute_drift_yaw_rate"):
+		return
+	var yaw_rate: float = float(_physics.call("compute_drift_yaw_rate", -1.0, 1.0, _tuning, _kart_data))
+
+	assert_gt(yaw_rate, 0.0)
+	assert_almost_eq(yaw_rate, _tuning.drift_base_turn - _tuning.drift_steer_influence, 0.001)
+
+
+func test_drift_turn_scales_base_and_steer_influence_by_kart_factor() -> void:
+	assert_true(_physics.has_method("compute_drift_yaw_rate"))
+	if not _physics.has_method("compute_drift_yaw_rate"):
+		return
+	_kart_data.drift_factor = 1.15
+	var yaw_rate: float = float(_physics.call("compute_drift_yaw_rate", 1.0, 1.0, _tuning, _kart_data))
+
+	assert_almost_eq(yaw_rate, (_tuning.drift_base_turn + _tuning.drift_steer_influence) * 1.15, 0.001)
+
+
+func test_drift_grip_overrides_regular_terrain_grip() -> void:
+	assert_true(_physics.has_method("_effective_grip"))
+	if not _physics.has_method("_effective_grip"):
+		return
+	var terrain: KartPhysics.TerrainSample = KartPhysics.TerrainSample.new()
+	terrain.grip_mult = 0.7
+	var drift: KartPhysics.DriftResult = KartPhysics.DriftResult.new()
+	drift.is_drifting = true
+	drift.grip = _tuning.drift_grip
+
+	assert_almost_eq(float(_physics.call("_effective_grip", terrain, drift)), _tuning.drift_grip, 0.001)
+
+
+func test_drift_speed_retention_is_frame_rate_independent_per_second() -> void:
+	assert_true(_physics.has_method("apply_drift_speed_retention"))
+	if not _physics.has_method("apply_drift_speed_retention"):
+		return
+	var at_sixty: float = 20.0
+	for tick: int in range(60):
+		at_sixty = float(_physics.call("apply_drift_speed_retention", at_sixty, 0.97, 1.0 / 60.0))
+	var at_one_twenty: float = 20.0
+	for tick: int in range(120):
+		at_one_twenty = float(_physics.call("apply_drift_speed_retention", at_one_twenty, 0.97, 1.0 / 120.0))
+
+	assert_almost_eq(at_sixty, 19.4, 0.001)
+	assert_almost_eq(at_one_twenty, at_sixty, 0.001)
 
 
 func test_wall_response_graze_loses_little_speed_and_does_not_bounce() -> void:
