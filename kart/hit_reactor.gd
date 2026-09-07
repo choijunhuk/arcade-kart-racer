@@ -1,0 +1,125 @@
+class_name HitReactor
+extends Node
+
+## Owns deterministic hit durations and post-hit invulnerability. Physics
+## effects are applied once on acceptance; visuals read normalized progress.
+
+enum HitType {
+	BUMP,
+	SPIN_OUT,
+	TUMBLE,
+	SQUASH,
+}
+
+var _controller: KartController
+var _physics: KartPhysics
+var _tuning: PhysicsTuning
+var _hit_type: HitType = HitType.BUMP
+var _duration: float = 0.0
+var _remaining: float = 0.0
+var _invulnerability_remaining: float = 0.0
+
+
+## Wires optional runtime owners; null owners keep the timer unit-testable.
+func setup(controller: KartController, physics: KartPhysics, tuning: PhysicsTuning) -> void:
+	_controller = controller
+	_physics = physics
+	_tuning = tuning
+
+
+## Applies a hit unless invulnerability is active, returning acceptance.
+func apply(type: HitType, _source: Node) -> bool:
+	if is_invulnerable():
+		return false
+	_hit_type = type
+	_duration = _duration_for(type)
+	_remaining = _duration
+	_invulnerability_remaining = _tuning.hit_invulnerability_duration
+	_apply_initial_physics(type)
+	if is_inside_tree() and _controller != null:
+		EventBus.kart_hit.emit(_controller, type)
+	return true
+
+
+## Advances hit and invulnerability timers without coroutine timers.
+func tick(delta: float) -> void:
+	_remaining = maxf(0.0, _remaining - delta)
+	_invulnerability_remaining = maxf(0.0, _invulnerability_remaining - delta)
+	if is_active() and _hit_type == HitType.SQUASH and _physics != null:
+		_physics.cap_speed(_tuning.hit_squash_speed_cap_factor)
+
+
+## Clears only the reaction, preserving explicit invulnerability state.
+func clear() -> void:
+	_remaining = 0.0
+	_invulnerability_remaining = 0.0
+
+
+## Grants invulnerability for at least the requested duration.
+func grant_invulnerability(duration: float) -> void:
+	_invulnerability_remaining = maxf(_invulnerability_remaining, duration)
+
+
+## Returns whether a visual/gameplay hit reaction is active.
+func is_active() -> bool:
+	return _remaining > 0.0
+
+
+## Returns whether a new hit must be rejected.
+func is_invulnerable() -> bool:
+	return _invulnerability_remaining > 0.0
+
+
+## Returns the current hit enum for debug and visual presentation.
+func get_hit_type() -> HitType:
+	return _hit_type
+
+
+## Returns seconds left in the current reaction.
+func get_remaining_time() -> float:
+	return _remaining
+
+
+## Returns normalized elapsed progress in the active reaction.
+func get_progress() -> float:
+	if _duration <= 0.0:
+		return 0.0
+	return clampf(1.0 - (_remaining / _duration), 0.0, 1.0)
+
+
+## Returns the one-shot speed factor associated with the current hit.
+func get_speed_factor() -> float:
+	match _hit_type:
+		HitType.SPIN_OUT:
+			return _tuning.hit_spin_out_speed_factor
+		HitType.TUMBLE:
+			return _tuning.hit_tumble_speed_factor
+		HitType.SQUASH:
+			return _tuning.hit_squash_speed_cap_factor
+		_:
+			return 1.0
+
+
+func _duration_for(type: HitType) -> float:
+	match type:
+		HitType.BUMP:
+			return _tuning.hit_bump_duration
+		HitType.SPIN_OUT:
+			return _tuning.hit_spin_out_duration
+		HitType.TUMBLE:
+			return _tuning.hit_tumble_duration
+		HitType.SQUASH:
+			return _tuning.hit_squash_duration
+	return 0.0
+
+
+func _apply_initial_physics(type: HitType) -> void:
+	if _physics == null:
+		return
+	match type:
+		HitType.SPIN_OUT:
+			_physics.scale_speed(_tuning.hit_spin_out_speed_factor)
+		HitType.TUMBLE:
+			_physics.scale_speed(_tuning.hit_tumble_speed_factor)
+		HitType.SQUASH:
+			_physics.cap_speed(_tuning.hit_squash_speed_cap_factor)
