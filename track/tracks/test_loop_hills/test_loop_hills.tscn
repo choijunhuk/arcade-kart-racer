@@ -1,10 +1,11 @@
-[gd_scene load_steps=26 format=3]
+[gd_scene load_steps=27 format=3]
 
 [ext_resource type="Script" path="res://track/track.gd" id="1_track"]
 [ext_resource type="Script" path="res://track/racing_line.gd" id="2_line"]
 [ext_resource type="PackedScene" path="res://track/elements/offroad_zone.tscn" id="3_offroad"]
 [ext_resource type="PackedScene" path="res://track/elements/kill_zone.tscn" id="4_kill"]
 [ext_resource type="Resource" path="res://data/terrain/dirt.tres" id="5_dirt"]
+[ext_resource type="PackedScene" path="res://track/elements/jump_pad.tscn" id="6_jump"]
 
 [sub_resource type="StandardMaterial3D" id="Material_road"]
 albedo_color = Color(0.28, 0.3, 0.34, 1)
@@ -181,6 +182,10 @@ mesh = SubResource("Mesh_ramp")
 [node name="LedgePlatformCollision" type="CollisionShape3D" parent="Geometry"]
 position = Vector3(23, 1.25, 22)
 shape = SubResource("Shape_ramp")
+
+[node name="LandingZone" type="MeshInstance3D" parent="Geometry"]
+position = Vector3(39, 0.15, 22)
+mesh = SubResource("Mesh_ramp")
 
 [node name="BankedCornerOverlay" type="MeshInstance3D" parent="Geometry"]
 # PLACEHOLDER (Phase 4 replaces with curve-aligned banked geometry): a fixed
@@ -368,6 +373,10 @@ rotation_degrees = Vector3(0, -90, 0)
 [node name="BoostPads" type="Node3D" parent="."]
 
 [node name="JumpPads" type="Node3D" parent="."]
+
+[node name="MainJump" parent="JumpPads" instance=ExtResource("6_jump")]
+position = Vector3(24, 1.7, 22)
+rotation_degrees = Vector3(0, -90, 0)
 
 [node name="OffroadZones" type="Node3D" parent="."]
 

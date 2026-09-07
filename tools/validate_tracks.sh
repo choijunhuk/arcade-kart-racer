@@ -9,3 +9,5 @@ cd "$PROJECT_ROOT"
 	res://track/tracks/test_loop/test_loop.tscn
 "$GODOT_BIN" --headless --path . -s track/track_validator.gd -- \
 	res://track/tracks/test_loop_hills/test_loop_hills.tscn
+"$GODOT_BIN" --headless --path . -s track/track_validator.gd -- \
+	res://track/tracks/test_hairpin/test_hairpin.tscn
