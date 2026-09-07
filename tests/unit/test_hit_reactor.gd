@@ -23,6 +23,7 @@ func test_hit_reactor_script_exists() -> void:
 
 func test_spin_out_uses_configured_duration_and_speed_factor() -> void:
 	if _reactor == null:
+		fail_test("HitReactor could not be constructed")
 		return
 	var accepted: bool = bool(_reactor.call("apply", 1, null))
 
@@ -33,6 +34,7 @@ func test_spin_out_uses_configured_duration_and_speed_factor() -> void:
 
 func test_tumble_and_squash_use_distinct_configured_durations() -> void:
 	if _reactor == null:
+		fail_test("HitReactor could not be constructed")
 		return
 	_reactor.call("apply", 2, null)
 	var tumble_duration: float = float(_reactor.call("get_remaining_time"))
@@ -47,6 +49,7 @@ func test_tumble_and_squash_use_distinct_configured_durations() -> void:
 
 func test_second_hit_is_rejected_while_invulnerable() -> void:
 	if _reactor == null:
+		fail_test("HitReactor could not be constructed")
 		return
 	assert_true(bool(_reactor.call("apply", 0, null)))
 	assert_false(bool(_reactor.call("apply", 1, null)))
@@ -54,6 +57,7 @@ func test_second_hit_is_rejected_while_invulnerable() -> void:
 
 func test_hit_recovers_but_invulnerability_continues() -> void:
 	if _reactor == null:
+		fail_test("HitReactor could not be constructed")
 		return
 	_reactor.call("apply", 0, null)
 	_reactor.call("tick", _tuning.hit_bump_duration)
@@ -64,6 +68,7 @@ func test_hit_recovers_but_invulnerability_continues() -> void:
 
 func test_new_hit_is_accepted_after_invulnerability_expires() -> void:
 	if _reactor == null:
+		fail_test("HitReactor could not be constructed")
 		return
 	_reactor.call("apply", 0, null)
 	_reactor.call("tick", _tuning.hit_invulnerability_duration)
@@ -73,6 +78,7 @@ func test_new_hit_is_accepted_after_invulnerability_expires() -> void:
 
 func test_hit_types_expose_bump_weaken_spin_off_and_squash_control() -> void:
 	if _reactor == null:
+		fail_test("HitReactor could not be constructed")
 		return
 	_reactor.call("apply", 0, null)
 	assert_almost_eq(float(_reactor.call("get_control_factor")), _tuning.hit_bump_control_factor, EPSILON)

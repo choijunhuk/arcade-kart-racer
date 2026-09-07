@@ -83,9 +83,15 @@ func _resolve_pair(kart_a: KartController, kart_b: KartController) -> void:
 		yaw_a = -yaw_sign * tuning.kart_side_yaw_nudge
 		yaw_b = yaw_sign * tuning.kart_side_yaw_nudge
 	elif kart_a.get_forward().dot(normal) > tuning.kart_side_hit_threshold:
+		# kart_a rams kart_b from behind (normal points a -> b).
 		var rear_push: Vector3 = kart_a.get_forward() * maxf(kart_a.get_speed(), 0.0) * tuning.kart_rear_push_factor
 		result.delta_velocity_b += rear_push
 		result.delta_velocity_a -= rear_push * (kart_b.get_mass() / maxf(kart_a.get_mass(), 0.001))
+	elif kart_b.get_forward().dot(-normal) > tuning.kart_side_hit_threshold:
+		# kart_b rams kart_a from behind; registration order must not matter.
+		var rear_push_b: Vector3 = kart_b.get_forward() * maxf(kart_b.get_speed(), 0.0) * tuning.kart_rear_push_factor
+		result.delta_velocity_a += rear_push_b
+		result.delta_velocity_b -= rear_push_b * (kart_a.get_mass() / maxf(kart_b.get_mass(), 0.001))
 	kart_a.apply_impulse_arcade(result.delta_velocity_a, yaw_a)
 	kart_b.apply_impulse_arcade(result.delta_velocity_b, yaw_b)
 	_apply_separation(kart_a, kart_b, normal)

@@ -47,8 +47,13 @@ func unregister_kart(kart: KartController) -> void:
 
 ## Connects a KillZone once to this system's request path.
 func register_kill_zone(zone: KillZone) -> void:
-	if not zone.kart_entered.is_connected(request_respawn):
-		zone.kart_entered.connect(request_respawn)
+	if not zone.body_fell.is_connected(_on_kill_zone_body_fell):
+		zone.body_fell.connect(_on_kill_zone_body_fell)
+
+
+func _on_kill_zone_body_fell(body: Node3D) -> void:
+	if body is KartController:
+		request_respawn(body as KartController)
 
 
 ## Begins a respawn unless this kart is already in its respawn sequence.
@@ -79,6 +84,9 @@ func _update_registration(registration: Registration, delta: float) -> void:
 
 func _update_stuck_timer(registration: Registration, delta: float) -> void:
 	var kart: KartController = registration.kart
+	if kart.get_state() == KartState.HIT:
+		registration.stuck_timer = 0.0
+		return
 	if kart.is_throttle_held() and absf(kart.get_speed()) < tuning.stuck_speed_threshold:
 		registration.stuck_timer += delta
 		if registration.stuck_timer >= tuning.stuck_duration:

@@ -325,6 +325,8 @@ func reset_motion() -> void:
 	_vertical_speed = 0.0
 	air_time = 0.0
 	_body.velocity = Vector3.ZERO
+	_current_up = Vector3.UP
+	_was_grounded = true
 
 
 ## Rebinds per-kart handling and mass data after sandbox swaps.

@@ -1,9 +1,10 @@
 class_name KillZone
 extends Area3D
 
-## Converts layer-2 body entry into a typed kart signal for RespawnSystem.
+## Track element: re-emits layer-2 body entry as a generic node signal.
+## Track must not reference Kart (spec §6.5); RespawnSystem does the cast.
 
-signal kart_entered(kart: KartController)
+signal body_fell(body: Node3D)
 
 
 func _ready() -> void:
@@ -11,5 +12,4 @@ func _ready() -> void:
 
 
 func _on_body_entered(body: Node3D) -> void:
-	if body is KartController:
-		kart_entered.emit(body as KartController)
+	body_fell.emit(body)
