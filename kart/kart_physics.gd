@@ -17,8 +17,7 @@ class GroundProbe extends RefCounted:
 	var average_distance: float = -1.0
 
 
-## Neutral terrain sample. TODO(phase-2): replace with `TerrainSensor` output
-## (speed/grip/drag multipliers per surface type).
+## TerrainSensor output consumed by longitudinal and lateral integration.
 class TerrainSample extends RefCounted:
 	var speed_mult: float = 1.0
 	var grip_mult: float = 1.0
@@ -232,8 +231,6 @@ static func _slerp_up_vector(from: Vector3, to: Vector3, weight: float) -> Vecto
 
 ## Reduces speed on the first tick a landing is detected, capped by
 ## `landing_speed_loss_cap` (spec §9.7).
-## TODO(phase-2): landing alignment — remove part of `lateral` when the landing
-## heading deviates from travel by more than `landing_align_threshold_degrees`.
 func _apply_landing_loss(ground: GroundProbe) -> void:
 	if _was_grounded or not ground.grounded:
 		return

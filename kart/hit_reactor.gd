@@ -49,7 +49,7 @@ func tick(delta: float) -> void:
 		_physics.cap_speed(_tuning.hit_squash_speed_cap_factor)
 
 
-## Clears only the reaction, preserving explicit invulnerability state.
+## Clears reaction and protection timers for debug/reset tooling.
 func clear() -> void:
 	_remaining = 0.0
 	_invulnerability_remaining = 0.0
@@ -98,6 +98,35 @@ func get_speed_factor() -> float:
 			return _tuning.hit_squash_speed_cap_factor
 		_:
 			return 1.0
+
+
+## Returns analog driving authority for the active hit type.
+func get_control_factor() -> float:
+	if not is_active():
+		return 1.0
+	match _hit_type:
+		HitType.BUMP:
+			return _tuning.hit_bump_control_factor
+		HitType.SQUASH:
+			return 1.0
+		_:
+			return 0.0
+
+
+## Produces a hit-filtered input snapshot without mutating provider data.
+func filter_input(frame: InputFrame) -> InputFrame:
+	var factor: float = get_control_factor()
+	if factor <= 0.0:
+		return InputFrame.zero()
+	var filtered: InputFrame = frame.clone()
+	filtered.throttle *= factor
+	filtered.brake *= factor
+	filtered.steer *= factor
+	if factor < 1.0:
+		filtered.drift = false
+		filtered.drift_pressed = false
+		filtered.item = false
+	return filtered
 
 
 func _duration_for(type: HitType) -> float:

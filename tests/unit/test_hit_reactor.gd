@@ -69,3 +69,16 @@ func test_new_hit_is_accepted_after_invulnerability_expires() -> void:
 	_reactor.call("tick", _tuning.hit_invulnerability_duration)
 
 	assert_true(bool(_reactor.call("apply", 1, null)))
+
+
+func test_hit_types_expose_bump_weaken_spin_off_and_squash_control() -> void:
+	if _reactor == null:
+		return
+	_reactor.call("apply", 0, null)
+	assert_almost_eq(float(_reactor.call("get_control_factor")), _tuning.hit_bump_control_factor, EPSILON)
+	_reactor.call("clear")
+	_reactor.call("apply", 1, null)
+	assert_almost_eq(float(_reactor.call("get_control_factor")), 0.0, EPSILON)
+	_reactor.call("clear")
+	_reactor.call("apply", 3, null)
+	assert_almost_eq(float(_reactor.call("get_control_factor")), 1.0, EPSILON)

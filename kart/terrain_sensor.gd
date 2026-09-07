@@ -84,12 +84,10 @@ func _get_ground_terrain_metadata() -> Variant:
 
 
 func _on_area_entered(area: Area3D) -> void:
-	var terrain_value: Variant = area.get("terrain")
-	if terrain_value is TerrainData:
-		_overlapping_terrain.append(terrain_value as TerrainData)
+	if area is OffroadZone:
+		_overlapping_terrain.append((area as OffroadZone).terrain)
 
 
 func _on_area_exited(area: Area3D) -> void:
-	var terrain_value: Variant = area.get("terrain")
-	if terrain_value is TerrainData:
-		_overlapping_terrain.erase(terrain_value as TerrainData)
+	if area is OffroadZone:
+		_overlapping_terrain.erase((area as OffroadZone).terrain)

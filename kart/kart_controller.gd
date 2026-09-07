@@ -177,8 +177,10 @@ func finish_respawn() -> void:
 func _get_input_frame() -> InputFrame:
 	var frame: InputFrame = input_provider.get_frame()
 	_throttle_held = frame.throttle > 0.0
-	if state == KartState.HIT or state == KartState.RESPAWNING or state == KartState.FROZEN:
+	if state == KartState.RESPAWNING or state == KartState.FROZEN:
 		return InputFrame.zero()
+	if state == KartState.HIT:
+		return _hit_reactor.filter_input(frame)
 	return frame
 
 
