@@ -20,7 +20,7 @@ ambient_light_color = Color(0.75, 0.8, 0.9, 1)
 ambient_light_energy = 0.7
 
 [sub_resource type="BoxShape3D" id="Shape_gate_ns"]
-size = Vector3(2, 3, 14)
+size = Vector3(14, 3, 2)
 
 [sub_resource type="BoxShape3D" id="Shape_shortcut_trigger"]
 size = Vector3(10, 3, 44)

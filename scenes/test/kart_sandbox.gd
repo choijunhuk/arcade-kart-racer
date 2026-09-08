@@ -7,10 +7,13 @@ extends Node3D
 const RESET_KEY: Key = KEY_R
 const TRACK_KEY: Key = KEY_T
 const DUMMY_KEY: Key = KEY_B
+const AI_KEY: Key = KEY_A
 const DUMMY_COUNT: int = 3
 const DUMMY_START_DISTANCE: float = 4.0
 const DUMMY_SPACING: float = 3.0
 const DUMMY_LATERAL_OFFSET: float = 1.8
+const AI_KART_COUNT: int = 7
+const AI_DIFFICULTY: AIDifficultyProfile = preload("res://data/ai/normal.tres")
 const TRACK_SCENES: Array[PackedScene] = [
 	preload("res://track/tracks/test_loop/test_loop.tscn"),
 	preload("res://track/tracks/test_loop_hills/test_loop_hills.tscn"),
@@ -38,6 +41,7 @@ const WATCH_NAMES: Array[StringName] = [
 	&"slipstream", &"hit", &"invulnerable", &"air_time",
 	&"drift_state", &"drift_charge", &"drift_tier", &"boost", &"trick_armed",
 	&"lap", &"next_checkpoint", &"progress", &"wrong_way",
+	&"ai_target_speed", &"ai_rubber_band", &"ai_lane_offset",
 ]
 const SLIDER_NAMES: Array[StringName] = [
 	&"max_speed", &"acceleration", &"base_turn_rate", &"grip", &"drag", &"brake_force", &"gravity", &"hover_height",
@@ -47,6 +51,9 @@ var _input_provider: PlayerInputProvider = PlayerInputProvider.new()
 var _track: TrackRoot
 var _track_index: int = 0
 var _dummy_karts: Array[KartController] = []
+var _ai_karts: Array[KartController] = []
+var _ai_controllers: Array[AIController] = []
+var _ai_context: AIRaceContext
 
 
 func _ready() -> void:
@@ -89,6 +96,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				_switch_track()
 			DUMMY_KEY:
 				_spawn_dummy_karts()
+			AI_KEY:
+				_spawn_ai_karts()
 			KEY_1:
 				_swap_kart_data(0)
 			KEY_2:
@@ -132,6 +141,10 @@ func _select_track(index: int) -> void:
 	_configure_respawn_for_kart(_kart)
 	for dummy: KartController in _dummy_karts:
 		_configure_respawn_for_kart(dummy)
+	# AI controllers cache the previous track's RacingLine/shortcuts/item boxes
+	# at setup() time (spec §13.2); rather than re-wiring them in place, just
+	# clear and let the next `A` press respawn fresh ones for the new track.
+	_clear_ai_karts()
 	_reset_to_grid()
 
 
@@ -168,6 +181,47 @@ func _clear_dummy_karts() -> void:
 	_dummy_karts.clear()
 
 
+## Spawns 7 AIController-driven karts on the current track (spec §13/§26
+## play gate). `_kart` (the player) becomes their rubber-band reference.
+func _spawn_ai_karts() -> void:
+	_clear_ai_karts()
+	_ai_context = AIRaceContext.new()
+	_ai_context.racing_line = _track.get_racing_line()
+	_ai_context.track = _track
+	_ai_context.position_tracker = _position_tracker
+	_ai_context.player_kart = _kart
+	var grid: Array[Transform3D] = _track.get_start_grid()
+	var race_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	race_rng.randomize()
+	for index: int in range(AI_KART_COUNT):
+		var ai_kart: KartController = KART_SCENE.instantiate() as KartController
+		ai_kart.name = "AiKart%d" % (index + 1)
+		ai_kart.kart_data = KART_DATA[index % KART_DATA.size()].duplicate(true) as KartData
+		add_child(ai_kart)
+		ai_kart.global_transform = grid[(index + 1) % grid.size()]
+		ai_kart.reset_motion_arcade()
+		var controller: AIController = AIController.new()
+		ai_kart.add_child(controller)
+		var kart_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+		kart_rng.seed = race_rng.randi()
+		controller.setup(ai_kart, _track, _ai_context, AI_DIFFICULTY, kart_rng)
+		_ai_karts.append(ai_kart)
+		_ai_controllers.append(controller)
+		_collision_resolver.register_kart(ai_kart)
+		_register_kart_progress(ai_kart)
+		_configure_respawn_for_kart(ai_kart)
+
+
+func _clear_ai_karts() -> void:
+	for ai_kart: KartController in _ai_karts:
+		_collision_resolver.unregister_kart(ai_kart)
+		_respawn_system.unregister_kart(ai_kart)
+		remove_child(ai_kart)
+		ai_kart.queue_free()
+	_ai_karts.clear()
+	_ai_controllers.clear()
+
+
 func _configure_respawn_for_kart(kart: KartController) -> void:
 	_respawn_system.register_kart(kart, _get_respawn_transform)
 
@@ -188,6 +242,7 @@ func _get_respawn_transform(kart: KartController) -> Transform3D:
 func _all_karts() -> Array[KartController]:
 	var karts: Array[KartController] = [_kart]
 	karts.append_array(_dummy_karts)
+	karts.append_array(_ai_karts)
 	return karts
 
 
@@ -237,6 +292,11 @@ func _register_debug_overlay() -> void:
 	DebugOverlay.watch(&"next_checkpoint", func() -> int: return _lap_tracker.get_next_checkpoint_index(_kart))
 	DebugOverlay.watch(&"progress", func() -> String: return "%.1f" % _position_tracker.get_progress(_kart))
 	DebugOverlay.watch(&"wrong_way", func() -> bool: return _lap_tracker.is_wrong_way(_kart))
+	# spec §13.7: expose AI kart 1's target speed/rubber-band/lane offset so the
+	# catch-up multiplier is never an invisible cheat.
+	DebugOverlay.watch(&"ai_target_speed", func() -> String: return "%.1f" % _ai_controllers[0].get_target_speed() if not _ai_controllers.is_empty() else "-")
+	DebugOverlay.watch(&"ai_rubber_band", func() -> String: return "%.3f" % _ai_controllers[0].get_rubber_band_mult() if not _ai_controllers.is_empty() else "-")
+	DebugOverlay.watch(&"ai_lane_offset", func() -> String: return "%.2f" % _ai_controllers[0].get_lane_offset() if not _ai_controllers.is_empty() else "-")
 
 	DebugOverlay.add_slider(&"max_speed", 5.0, 60.0,
 		func() -> float: return _kart.kart_data.max_speed,

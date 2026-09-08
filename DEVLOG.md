@@ -1,5 +1,226 @@
 # Development Log
 
+## Phase 6 보고 — AI 레이서
+
+### 구현된 기능
+
+- `ai/`에 실제 AI 파이프라인을 구현했다: `AISensors`(전방 좌/중/우 +
+  후방 `ShapeCast3D`, 레이어 마스크 world|kart_body, AI 틱에서만 갱신) →
+  `AINavigator`(레이싱라인 오프셋+룩어헤드 목표점, 카트별 시드 레인
+  오프셋 + 회피/추월 동적 바이어스의 지수 스무딩, 지름길 진입 확률
+  판정 후 `alt_curve` 추종, 아이템 박스 유혹 바이어스) → `AIDriver`(PD
+  조향, `corner_speed = sqrt(max_lateral_accel/curvature)*speed_confidence`
+  + 고무줄 배율 목표 속도, `late_brake_prob` 지연 제동, 정면 근접 시
+  긴급 제동, 헤드온 회피/추월 바이어스, 스턱 2초 후진→5초 리스폰,
+  스타트 부스트 타이밍, 트릭)와 `AIDriftPlanner`(곡률 게이트 드리프트
+  진입/유지/해제, `drift_skill`로 시도확률·취소확률 조절) → `AIItemBrain`
+  (아이템별 규칙 테이블, `ItemSlotView` null 구현으로 Phase 7 이전에도
+  구조적으로 동작). `AIController`(Node3D, 30Hz 카트별 위상 분산 틱)가
+  전체를 조합해 `AIInputProvider`에 `InputFrame`을 채운다.
+- `AIDifficultyProfile`에 §13.6 누락 필드(`max_lateral_accel`,
+  `brake_look_ahead`, `drift_curvature_threshold`, `overtake_range`,
+  `ai_tick_hz`, `lane_offset_min/max`)를 추가하고 easy/normal/hard.tres에
+  채웠다. 감각/틱레이트 등 물리적 파라미터는 난이도 간 동일하게 유지해
+  "치트가 아닌 판단력 차이"(§13.6 마지막 항목) 원칙을 지켰다.
+- `RaceManager`가 플레이어가 아닌 모든 슬롯에 `AIController` +
+  `RaceConfig.ai_difficulty`를 장착한다. `RaceConfig.player_slot = -1`이면
+  전원 AI(시뮬레이션 용도)이며, 이 경우 첫 완주 카트가 FINISHING을
+  연다(기존엔 플레이어 완주만 트리거해 전원 AI 레이스가 영원히 끝나지
+  않았다). 완주한 AI 카트는 provider 교체 없이 계속 `AIController`가
+  몰되, `AIDriver`가 FINISHED 상태에서 자체적으로 50% 안전 주행으로
+  전환한다(§13.4).
+- `scenes/test/kart_sandbox.gd`: `A` 키로 현재 트랙에 normal 난이도 AI
+  카트 7대를 생성한다. AI 카트 1의 목표 속도/고무줄 배율/레인 오프셋을
+  DebugOverlay(F3)에 노출해 §13.7이 요구하는 "보이지 않는 치트 방지"를
+  만족한다.
+- `tests/sim/run_ai_race.gd`를 실제 AI 시뮬레이터로 재작성했다:
+  `--races/--difficulty/--laps/--karts/--track` 인자, `Engine.time_scale`
+  8배, 레이스별 `RaceConfig.seed`를 레이스 번호로 바꿔 반복 실행마다
+  다른 판단을 샘플링한다. 레이스별 JSON에 완주 순서/시간/리스폰 수 +
+  `drifts_started`/`tier3_releases`/`shortcut_takes`/`wall_head_on_count`를
+  담고, 카트 미완주·리스폰 2회 초과·벽 정면충돌 `3*laps` 초과 중 하나라도
+  있으면 실패로 판정한다. `summary.mean_lap_time_seconds`(완주자
+  총시간/laps 평균)를 계산해 난이도 간 비교에 쓴다. `tools/run_sim.sh`는
+  이제 exec 대신 출력을 캡처해 summary 줄을 별도로 다시 찍는다.
+
+### 생성/수정된 파일
+
+- AI 신규: `ai/ai_controller.gd`, `ai/ai_sensors.gd`, `ai/ai_navigator.gd`,
+  `ai/ai_driver.gd`, `ai/ai_driver_drift.gd`, `ai/ai_item_brain.gd`,
+  `ai/item_slot_view.gd`, `ai/ai_difficulty.gd`, `ai/ai_input_provider.gd`,
+  `ai/ai_race_context.gd`.
+- 데이터: `data/schemas/ai_difficulty_profile.gd`, `data/ai/easy.tres`,
+  `data/ai/normal.tres`, `data/ai/hard.tres`.
+- 레이스/UI: `race/race_manager.gd`, `race/race_config.gd`, `ui/hud/hud.gd`
+  (플레이어 없는 레이스에서 `bind(null, ...)` 허용).
+- 트랙 버그 수정: `track/tracks/track_01_ridgeline_circuit/
+  track_01_ridgeline_circuit.tscn`(체크포인트 게이트 충돌 shape 치수
+  교정, 아래 참고).
+- 샌드박스: `scenes/test/kart_sandbox.gd`.
+- 시뮬레이션: `tests/sim/run_ai_race.gd`, `tools/run_sim.sh`.
+- 문서: `ARCHITECTURE.md`(AI 섹션 + Phase 6 결정 기록), `README.md`,
+  `DEVLOG.md`.
+- 신규 테스트: unit 49개(`test_ai_driver.gd` 15, `test_ai_navigator.gd` 7,
+  `test_ai_item_brain.gd` 8, `test_ai_difficulty.gd` 11, `test_race_sim.gd`
+  확장 8) + integration 3개(`test_ai_race.gd`) = **52개**.
+
+### 핵심 설계 결정과 이유
+
+- `AIController`/`AISensors`는 `Node`가 아니라 `Node3D`다. `Node3D`는
+  월드 트랜스폼을 *직계* 부모에서만 상속하므로, 스펙 문구를 그대로
+  좇아 평범한 `Node` 컨테이너로 만들면 `ShapeCast3D`들이 카트를 따라
+  움직이지 않고 월드 원점에 고정된다 — 실제로 이 버그로 모든 AI
+  카트가 출발 즉시 "영구 정면 벽"을 감지해 브레이크만 밟는 상태였다.
+- `AINavigator.NavResult`는 부호 없는 윈도우 곡률(`curvature_ahead`,
+  코너 속도·추월 정점 판정용)과 부호 있는 단일 지점 곡률
+  (`signed_curvature_ahead`, 드리프트 방향 판정용)을 분리해 노출한다.
+  처음엔 부호 없는 값을 드리프트 방향 판정에 그대로 썼는데, 모든
+  코너에서 `curvature > 0`이 항상 참이 되어 좌회전에서도 "우측
+  드리프트"를 고집해 스스로의 조향과 싸우다 헤어핀에서 완전히
+  멈추는 버그가 있었다.
+- `AIController._physics_process`는 누적된 `delta`를 고정 간격만큼
+  덜어내는 대신 **전체를 소진**하고 그 실제 경과 시간을 그대로
+  `AIDriver`/`AINavigator`에 넘긴다. 고정 간격을 계속 썼다면
+  `Engine.time_scale`(헤드리스 시뮬은 최대 8배, §13.8)이 한 물리
+  틱의 스케일된 delta를 AI 틱 간격보다 크게 만드는 순간부터 모든
+  타이머·PD `kd` 항이 실제보다 느린 시계로 계산돼 조용히 어긋난다.
+- 긴급 정면 제동(`_apply_head_on_brake`)은 6m가 아니라 3m, 그리고
+  카트가 여전히 실속도를 내고 있을 때만 발동한다. 직선 레이캐스트는
+  코너를 도는 동안 바깥쪽 벽을 항상 "가까이" 보므로(곡선 도로에서는
+  당연한 기하학), 긴 사거리로 무조건 개입하면 코너 속도 거버너를
+  영구히 덮어써 브레이크가 후진까지 밀어붙이는 버그가 있었다.
+- 스턱 판정(`_update_stuck`)은 순간 속도 대신 1초 시상수 EMA를 쓴다.
+  벽에 낀 채 매 틱 속도가 0~2m/s 사이를 오가면 순간 속도 기준으로는
+  매번 "안 멈췄다"로 리셋되어 2초/5초 누적이 영원히 안 쌓였다.
+- **Track01 체크포인트 게이트 충돌 shape 버그.** 체크포인트 6개가
+  ±90° Y 회전과 짝을 이루는 커스텀 shape `Shape_gate_ns`를 `(2,3,14)`로
+  정의했는데, 회전 후 실제로는 트랙을 가로지르는 폭이 2m(원래
+  의도한 14m가 아니라)로, 진행 방향 깊이가 14m(원래 2m)로 뒤집혀
+  있었다. `LapTracker`는 순차 통과만 인정하므로 이 2m 폭 게이트를
+  한 번이라도 벗어나면 그 카트는 남은 레이스 내내 그 체크포인트
+  인덱스에서 영원히 멈춘다 — Phase 5 스크립트 추종기는 항상 중앙선을
+  정확히 달려 이 버그를 드러낸 적이 없었지만, 실제 AI는 레인
+  오프셋·회피·추월으로 충분히 벗어나 매번 걸렸다. `Shape_gate_ns`를
+  `(14,3,2)`로 고쳐 기본(회전 없음) shape와 같은 비율로 맞췄다. 8카트
+  레이스가 아무도 완주하지 못했던 진짜 원인이었고, `Checkpoint.
+  body_passed`에 직접 연결해 각 카트가 실제로 통과/거부한 인덱스
+  시퀀스를 로그로 찍어서 찾았다 — AI 추론만으로는 찾지 못했다.
+- 완주한 AI 카트는 provider를 스크립트 추종기로 교체하지 않고
+  `AIController`가 계속 몬다. `AIDriver`가 `KartState.FINISHED`를
+  직접 감지해 50% 안전 속도로 전환하므로(§13.4), Phase 5의 "완주 후
+  안전 주행" 로직을 중복 구현하지 않고 재사용한다.
+- `AIRaceContext`는 전 카트 배열을 들고 있지 않는다. `AISensors`는
+  자체 `ShapeCast3D` 물리 질의로 주변 카트를 감지하고, 고무줄은
+  `player_kart` + `PositionTracker`만 있으면 충분하다 — 소비자 없는
+  필드는 만들지 않았다(§29 11항).
+
+### 실행 방법
+
+```sh
+/opt/homebrew/bin/godot --path .
+```
+
+메인 메뉴에서 Enter/Start로 Track01 3랩·8카트 레이스를 시작하면 상대
+7대가 전부 실제 AI다. `scenes/test/kart_sandbox.tscn`에서 `A`로 트랙에
+AI 카트 7대를 추가해 관찰할 수 있다(F3으로 목표 속도/고무줄 배율/레인
+오프셋 확인).
+
+### 테스트 방법 및 결과 (run_tests / run_sim / validate_tracks 실제 출력 요약)
+
+- `HOME=$PWD/.tmp-home /opt/homebrew/bin/godot --headless --path . --import`
+  — exit 0, 신규 `.gd.uid` 전부 생성·커밋.
+- `HOME=$PWD/.tmp-home /opt/homebrew/bin/godot --headless --path . --quit`
+  — exit 0, `SCRIPT ERROR` 0.
+- `HOME=$PWD/.tmp-home tools/run_tests.sh` — GUT 9.7.1,
+  **43 scripts / 217 tests / 217 passing**, 932 assertions, 0 failures
+  (Phase 5까지 165 + Phase 6 신규 52: unit 49 + integration 3).
+- `HOME=$PWD/.tmp-home tools/validate_tracks.sh` — `test_loop`,
+  `test_loop_hills`, `test_hairpin`, `track_01_ridgeline_circuit` 모두
+  `TRACK VALIDATION PASSED` (4/4).
+- `HOME=$PWD/.tmp-home tools/run_sim.sh --races 3 --difficulty normal` —
+  exit 0, `success:true`, 3레이스 모두 8/8 완주, 리스폰 전원 0회, 벽
+  정면충돌 레이스당 0~2회(예산 9회), `summary: mean_lap_time_seconds ≈
+  64.51`.
+- `HOME=$PWD/.tmp-home tools/run_sim.sh --races 3 --difficulty easy` —
+  exit 0, `success:true`, 리스폰 0, 벽 정면충돌 0~2회, `mean_lap_time_seconds
+  ≈ 69.29`.
+- `HOME=$PWD/.tmp-home tools/run_sim.sh --races 3 --difficulty hard` —
+  exit 0, `success:true`, 리스폰 0, 벽 정면충돌 3~6회(예산 9회),
+  `mean_lap_time_seconds ≈ 61.83`.
+- 세 난이도 평균 랩타임: **easy 69.29s > normal 64.51s > hard 61.83s**
+  (Phase 4 트랙 설계 목표 랩타임 60~75s 범위 안).
+- 모든 production `.gd` ≤400줄(`kart/kart_physics.gd` 395줄 최대,
+  `race/race_manager.gd` 380줄, `ai/ai_driver.gd` 289줄).
+  `project.godot`에 network/TLS section 없음.
+
+### 현재 문제점 / 알려진 제한
+
+- `tier3_releases`가 normal 난이도 3레이스 모두 0으로 관측됐다.
+  `target_tier=2`인 normal은 코너를 벗어나며 곡률이 release 임계값
+  아래로 떨어지는 순간 Tier 2에서 먼저 릴리즈되는 경우가 많다 — 버그는
+  아니지만 hard(`target_tier=3`)에서 더 자주 확인해야 한다.
+  플레이 지시 4번 참고.
+- `AIItemBrain`은 규칙 골격만 있고 `ItemSlotView`가 항상 "아이템 없음"을
+  보고하는 null 구현이라 실제로 아이템을 절대 쓰지 않는다. Phase 7이
+  진짜 `ItemSlot`을 연결하면 그대로 붙는다.
+- 지름길은 Track01에만 1개(`HairpinCutoff`) 있고, 나머지 트랙은
+  `Shortcuts` 노드가 비어 있어 그 트랙에서는 지름길 판단 코드가
+  자연히 아무 일도 하지 않는다.
+
+### TODO / PLACEHOLDER 목록
+
+- TODO(phase-7): `ai/item_slot_view.gd`의 null 구현을 실제 `ItemSlot`
+  기반 뷰로 교체하고, `AIController._evaluate_item_use`가 만드는
+  플레이스홀더 `AIItemUseProfile.new()`/`ItemSlotView.new()`를 진짜
+  카트 슬롯/아이템 데이터로 연결한다.
+- TODO(phase-7): `ai/ai_sensors.gd`의 `_sense_projectile()`이
+  `ItemManager.active_projectiles`를 읽도록 완성한다(현재는 autoload가
+  없어 항상 위협 없음을 보고하는 구조적 스텁).
+- TODO(phase-8): 카메라 셰이크/드리프트 오프셋이 AI 카트에도 동일
+  물리를 쓰므로 추가 작업은 없지만, 관전 카메라로 AI 추월/드리프트를
+  보여주는 연출은 Phase 8/13 폴리시 범위다.
+- TODO(phase-9): 난이도 선택 UI(현재는 `RaceConfig.ai_difficulty`를
+  코드/기본값으로만 설정, 메뉴에 노출되지 않음).
+
+### 다음 Phase 계획
+
+사용자 승인 후 Phase 7에서 `ItemManager`/`ItemSlot`/아이템 7종을
+구현하고 `AIItemBrain`의 규칙 골격에 실제 판단을 연결한다.
+
+### 플레이 지시
+
+```text
+1. 프로젝트 루트에서 `godot --path .`를 실행한다.
+2. 메인 화면에서 Enter/Space 또는 게임패드 A/Start로 Track01 3랩·8카트
+   레이스를 시작한다. 상대 7대는 전부 실제 AI다.
+3. 최소 1랩 동안 AI 카트를 관찰한다: 직선에서 최고속으로 가속하는지,
+   코너 앞에서 미리 감속하는지, 헤어핀류 코너에서 드리프트(카트 뒤
+   스파크/미끄러짐)를 거는지 확인한다.
+4. Track01 서쪽 헤어핀(HairpinCutoff 지름길 근처)에서 몇몇 AI가 안쪽
+   지름길로 빠지는지 관찰한다 — 매 랩 다른 카트가 다른 선택을 할 수
+   있다(확률적 결정, §13.3).
+5. AI 카트 근처에서 나란히 달려 추월/회피를 유도해본다: 앞차를 막고
+   있으면 AI가 옆으로 빠져나가려 하는지, 정면 장애물(다른 카트/벽)
+   근처에서 브레이크를 거는지 확인한다.
+6. `scenes/test/kart_sandbox.tscn`을 열어(`godot --path .
+   scenes/test/kart_sandbox.tscn`) `A`를 눌러 AI 카트 7대를 추가하고,
+   F3으로 DebugOverlay를 연 뒤 `ai_rubber_band`(1.00 근처에서 ±5% 이내로
+   움직이는지 — 플레이어 카트를 일부러 뒤처지게/앞서게 몰아 배율이
+   반응하는지)와 `ai_lane_offset`(카트가 좌우로 자연스럽게 흔들리며
+   달리는지)을 확인한다.
+7. "AI와 겨루는 게 재미있고 억울하지 않은가?"를 판정 기준으로 삼는다:
+   Hard 난이도가 속도 자체는 플레이어 카트 스펙을 넘지 않으면서도
+   판단력(코너 진입/탈출, 추월 타이밍)으로 앞서는지가 핵심이다.
+```
+
+### 사용자에게 필요한 결정
+
+위 플레이 지시로 AI가 실제로 레이싱라인을 이해하고 코너·추월·지름길을
+스스로 판단하는지, 그리고 고무줄 보정이 눈치채지 못할 정도로 미세한지
+확인한 뒤 Phase 6 승인 여부를 알려주면 된다.
+
+---
+
 ## Phase 5 보고 — 레이스 흐름
 
 ### 구현된 기능
