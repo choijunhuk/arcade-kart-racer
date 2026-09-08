@@ -271,7 +271,10 @@ func _on_kart_finished(kart: KartController, finish_time_seconds: float) -> void
 		kart.set_finished(ai_controller.get_input_provider())
 	else:
 		kart.set_finished(_make_scripted_provider(kart, FINISHED_SPEED_RATIO))
-	if kart == _player_kart and _state == RaceState.RACING:
+	# With a human participant, only their finish starts the FINISHING wind-down
+	# (spec §14.1). Without one (RaceConfig.player_slot == -1, e.g. the sim),
+	# there is no player finish to wait for, so the first kart to finish does.
+	if (kart == _player_kart or _player_kart == null) and _state == RaceState.RACING:
 		_transition_to(RaceState.FINISHING)
 
 

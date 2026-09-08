@@ -18,11 +18,18 @@ const SHORTCUT_ALT_LOOKAHEAD: float = 8.0
 const SHORTCUT_EXIT_MARGIN: float = 2.0
 const ITEM_SEEK_RANGE: float = 18.0
 const ITEM_SEEK_CURVATURE_MAX: float = 0.02
+## Metres ahead sampled for `signed_curvature_ahead`'s turn-direction sign.
+const DIRECTION_PROBE_AHEAD: float = 8.0
 
 class NavResult extends RefCounted:
 	var target_point: Vector3
 	var offset: float = 0.0
+	## Unsigned magnitude (spec's `max_curvature_in` is windowed and
+	## direction-less) — use this for corner-speed/apex-proximity checks.
 	var curvature_ahead: float = 0.0
+	## Signed single-point sample (positive = left turn) — use this whenever
+	## a turn *direction* is needed (e.g. which way to lock a drift).
+	var signed_curvature_ahead: float = 0.0
 	var lane_offset: float = 0.0
 	var on_shortcut: bool = false
 
@@ -76,6 +83,7 @@ func compute(kart_pos: Vector3, speed: float, profile: AIDifficultyProfile, desi
 	_cached_offset = offset
 	result.offset = offset
 	result.curvature_ahead = _racing_line.max_curvature_in(offset, profile.brake_look_ahead)
+	result.signed_curvature_ahead = _racing_line.curvature_at(offset + DIRECTION_PROBE_AHEAD)
 	_last_curvature_ahead = result.curvature_ahead
 	_update_shortcut_state(kart_pos, offset, speed, profile, rng)
 	_advance_lane_offset(profile, desired_bias, dt)

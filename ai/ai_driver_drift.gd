@@ -31,9 +31,9 @@ func update(frame: InputFrame, kart: KartController, profile: AIDifficultyProfil
 			frame.steer = float(_locked_direction) * maxf(absf(frame.steer), MIN_STEER_TO_START_DRIFT)
 			frame.drift = true
 		DriftController.DriftState.HOLD:
-			_update_hold(frame, kart, profile, nav.curvature_ahead, dt)
+			_update_hold(frame, kart, profile, nav.signed_curvature_ahead, dt)
 		_:
-			_try_enter(frame, kart, profile, nav.curvature_ahead)
+			_try_enter(frame, kart, profile, nav.signed_curvature_ahead)
 
 
 func _try_enter(frame: InputFrame, kart: KartController, profile: AIDifficultyProfile, curvature: float) -> void:

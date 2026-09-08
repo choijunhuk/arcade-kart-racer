@@ -22,9 +22,9 @@ extends Resource
 ## Sensing/physical parameters below are deliberately uniform across
 ## difficulties (spec §13.6: difficulty is judgment quality, not a speed or
 ## perception cheat).
-@export var max_lateral_accel: float = 14.0
+@export var max_lateral_accel: float = 20.0
 ## Metres ahead sampled for both the corner-speed formula and drift entry (spec §13.4).
-@export var brake_look_ahead: float = 12.0
+@export var brake_look_ahead: float = 25.0
 ## Absolute curvature (1/radius) above which a corner is worth drifting (spec §13.4).
 @export var drift_curvature_threshold: float = 0.05
 ## Metres within which a slower kart ahead is worth overtaking (spec §13.4).

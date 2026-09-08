@@ -11,7 +11,12 @@ extends Node3D
 const FORWARD_RANGE: float = 16.0
 const REAR_RANGE: float = 10.0
 const LANE_PROBE_OFFSET: float = 1.6
-const PROBE_SHAPE_SIZE: Vector3 = Vector3(0.8, 0.8, 0.6)
+const PROBE_SHAPE_SIZE: Vector3 = Vector3(0.8, 0.6, 0.6)
+## Local height above the kart's own origin (spec's road top sits ~0.35 m
+## below it, per `PhysicsTuning.hover_height`); keeps the probe box clear of
+## the road/ground `StaticBody3D` (world, layer 1) while still low enough to
+## catch a wall (walls are ~2 m tall, spec §15.6).
+const PROBE_HEIGHT: float = 0.5
 ## World (layer 1) | kart_body (layer 2) — spec §13.2's "레이어 마스크 1|2".
 const CAST_MASK: int = 0b11
 
@@ -41,10 +46,10 @@ var _rear_cast: ShapeCast3D
 ## Builds the four probes as children and excludes `kart` from every cast.
 func setup(kart: KartController) -> void:
 	_owner_kart = kart
-	_forward_casts[Side.LEFT] = _make_cast(Vector3(-LANE_PROBE_OFFSET, 0.0, 0.0), Vector3(0.0, 0.0, -FORWARD_RANGE))
-	_forward_casts[Side.CENTER] = _make_cast(Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.0, -FORWARD_RANGE))
-	_forward_casts[Side.RIGHT] = _make_cast(Vector3(LANE_PROBE_OFFSET, 0.0, 0.0), Vector3(0.0, 0.0, -FORWARD_RANGE))
-	_rear_cast = _make_cast(Vector3.ZERO, Vector3(0.0, 0.0, REAR_RANGE))
+	_forward_casts[Side.LEFT] = _make_cast(Vector3(-LANE_PROBE_OFFSET, PROBE_HEIGHT, 0.0), Vector3(0.0, 0.0, -FORWARD_RANGE))
+	_forward_casts[Side.CENTER] = _make_cast(Vector3(0.0, PROBE_HEIGHT, 0.0), Vector3(0.0, 0.0, -FORWARD_RANGE))
+	_forward_casts[Side.RIGHT] = _make_cast(Vector3(LANE_PROBE_OFFSET, PROBE_HEIGHT, 0.0), Vector3(0.0, 0.0, -FORWARD_RANGE))
+	_rear_cast = _make_cast(Vector3(0.0, PROBE_HEIGHT, 0.0), Vector3(0.0, 0.0, REAR_RANGE))
 
 
 ## Refreshes every cast and returns one immutable perception snapshot.

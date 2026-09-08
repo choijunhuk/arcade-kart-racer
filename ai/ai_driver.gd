@@ -7,9 +7,13 @@ extends RefCounted
 ## 400-line budget.
 
 const SPEED_MARGIN: float = 1.0
-const BRAKE_AMOUNT: float = 0.7
+const BRAKE_AMOUNT: float = 1.0
 const LATE_BRAKE_DELAY_SECONDS: float = 0.3
-const HEAD_ON_BRAKE_DISTANCE: float = 6.0
+## Deliberately short: the forward-center cast sees an ordinary curving wall
+## within range constantly while cornering (a straight ray vs. a curved
+## corridor), so this must stay a genuine near-collision check, not routine
+## corner geometry, or it would override the corner-speed governor forever.
+const HEAD_ON_BRAKE_DISTANCE: float = 3.0
 const AVOID_STRENGTH: float = 1.0
 const OVERTAKE_SPEED_DELTA: float = 1.5
 ## Above this |curvature| the AI is mid-corner; it neither starts nor holds
@@ -19,9 +23,15 @@ const REVERSE_TRIGGER_SECONDS: float = 2.0
 const RESPAWN_TRIGGER_SECONDS: float = 5.0
 const REVERSE_DURATION_SECONDS: float = 1.0
 const STUCK_SPEED_THRESHOLD: float = 1.0
+const STUCK_SPEED_SMOOTHING_RATE: float = 1.0
 const FINISHED_SPEED_RATIO: float = 0.5
 const MAX_RUBBER_BAND: float = 0.05
 const TRICK_MIN_AIR_TIME: float = 0.35
+## Rate-limits the PD derivative term (radians/tick). Without this, a target
+## point close to the kart (short look-ahead at low corner speed) can swing
+## its angle wildly tick to tick, and `kd` amplifies that "derivative kick"
+## into steer flipping hard-left/hard-right every tick instead of settling.
+const MAX_STEER_ERROR_DELTA: float = 0.4
 
 enum StuckAction { NONE, REVERSE, RESPAWN }
 
@@ -29,6 +39,7 @@ var _rng: RandomNumberGenerator
 var _drift_planner: AIDriftPlanner
 var _prev_steer_error: float = 0.0
 var _stuck_elapsed: float = 0.0
+var _speed_ema: float = 999.0
 var _reverse_remaining: float = 0.0
 var _was_overspeed: bool = false
 var _late_brake_delay_remaining: float = 0.0
@@ -56,7 +67,8 @@ func get_last_target_speed() -> float:
 
 ## Pure PD steering law with clamp and one injected noise sample (spec §13.4).
 static func compute_steer(error: float, prev_error: float, dt: float, kp: float, kd: float, noise_amplitude: float, noise_sample: float) -> float:
-	var derivative: float = (error - prev_error) / maxf(dt, 0.0001)
+	var delta: float = clampf(error - prev_error, -MAX_STEER_ERROR_DELTA, MAX_STEER_ERROR_DELTA)
+	var derivative: float = delta / maxf(dt, 0.0001)
 	return clampf(kp * error + kd * derivative + noise_amplitude * noise_sample, -1.0, 1.0)
 
 
@@ -122,6 +134,7 @@ func compute_frame(
 		KartState.RESPAWNING:
 			_stuck_elapsed = 0.0
 			_reverse_remaining = 0.0
+			_speed_ema = 999.0
 			return frame
 		KartState.FROZEN:
 			return _compute_start_frame(context)
@@ -138,9 +151,15 @@ func compute_frame(
 	frame.steer = compute_steer(steer_error, _prev_steer_error, dt, profile.steer_kp, profile.steer_kd, profile.steer_noise, _rng.randfn(0.0, 1.0))
 	_prev_steer_error = steer_error
 	var target_speed: float = _compute_target_speed(kart, profile, nav, context)
-	_drive_throttle_brake(frame, kart, target_speed, dt, profile)
+	if kart.get_drift_state() == DriftController.DriftState.HOLD:
+		# Mid-drift, `DriftController`'s own grip/speed-retention rules (spec
+		# §10.2) already keep cornering safe; braking on top of that starves
+		# mini-turbo charge and fights the very reason to drift a corner.
+		frame.throttle = 1.0
+	else:
+		_drive_throttle_brake(frame, kart, target_speed, dt, profile)
 	_drift_planner.update(frame, kart, profile, nav, dt)
-	_apply_head_on_brake(frame, sensors)
+	_apply_head_on_brake(frame, kart, sensors)
 	_apply_trick(frame, kart, profile)
 	return frame
 
@@ -191,8 +210,11 @@ func _drive_throttle_brake(frame: InputFrame, kart: KartController, target_speed
 	frame.brake = BRAKE_AMOUNT
 
 
-func _apply_head_on_brake(frame: InputFrame, sensors: AISensors.SensorReport) -> void:
-	if sensors.obstacle_distance.get(AISensors.Side.CENTER, INF) <= HEAD_ON_BRAKE_DISTANCE:
+## Only overrides throttle/brake for a genuine near-collision, and only while
+## still carrying real speed — once slow, the stuck/reverse handling above
+## takes over instead of this pinning the kart into reverse forever.
+func _apply_head_on_brake(frame: InputFrame, kart: KartController, sensors: AISensors.SensorReport) -> void:
+	if kart.get_speed() > STUCK_SPEED_THRESHOLD and sensors.obstacle_distance.get(AISensors.Side.CENTER, INF) <= HEAD_ON_BRAKE_DISTANCE:
 		frame.throttle = 0.0
 		frame.brake = 1.0
 
@@ -208,8 +230,13 @@ func _apply_trick(frame: InputFrame, kart: KartController, profile: AIDifficulty
 		frame.drift_pressed = true
 
 
+## Uses a smoothed speed (not the instantaneous value) so a kart wedged
+## against a wall and bouncing between ~0 and ~2 m/s every tick still reads
+## as stuck instead of endlessly resetting the timer on each brief spike.
 func _update_stuck(kart: KartController, context: AIRaceContext, dt: float) -> void:
-	if absf(kart.get_speed()) < STUCK_SPEED_THRESHOLD:
+	var alpha: float = clampf(STUCK_SPEED_SMOOTHING_RATE * dt, 0.0, 1.0)
+	_speed_ema = lerpf(_speed_ema, absf(kart.get_speed()), alpha)
+	if _speed_ema < STUCK_SPEED_THRESHOLD:
 		_stuck_elapsed += dt
 	else:
 		_stuck_elapsed = 0.0
