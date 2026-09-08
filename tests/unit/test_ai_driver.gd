@@ -154,3 +154,14 @@ func test_active_boost_raises_straight_target_without_raising_corner_limit() -> 
 	assert_lte(boosted, kart.get_kart_data().max_speed * kart.boost_controller.get_result().speed_mult)
 	nav.curvature_ahead = 0.1
 	assert_almost_eq(driver._compute_target_speed(kart, profile, nav, context), sqrt(profile.max_lateral_accel / nav.curvature_ahead), 0.001)
+
+
+func test_ai_hold_preserves_countersteer_to_widen_a_drift() -> void:
+	var kart: KartController = KART_SCENE.instantiate() as KartController
+	add_child_autofree(kart)
+	var planner: AIDriftPlanner = AIDriftPlanner.new(RandomNumberGenerator.new())
+	planner._locked_direction = 1
+	var frame: InputFrame = InputFrame.zero()
+	frame.steer = -0.25
+	planner._update_hold(frame, kart, HARD_DIFFICULTY, 0.06, 1.0 / 30.0)
+	assert_eq(frame.steer, -0.25, "KartPhysics keeps drift direction locked; AI can countersteer without reversing it")

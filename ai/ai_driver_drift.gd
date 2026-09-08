@@ -48,7 +48,8 @@ func _try_enter(frame: InputFrame, kart: KartController, profile: AIDifficultyPr
 
 
 func _update_hold(frame: InputFrame, kart: KartController, profile: AIDifficultyProfile, curvature: float, dt: float) -> void:
-	frame.steer = maxf(frame.steer * float(_locked_direction), 0.0) * float(_locked_direction)
+	# KartPhysics already locks drift direction. Preserve countersteer so the
+	# navigator can widen the turn instead of forcing the kart into the inner wall.
 	var release_threshold: float = profile.drift_curvature_threshold * DRIFT_RELEASE_CURVATURE_RATIO
 	var tier_reached: bool = kart.get_drift_tier() >= profile.target_tier
 	var cancel_prob: float = (1.0 - profile.drift_skill) * DRIFT_CANCEL_PROB_PER_SECOND * dt
