@@ -356,14 +356,110 @@ the checkpoint/element contract from spec §15:
 
 ### Items and AI
 
-Item behavior will live in `items/`; AI behavior will live in `ai/`. Phase 0
-creates their directory contracts and data schemas, not runtime behavior.
-Future AI produces `InputFrame` objects and never changes kart physics state
-directly. `race/scripted_race_input_provider.gd` is deliberately not Phase 6
-AI: it performs fixed racing-line pursuit/corner braking only so Phase 5 races
-and headless simulations can finish. It contains no overtaking, avoidance,
-difficulty, shortcut, item, or rubber-band decisions and is marked for Phase 6
-replacement.
+Item behavior will live in `items/`; Phase 0 created only its directory
+contracts and data schemas, and it stays that way until Phase 7.
+`race/scripted_race_input_provider.gd` still exists — RaceManager now uses it
+only for the FINISHING-state player fallback (a human's kart after they cross
+the line) and can still be used directly by tests/sims that want a
+deterministic non-AI driver. It is no longer the game's default opponent.
+
+#### AI node tree and tick (spec §13)
+
+`AIController` (`ai/ai_controller.gd`, `extends Node3D`) is added as a child
+of a `KartController` whenever `RaceManager`/`kart_sandbox.gd` spawns a
+non-player kart:
+
+```text
+Kart (CharacterBody3D)
+└── AIController (Node3D)
+    └── AISensors (Node3D)
+        ├── ShapeCast3D (forward-left)
+        ├── ShapeCast3D (forward-center)
+        ├── ShapeCast3D (forward-right)
+        └── ShapeCast3D (rear)
+```
+
+`AIController` extends `Node3D` (not a plain `Node`) purely so `AISensors`'s
+`ShapeCast3D` children inherit the kart's transform correctly — `Node3D` only
+looks at its *direct* parent for a world transform, so a plain-`Node`
+container in the middle would leave the casts stuck at the world origin.
+`AISensors` is `Node3D` for the same reason.
+
+`AIController._physics_process(delta)` accumulates `delta` (which already
+carries any `Engine.time_scale`, spec §13.8's up-to-8x headless sim) and, once
+the accumulator reaches `1 / profile.ai_tick_hz` (30 Hz), drains the *whole*
+accumulated span and runs one tick with that real elapsed time — not a fixed
+nominal interval. Passing a fixed interval while draining only that much per
+physics frame silently understates every downstream timer (PD `kd`, EMA
+smoothing, stuck timers) the instant one scaled `delta` exceeds a tick's
+worth, which is exactly what happened before this was fixed (see the Phase 6
+decision log entry). Each kart's tick is phase-offset (a starting fraction of
+one tick interval) so seven-plus AI karts do not all re-run their `ShapeCast3D`
+queries on the same physics frame (spec §26).
+
+One AI tick composes, in order:
+
+```text
+AISensors.tick() -> SensorReport
+  -> AIDriver.compute_avoid_bias / compute_overtake_bias(SensorReport, profile)
+  -> AINavigator.compute(pos, speed, profile, bias, dt, rng) -> NavResult
+  -> AIDriver.compute_frame(kart, profile, NavResult, SensorReport, context, dt) -> InputFrame
+     (delegates cornering-drift entry/hold to AIDriftPlanner)
+  -> AIItemBrain.should_use(ItemSlotView, ...) -> InputFrame.item
+  -> AIInputProvider.set_frame(InputFrame)
+```
+
+`AIInputProvider` (an `InputProvider`) is the only thing `KartController` ever
+polls; it just returns whatever `InputFrame` the last AI tick produced; the
+same frame is served across the ~2 physics ticks between 30 Hz AI ticks and
+60 Hz physics ticks. `AISensors` (3 forward + 1 rear `ShapeCast3D`, layer mask
+`world | kart_body`) only re-queries on an AI tick, never every physics frame.
+`AINavigator` owns the smoothed per-kart lane offset (random base + a
+biased target the sensors/overtake logic feed in) and shortcut entry/
+following; it exposes both an *unsigned* windowed curvature
+(`max_curvature_in`, for corner-speed/apex checks) and a *signed*
+single-point curvature (`curvature_at` a fixed distance ahead, for which way
+to lock a drift) — collapsing those into one unsigned value was a real Phase 6
+bug (decision log). `AIDriver` owns steering (PD), the corner-speed/rubber-band
+throttle-brake governor, stuck/reverse/respawn handling, and start-boost
+timing; `AIDriftPlanner` (split out to keep `ai_driver.gd` under the spec §29
+400-line budget) owns only curvature-gated drift entry/hold/release.
+`AIItemBrain` evaluates a rule table against `ItemSlotView` — a null Phase 6
+stub (`view.has_item()` is always `false`) so the full pipeline runs
+structurally without Phase 7's `ItemSlot` existing yet.
+
+`AIRaceContext` (`ai/ai_race_context.gd`) is the one upward-reaching seam:
+`RaceManager`/`kart_sandbox.gd` build a single shared instance per race
+(`racing_line`, `track`, `position_tracker`, `player_kart` — nullable for an
+all-AI race, `request_respawn`, `get_countdown_phase_seconds`) and pass it to
+every `AIController.setup()`. Every field has a concrete consumer; it is not
+a general-purpose grab-bag. AI never reaches upward through
+`get_node("../..")` (spec §29 rule 5) — everything it needs about the race
+comes through this one object or its own `setup()` parameters.
+
+`AIDifficultyProfile` (`data/schemas/ai_difficulty_profile.gd`,
+`data/ai/{easy,normal,hard}.tres`) holds every tunable from spec §13.6.
+Fields split into two groups: skill (`speed_confidence`, `steer_kp/kd`,
+`steer_noise`, `drift_skill`/`target_tier`, `late_brake_prob`,
+`shortcut_take_prob`, `item_decision_delay`/`item_use_accuracy`,
+`start_boost_skill`, `trick_prob`, `rubber_band_strength`) differs per
+difficulty; sensing/mechanical fields (`max_lateral_accel`,
+`brake_look_ahead`, `drift_curvature_threshold`, `overtake_range`,
+`ai_tick_hz`, `lane_offset_min/max`) are deliberately identical across all
+three — spec §13.6's last bullet is "difficulty is judgment quality, never a
+speed or perception cheat," and Hard never exceeds `speed_confidence = 1.0`
+(`AIDifficulty.validate()` enforces this and pushes an error rather than
+silently clamping). `AIDifficulty` also derives `tick_interval()` and rolls
+each kart's seeded base lane offset — small helpers, not a God object.
+
+Rubber banding (spec §13.7) lives in `AIDriver._rubber_band_gap()`: it reads
+`PositionTracker.get_progress()` for both the AI kart and
+`context.player_kart` (0 if there is none), and
+`AIDriver.compute_rubber_band_mult()` clamps the result to `±max_band`
+(0.05). `AIController.get_rubber_band_mult()`/`get_target_speed()`/
+`get_lane_offset()` exist purely so `kart_sandbox.gd`'s `DebugOverlay`
+watches can show it happening — spec §13.7 explicitly calls this out as
+something that must never become an invisible cheat.
 
 ### Camera, UI, audio, and effects
 
@@ -820,3 +916,76 @@ its `Curve3D` from arc points at `_ready()` — but everything else about it
   `SceneTree`. Direct script-main-loop execution did not compose project
   autoloads, so scripts referencing `EventBus`, `GameState`, or `SaveManager`
   failed compilation before the runner could return a meaningful exit code.
+
+### Phase 6
+
+- `AIController`/`AISensors` extend `Node3D`, not a plain `Node`. `Node3D`
+  only inherits a world transform from its *direct* parent; a plain-`Node`
+  container in between (which "a Node added as child of the kart" more
+  literally suggests) left every `ShapeCast3D` probe stuck at the world
+  origin instead of following the kart, and every AI kart perceived a
+  permanent wall dead ahead from the moment it left the grid.
+- `AINavigator.NavResult` exposes both an unsigned windowed curvature
+  (`curvature_ahead`, from `RacingLine.max_curvature_in`) and a signed
+  single-point one (`signed_curvature_ahead`, from `RacingLine.curvature_at`
+  a fixed distance ahead). The first pass fed the drift planner the unsigned
+  value, so `curvature > 0.0` was true on every corner including left turns —
+  the AI locked "drift right" on every corner and fought its own correct PD
+  steering, deadlocking at any genuinely tight turn. Corner-speed and
+  apex-proximity checks (which only need magnitude) still use the unsigned
+  one.
+- `AIController._physics_process` drains the whole accumulated `delta` span
+  each AI tick and passes that real elapsed time downstream, instead of
+  subtracting a fixed nominal `1 / ai_tick_hz` and passing that fixed value
+  as `dt`. The fixed-interval version silently ran every timer and the PD
+  `kd` term on the wrong clock the moment a single `Engine.time_scale`-scaled
+  physics `delta` exceeded one AI tick's worth (true above roughly 2x scale
+  at the project's 60 Hz physics rate) — exactly the regime the headless sim
+  runs in (spec §13.8, up to 8x).
+- The AI's emergency "brake now, something is dead ahead" override
+  (`AIDriver._apply_head_on_brake`) checks a genuine near-collision distance
+  (3 m) and only while the kart still carries real speed, not "anything
+  within the sensor's full forward range" (originally 6 m). A straight
+  `ShapeCast3D` ray sees a curving corridor's outer wall constantly while
+  cornering — that is normal track geometry, not an emergency — and the
+  looser version permanently overrode the corner-speed governor's throttle
+  decision, braking the kart past standstill into full reverse and pinning
+  it there.
+- Stuck detection (`AIDriver._update_stuck`) smooths speed with a 1-second-
+  time-constant EMA before comparing it to `STUCK_SPEED_THRESHOLD`, instead
+  of comparing instantaneous speed. A kart wedged against a wall and
+  bouncing between ~0 and ~2 m/s every tick reset the instantaneous-speed
+  timer every single tick and never accumulated the 2s/5s needed to trigger
+  reverse/respawn recovery.
+- **`track/tracks/track_01_ridgeline_circuit/track_01_ridgeline_circuit.tscn`'s
+  `Shape_gate_ns` checkpoint shape was `(2, 3, 14)`; it needed to be
+  `(14, 3, 2)`.** Six of the track's eight checkpoints override their gate's
+  default `CollisionShape3D` with this shape to pair with a ±90° Y rotation
+  (so the gate still faces across the track where travel runs along world X
+  instead of world Z). The override swapped the two horizontal dimensions
+  from what that rotation needs, producing a real gate only 2 m wide *across*
+  the track (instead of the intended 14 m) and 2 m *along* it swapped to 14 m
+  deep. `LapTracker`'s sequential-only rule means missing one checkpoint once
+  permanently stalls that kart's lap count for the rest of the race — no
+  self-correction on a later, cleaner pass. Phase 5's scripted follower drove
+  dead-centerline and never drifted the ~1m needed to notice; real AI (lane
+  offsets, avoidance, overtaking) reliably does. This is the reason a full
+  8-kart AI race never finished before the fix despite every kart visibly
+  still racing — found by connecting to `Checkpoint.body_passed` directly and
+  logging the accepted/rejected index sequence for one kart, not by reasoning
+  about the AI.
+- `RaceManager` only transitioned `RACING -> FINISHING` on the human player's
+  own finish. An all-AI race (`RaceConfig.player_slot == -1`, which the
+  headless sim now uses so every kart is AI-driven) has no player finish to
+  wait for, so it now also transitions on the first kart to finish whenever
+  there is no player.
+- `tests/sim/run_ai_race.gd` varies `RaceConfig.seed` by race number
+  (`config.seed = race_number`) instead of leaving it at the default `0` for
+  every `--races` repetition. Identical seeds produced byte-identical
+  finish orders and times across "repeated" races, which defeats the point
+  of sampling multiple races for the DoD's mean-lap-time comparison.
+- `AIRaceContext` intentionally does not carry a live list of all karts in
+  the race. `AISensors` finds nearby karts through its own `ShapeCast3D`
+  physics queries (self-sufficient), and rubber banding only ever needs
+  `player_kart` + `PositionTracker`. A field with no consumer is exactly the
+  kind of speculative surface spec §29 rule 11 warns against.
