@@ -1,6 +1,6 @@
 # Arcade Kart Racer Architecture
 
-This document is the repository-specific architecture contract through Phase 9. It
+This document is the repository-specific architecture contract through Phase 10. It
 translates sections 6–8 of `KART_RACING_DEV_PROMPT.md` into the concrete paths
 used by this project. Later phases must update this document before changing a
 major boundary or dependency direction.
@@ -20,8 +20,7 @@ major boundary or dependency direction.
 6. Scenes assemble nodes. Scripts own one focused behavior and stay below 400
    lines unless a documented exception is necessary.
 7. Phase delivery is additive: kart physics, drift, track rules, race flow, AI,
-   items, camera/game-feel presentation, and Phase 9 UI are live. Audio playback
-   remains behind its Phase 10 seam.
+   items, camera/game-feel presentation, Phase 9 UI, and Phase 10 audio are live.
 
 ## Runtime composition
 
@@ -119,7 +118,7 @@ Kart (CharacterBody3D, layer 2 / mask 1)  [kart_controller.gd]
     └── WheelFL / WheelFR / WheelRL / WheelRR (Node3D pivot + static-tilt Mesh child)
 ```
 
-`KartAudio` remains a Phase 10 slot. `DriftController` and
+`KartAudio` is a read-only signal subscriber in `kart.tscn`. `DriftController` and
 `BoostController` own their own gameplay state (see the Drift and Boost
 subsections below) and hand `KartPhysics` only the immutable
 `DriftResult`/`BoostResult` value objects each tick; `KartPhysics` remains the
@@ -1343,3 +1342,60 @@ its `Curve3D` from arc points at `_ready()` — but everything else about it
 - The default Godot font is intentional for this offline implementation run.
   `assets/fonts/README.md` records the Phase 13 official-source font/license
   replacement requirement.
+
+
+### Phase 10 audio
+
+Implementation plan: (1) resource library and reproducible PCM assets, (2) fixed
+voice pool and tick-driven BGM crossfade, (3) kart/race/item/menu subscriptions
+and settings, (4) regression tests, headless import/parse, four track validators
+and an eight-kart simulation. No physics tuning or new dependencies.
+
+`AudioManagerService` is the Core audio facade; `audio/{audio_voice,sfx_pool,
+bgm_crossfade}.gd` are its infrastructure helpers (no gameplay imports).
+`RaceAudio` belongs to race composition and reads EventBus plus the explicitly
+bound player/lap count. `KartAudio` reads kart ratios and local component signals.
+Neither subscriber writes physics. MenuScreen attaches `UiAudio` to menu roots;
+pause/results attach it to their own panels, avoiding nested-menu duplicates.
+
+`default_bus_layout.tres`: Music, SFX and Engine send to Master. Engine has one
+low-pass effect. Its toggle follows the local player's offroad state; because
+this is a shared bus, all engines receive that coloration. In all-AI simulations
+the filter stays off. SettingsManager remains the sole persisted volume source;
+AudioManager maps linear values to dB and explicitly mutes exactly zero.
+Music ducking adds -8 dB to the user's current level and never overwrites it.
+
+The hard budget is **16 AudioStreamPlayer3D + 8 AudioStreamPlayer** total,
+including kart loops and the two reserved non-stealable BGM crossfade voices.
+KartAudio leases at most three voices per kart (player engine/squeal use 2D).
+Idle first, then lowest-priority/oldest eligible voice; lower priorities cannot
+steal higher ones. Engine loops outrank transient effects, squeal loops yield
+first and reacquire when eligible. Owner/id checks prevent a stolen lease from
+being updated by its former owner. No nodes or voice records allocate per play.
+Explicit lifetime ticks make headless assertions independent of audio hardware.
+
+BGM uses two preallocated voices and an explicit `step(delta)` linear-gain
+crossfade. Interrupted transitions start from current gains; zero duration is
+immediate. Menu -> race (COUNTDOWN) -> results uses idempotent track requests.
+Final lap pitch is 1.03 when `audio.final_lap_pitch` is enabled, otherwise 1.0;
+restart/menu restores 1.0. BGM and menu audio keep processing during pause;
+world/kart voices pause and do not consume lifetime while paused.
+
+| Signal / source | Sound id |
+|---|---|
+| countdown_tick 3,2,1 / race_started | countdown / go |
+| player lap_completed / entering last lap / kart_finished | lap / final_lap / finish |
+| player position_changed | position_up / position_down |
+| local drift_tier_changed | drift_tier_1..3 |
+| local boost_started / hit_started | boost / hit_spin, hit_tumble, hit_squash, impact_kart |
+| local wall impact / kart contact / launched / landed | impact_wall / impact_kart / jump / landing |
+| ItemSlot roulette_started / roulette_ticked / roulette_stopped | item_pickup / roulette_tick / roulette_stop |
+| item_used / item_hit | <item_id>_fire / <item_id>_hit (all seven ids) |
+| player threat_warning | threat_warning |
+| button focus / pressed / Back action | menu_move / menu_accept / menu_back |
+
+`SfxLibrary` maps StringName ids to AudioStream resources with per-id dB volume
+and pitch variance. Missing ids warn once per library. Build-time generation
+writes deterministic mono 22.05 kHz 16-bit PCM WAVs, including eight-bar menu,
+race and results arpeggios; imported loop settings preserve loop endpoints.
+TODO(phase-13): replace generated CC0 placeholders and tune the final mix by ear.
