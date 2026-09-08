@@ -8,6 +8,8 @@ const BUTTON_THRESHOLD: float = 0.5
 const PHYSICS_TICKS_PER_SECOND: float = 60.0
 const STEER_SMOOTHING_PER_SECOND: float = 8.0
 const STEER_STEP: float = STEER_SMOOTHING_PER_SECOND / PHYSICS_TICKS_PER_SECOND
+const MIN_STEERING_SENSITIVITY: float = 0.5
+const MAX_STEERING_SENSITIVITY: float = 2.0
 
 var device_id: int = DEVICE_ANY
 
@@ -39,7 +41,12 @@ func get_frame() -> InputFrame:
 	frame.throttle = _get_strength(InputActions.ACCELERATE)
 	frame.brake = _get_strength(InputActions.BRAKE)
 	var steer_target: float = _get_strength(InputActions.STEER_RIGHT) - _get_strength(InputActions.STEER_LEFT)
-	_smoothed_steer = move_toward(_smoothed_steer, steer_target, STEER_STEP)
+	var sensitivity: float = clampf(
+		float(SettingsManager.get_setting(&"controls", &"steering_sensitivity", 1.0)),
+		MIN_STEERING_SENSITIVITY,
+		MAX_STEERING_SENSITIVITY,
+	)
+	_smoothed_steer = move_toward(_smoothed_steer, steer_target, STEER_STEP * sensitivity)
 	frame.steer = _smoothed_steer
 	frame.drift = _get_strength(InputActions.DRIFT) > BUTTON_THRESHOLD
 	frame.drift_pressed = frame.drift and not _previous_drift

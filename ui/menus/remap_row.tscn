@@ -1,0 +1,19 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://ui/menus/remap_row.gd" id="1_script"]
+
+[node name="RemapRow" type="HBoxContainer"]
+custom_minimum_size = Vector2(0, 48)
+theme_override_constants/separation = 14
+script = ExtResource("1_script")
+
+[node name="ActionLabel" type="Label" parent="."]
+custom_minimum_size = Vector2(210, 0)
+layout_mode = 2
+text = "ACTION"
+vertical_alignment = 1
+
+[node name="BindButton" type="Button" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "UNBOUND"

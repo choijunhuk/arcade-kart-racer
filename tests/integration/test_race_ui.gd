@@ -48,6 +48,12 @@ func test_pause_menu_focuses_continue_and_exposes_three_actions() -> void:
 	assert_eq(get_viewport().gui_get_focus_owner(), continue_button)
 	assert_not_null(menu.get_node_or_null("Panel/VBox/RestartButton"))
 	assert_not_null(menu.get_node_or_null("Panel/VBox/MenuButton"))
+	var restart_button: Button = menu.get_node("Panel/VBox/RestartButton") as Button
+	var settings_button: Button = menu.get_node("Panel/VBox/SettingsButton") as Button
+	var menu_button: Button = menu.get_node("Panel/VBox/MenuButton") as Button
+	assert_eq(continue_button.focus_neighbor_bottom, continue_button.get_path_to(restart_button))
+	assert_eq(restart_button.focus_neighbor_bottom, restart_button.get_path_to(settings_button))
+	assert_eq(settings_button.focus_neighbor_bottom, settings_button.get_path_to(menu_button))
 
 
 func test_results_screen_builds_rows_and_focuses_restart() -> void:

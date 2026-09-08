@@ -5,7 +5,10 @@ extends CanvasLayer
 
 @onready var _continue_button: Button = $Panel/VBox/ContinueButton
 @onready var _restart_button: Button = $Panel/VBox/RestartButton
+@onready var _settings_button: Button = $Panel/VBox/SettingsButton
 @onready var _menu_button: Button = $Panel/VBox/MenuButton
+@onready var _panel: PanelContainer = $Panel
+@onready var _settings_menu: SettingsMenu = $SettingsMenu
 
 var _manager: RaceManager
 
@@ -14,7 +17,10 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_continue_button.pressed.connect(_on_continue_pressed)
 	_restart_button.pressed.connect(_on_restart_pressed)
+	_settings_button.pressed.connect(_on_settings_pressed)
 	_menu_button.pressed.connect(_on_menu_pressed)
+	_wire_focus()
+	_settings_menu.visible = false
 	visible = false
 
 
@@ -40,12 +46,15 @@ func bind(manager: RaceManager) -> void:
 func show_menu(manager: RaceManager) -> void:
 	_manager = manager
 	visible = true
+	_panel.visible = true
+	_settings_menu.visible = false
 	_continue_button.call_deferred("grab_focus")
 
 
 ## Hides the pause overlay without changing race state.
 func hide_menu() -> void:
 	visible = false
+	_settings_menu.visible = false
 
 
 func _on_continue_pressed() -> void:
@@ -59,7 +68,25 @@ func _on_restart_pressed() -> void:
 		_manager.restart()
 
 
+func _on_settings_pressed() -> void:
+	_panel.visible = false
+	_settings_menu.open_embedded(_on_settings_closed)
+
+
+func _on_settings_closed() -> void:
+	_panel.visible = true
+	_continue_button.call_deferred("grab_focus")
+
+
+func _wire_focus() -> void:
+	var buttons: Array[Button] = [_continue_button, _restart_button, _settings_button, _menu_button]
+	for index: int in range(buttons.size()):
+		var previous: Button = buttons[(index - 1 + buttons.size()) % buttons.size()]
+		var next: Button = buttons[(index + 1) % buttons.size()]
+		buttons[index].focus_neighbor_top = buttons[index].get_path_to(previous)
+		buttons[index].focus_neighbor_bottom = buttons[index].get_path_to(next)
+
+
 func _on_menu_pressed() -> void:
 	if _manager != null:
 		_manager.back_to_menu()
-
