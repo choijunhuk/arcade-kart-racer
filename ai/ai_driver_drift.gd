@@ -10,6 +10,7 @@ extends RefCounted
 ## Mirrors `PhysicsTuning.drift_min_steer` (0.35): DriftController silently
 ## refuses a hop below that, so the locked steer must clear it with margin.
 const MIN_STEER_TO_START_DRIFT: float = 0.4
+const COUNTERSTEER_CANCEL_MARGIN: float = 0.9
 const DRIFT_RELEASE_CURVATURE_RATIO: float = 0.5
 const DRIFT_CANCEL_PROB_PER_SECOND: float = 0.15
 ## drift_skill=0 still attempts half the eligible corners; skill only closes
@@ -50,6 +51,10 @@ func _try_enter(frame: InputFrame, kart: KartController, profile: AIDifficultyPr
 func _update_hold(frame: InputFrame, kart: KartController, profile: AIDifficultyProfile, curvature: float, dt: float) -> void:
 	# KartPhysics already locks drift direction. Preserve countersteer so the
 	# navigator can widen the turn instead of forcing the kart into the inner wall.
+	# Strong opposition cancels DriftController HOLD, so keep a strict margin.
+	if frame.steer * float(_locked_direction) < 0.0:
+		var limit: float = kart.tuning.drift_min_steer * COUNTERSTEER_CANCEL_MARGIN
+		frame.steer = clampf(frame.steer, -limit, limit)
 	var release_threshold: float = profile.drift_curvature_threshold * DRIFT_RELEASE_CURVATURE_RATIO
 	var tier_reached: bool = kart.get_drift_tier() >= profile.target_tier
 	var cancel_prob: float = (1.0 - profile.drift_skill) * DRIFT_CANCEL_PROB_PER_SECOND * dt

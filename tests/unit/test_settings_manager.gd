@@ -143,6 +143,33 @@ func test_remap_conflict_swaps_bindings_and_persists_them() -> void:
 	_restore_action(InputActions.BRAKE, original_brake)
 
 
+func test_conflict_moving_only_custom_key_restores_source_defaults() -> void:
+	var original_accelerate: Array[InputEvent] = InputMap.action_get_events(InputActions.ACCELERATE)
+	var original_brake: Array[InputEvent] = InputMap.action_get_events(InputActions.BRAKE)
+	var key: InputEventKey = _make_key(KEY_K)
+	_restore_action(InputActions.ACCELERATE, [key])
+	_restore_action(InputActions.BRAKE, [_make_joypad_button(JOY_BUTTON_B)])
+	var manager: SettingsManagerService = SettingsManagerService.new(SETTINGS_PATH, false)
+	autofree(manager)
+	manager.load_settings()
+	assert_eq(manager.remap_action(InputActions.BRAKE, key), OK)
+	var remaps: Dictionary = manager.get_setting(&"controls", &"remaps", {})
+	assert_eq(remaps["accelerate"], [], "moving the only key leaves a valid empty source remap")
+	manager.apply_section(&"controls")
+	assert_true(InputMap.action_has_event(InputActions.BRAKE, key))
+	for action: StringName in SettingsManagerService.REMAPPABLE_ACTIONS:
+		if action != InputActions.BRAKE:
+			assert_false(InputMap.action_has_event(action, key), "K must belong only to brake")
+	var defaults: Dictionary = ProjectSettings.get_setting("input/accelerate")
+	var restored: Array[InputEvent] = InputMap.action_get_events(InputActions.ACCELERATE)
+	assert_gt(restored.size(), 0, "the source action must never be left unbound")
+	assert_eq(restored.size(), defaults["events"].size())
+	for event: InputEvent in defaults["events"]:
+		assert_true(InputMap.action_has_event(InputActions.ACCELERATE, event))
+	_restore_action(InputActions.ACCELERATE, original_accelerate)
+	_restore_action(InputActions.BRAKE, original_brake)
+
+
 func _remove_test_file() -> void:
 	if FileAccess.file_exists(SETTINGS_PATH):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(SETTINGS_PATH))

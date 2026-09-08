@@ -332,19 +332,27 @@ func _apply_controls() -> void:
 		if not InputMap.has_action(action):
 			continue
 		if not remaps[action_key] is Array:
+			push_warning("Invalid remap for %s; existing bindings will be kept." % action)
 			continue
 		var encoded_events: Array = remaps[action_key]
 		var decoded_events: Array[InputEvent] = []
+		var valid: bool = true
 		for encoded: Variant in encoded_events:
-			if encoded is Dictionary:
-				var data: Dictionary = encoded as Dictionary
-				if _valid_remap(data):
-					decoded_events.append(deserialize_input_event(data))
-		# A corrupt/empty binding must not erase the keyboard fallback.
-		if not decoded_events.is_empty():
-			InputMap.action_erase_events(action)
-			for event: InputEvent in decoded_events:
-				InputMap.action_add_event(action, event)
+			if not encoded is Dictionary or not _valid_remap(encoded as Dictionary):
+				valid = false
+				break
+			decoded_events.append(deserialize_input_event(encoded as Dictionary))
+		if not valid:
+			push_warning("Invalid remap for %s; existing bindings will be kept." % action)
+			continue
+		# Conflict swaps can move the only custom binding away. Restore project
+		# defaults rather than keeping the stale binding or leaving the action empty.
+		if encoded_events.is_empty():
+			var defaults: Dictionary = ProjectSettings.get_setting("input/%s" % action, {})
+			decoded_events.assign(defaults.get("events", []))
+		InputMap.action_erase_events(action)
+		for event: InputEvent in decoded_events:
+			InputMap.action_add_event(action, event)
 
 
 func _valid_remap(data: Dictionary) -> bool:
