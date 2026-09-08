@@ -1,26 +1,53 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://ui/hud/hud.gd" id="1_hud"]
 [ext_resource type="PackedScene" path="res://ui/hud/drift_meter.tscn" id="2_drift"]
+[ext_resource type="PackedScene" path="res://ui/hud/minimap.tscn" id="3_minimap"]
+[ext_resource type="Theme" path="res://ui/theme/default_theme.tres" id="4_theme"]
 
 [node name="HUD" type="CanvasLayer"]
 script = ExtResource("1_hud")
 
-[node name="PositionLabel" type="Label" parent="."]
+[node name="PositionPanel" type="PanelContainer" parent="."]
 offset_left = 24.0
 offset_top = 20.0
-offset_right = 240.0
-offset_bottom = 76.0
-theme_override_font_sizes/font_size = 36
-text = "1/8"
+offset_right = 214.0
+offset_bottom = 142.0
+mouse_filter = 2
+theme = ExtResource("4_theme")
+
+[node name="PositionLabel" type="Label" parent="."]
+offset_left = 42.0
+offset_top = 26.0
+offset_right = 124.0
+offset_bottom = 104.0
+mouse_filter = 2
+theme = ExtResource("4_theme")
+theme_override_colors/font_color = Color(1, 0.82, 0.14, 1)
+theme_override_font_sizes/font_size = 64
+text = "1"
+horizontal_alignment = 1
+
+[node name="PositionCountLabel" type="Label" parent="."]
+offset_left = 124.0
+offset_top = 56.0
+offset_right = 194.0
+offset_bottom = 100.0
+mouse_filter = 2
+theme = ExtResource("4_theme")
+theme_override_font_sizes/font_size = 28
+text = "/8"
 
 [node name="LapLabel" type="Label" parent="."]
-offset_left = 24.0
-offset_top = 76.0
-offset_right = 240.0
-offset_bottom = 124.0
-theme_override_font_sizes/font_size = 28
-text = "1/3"
+offset_left = 42.0
+offset_top = 104.0
+offset_right = 194.0
+offset_bottom = 136.0
+mouse_filter = 2
+theme = ExtResource("4_theme")
+theme_override_font_sizes/font_size = 22
+text = "LAP 1/3"
+horizontal_alignment = 1
 
 [node name="CountdownLabel" type="Label" parent="."]
 anchors_preset = 8
@@ -34,17 +61,28 @@ offset_right = 180.0
 offset_bottom = 130.0
 grow_horizontal = 2
 grow_vertical = 2
+mouse_filter = 2
+theme = ExtResource("4_theme")
+theme_override_colors/font_color = Color(1, 0.82, 0.14, 1)
 theme_override_font_sizes/font_size = 112
 text = "3"
 horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="WrongWayLabel" type="Label" parent="."]
-anchors_preset = 10
-anchor_right = 1.0
-offset_top = 150.0
-offset_bottom = 210.0
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -260.0
+offset_top = 110.0
+offset_right = 260.0
+offset_bottom = 170.0
 grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme = ExtResource("4_theme")
 theme_override_colors/font_color = Color(1, 0.2, 0.15, 1)
 theme_override_font_sizes/font_size = 42
 text = "WRONG WAY"
@@ -53,79 +91,149 @@ horizontal_alignment = 1
 [node name="MessageLabel" type="Label" parent="."]
 anchors_preset = 10
 anchor_right = 1.0
-offset_top = 92.0
-offset_bottom = 148.0
+offset_top = 94.0
+offset_bottom = 150.0
 grow_horizontal = 2
+mouse_filter = 2
+theme = ExtResource("4_theme")
+theme_override_colors/font_color = Color(1, 0.45, 0.16, 1)
 theme_override_font_sizes/font_size = 38
 horizontal_alignment = 1
 
+[node name="ThreatWarning" type="Label" parent="."]
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 450.0
+offset_top = 24.0
+offset_right = -450.0
+offset_bottom = 78.0
+grow_horizontal = 2
+mouse_filter = 2
+theme = ExtResource("4_theme")
+theme_override_colors/font_color = Color(0.55, 0.82, 1, 1)
+theme_override_font_sizes/font_size = 30
+text = "STORM BEACON INCOMING"
+horizontal_alignment = 1
+
+[node name="Minimap" parent="." instance=ExtResource("3_minimap")]
+layout_mode = 3
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = -224.0
+offset_right = 284.0
+offset_bottom = -24.0
+grow_vertical = 0
+
 [node name="DriftMeter" parent="." instance=ExtResource("2_drift")]
+layout_mode = 3
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -210.0
+offset_top = -98.0
+offset_right = 210.0
+offset_bottom = -26.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="Speedometer" type="PanelContainer" parent="."]
+layout_mode = 3
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = 228.0
+offset_top = -98.0
+offset_right = 398.0
+offset_bottom = -26.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+theme = ExtResource("4_theme")
+
+[node name="SpeedLabel" type="Label" parent="Speedometer"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 24
+text = "000 km/h"
+horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="ItemPanel" type="Control" parent="."]
 layout_mode = 3
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -188.0
-offset_top = 24.0
+offset_left = -244.0
+offset_top = 238.0
 offset_right = -24.0
-offset_bottom = 154.0
+offset_bottom = 398.0
 grow_horizontal = 0
+theme = ExtResource("4_theme")
 
-[node name="Background" type="ColorRect" parent="ItemPanel"]
+[node name="Background" type="PanelContainer" parent="ItemPanel"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.03, 0.06, 0.1, 0.78)
+mouse_filter = 2
 
 [node name="Icon" type="TextureRect" parent="ItemPanel"]
 layout_mode = 0
-offset_left = 50.0
-offset_top = 8.0
-offset_right = 114.0
-offset_bottom = 72.0
+offset_left = 74.0
+offset_top = 10.0
+offset_right = 146.0
+offset_bottom = 82.0
+mouse_filter = 2
 expand_mode = 1
 stretch_mode = 5
-pivot_offset = Vector2(32, 32)
+pivot_offset = Vector2(36, 36)
 
 [node name="ItemName" type="Label" parent="ItemPanel"]
 layout_mode = 0
-offset_top = 78.0
-offset_right = 164.0
-offset_bottom = 104.0
+offset_top = 86.0
+offset_right = 220.0
+offset_bottom = 114.0
+mouse_filter = 2
 text = "EMPTY"
 horizontal_alignment = 1
 
 [node name="RouletteLabel" type="Label" parent="ItemPanel"]
 layout_mode = 0
-offset_top = 104.0
-offset_right = 164.0
-offset_bottom = 128.0
+offset_top = 110.0
+offset_right = 220.0
+offset_bottom = 134.0
+mouse_filter = 2
 theme_override_colors/font_color = Color(1, 0.82, 0.2, 1)
+theme_override_font_sizes/font_size = 16
 horizontal_alignment = 1
 
-[node name="ThreatWarning" type="Label" parent="."]
-anchors_preset = 10
-anchor_right = 1.0
-offset_top = 24.0
-offset_bottom = 78.0
-grow_horizontal = 2
-theme_override_colors/font_color = Color(0.55, 0.8, 1, 1)
-theme_override_font_sizes/font_size = 32
-text = "STORM BEACON INCOMING"
-horizontal_alignment = 1
+[node name="CooldownBar" type="ProgressBar" parent="ItemPanel"]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 136.0
+offset_right = 204.0
+offset_bottom = 151.0
+mouse_filter = 2
+show_percentage = false
 
 [node name="ShieldTimer" type="TextureProgressBar" parent="."]
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -204.0
-offset_top = 8.0
-offset_right = -8.0
-offset_bottom = 170.0
+offset_left = -258.0
+offset_top = 224.0
+offset_right = -10.0
+offset_bottom = 412.0
 grow_horizontal = 0
+mouse_filter = 2
+theme = ExtResource("4_theme")
 value = 100.0
 fill_mode = 4

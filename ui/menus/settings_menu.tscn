@@ -1,0 +1,266 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://ui/menus/settings_menu.gd" id="1_script"]
+[ext_resource type="Theme" path="res://ui/theme/default_theme.tres" id="2_theme"]
+
+[node name="SettingsMenu" type="Control"]
+process_mode = 3
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2_theme")
+script = ExtResource("1_script")
+back_scene_path = "res://ui/menus/main_menu.tscn"
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.012, 0.025, 0.06, 0.98)
+
+[node name="Panel" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -500.0
+offset_top = -410.0
+offset_right = 500.0
+offset_bottom = 410.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBox" type="VBoxContainer" parent="Panel"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="Panel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 38
+text = "SETTINGS"
+horizontal_alignment = 1
+
+[node name="SectionPicker" type="OptionButton" parent="Panel/VBox"]
+layout_mode = 2
+
+[node name="Tabs" type="TabContainer" parent="Panel/VBox"]
+custom_minimum_size = Vector2(0, 610)
+layout_mode = 2
+size_flags_vertical = 3
+tabs_visible = false
+
+[node name="Audio" type="VBoxContainer" parent="Panel/VBox/Tabs"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Heading" type="Label" parent="Panel/VBox/Tabs/Audio"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "AUDIO"
+
+[node name="MasterLabel" type="Label" parent="Panel/VBox/Tabs/Audio"]
+layout_mode = 2
+text = "Master"
+
+[node name="MasterSlider" type="HSlider" parent="Panel/VBox/Tabs/Audio"]
+layout_mode = 2
+max_value = 1.0
+step = 0.05
+value = 1.0
+
+[node name="MusicLabel" type="Label" parent="Panel/VBox/Tabs/Audio"]
+layout_mode = 2
+text = "Music"
+
+[node name="MusicSlider" type="HSlider" parent="Panel/VBox/Tabs/Audio"]
+layout_mode = 2
+max_value = 1.0
+step = 0.05
+value = 1.0
+
+[node name="SfxLabel" type="Label" parent="Panel/VBox/Tabs/Audio"]
+layout_mode = 2
+text = "SFX"
+
+[node name="SfxSlider" type="HSlider" parent="Panel/VBox/Tabs/Audio"]
+layout_mode = 2
+max_value = 1.0
+step = 0.05
+value = 1.0
+
+[node name="EngineLabel" type="Label" parent="Panel/VBox/Tabs/Audio"]
+layout_mode = 2
+text = "Engine"
+
+[node name="EngineSlider" type="HSlider" parent="Panel/VBox/Tabs/Audio"]
+layout_mode = 2
+max_value = 1.0
+step = 0.05
+value = 1.0
+
+[node name="Video" type="VBoxContainer" parent="Panel/VBox/Tabs"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Heading" type="Label" parent="Panel/VBox/Tabs/Video"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "VIDEO"
+
+[node name="ResolutionLabel" type="Label" parent="Panel/VBox/Tabs/Video"]
+layout_mode = 2
+text = "Resolution"
+
+[node name="ResolutionOption" type="OptionButton" parent="Panel/VBox/Tabs/Video"]
+layout_mode = 2
+
+[node name="FullscreenToggle" type="CheckButton" parent="Panel/VBox/Tabs/Video"]
+layout_mode = 2
+text = "Fullscreen"
+
+[node name="VsyncToggle" type="CheckButton" parent="Panel/VBox/Tabs/Video"]
+layout_mode = 2
+button_pressed = true
+text = "VSync"
+
+[node name="RenderScaleLabel" type="Label" parent="Panel/VBox/Tabs/Video"]
+layout_mode = 2
+text = "3D Render Scale"
+
+[node name="RenderScaleSlider" type="HSlider" parent="Panel/VBox/Tabs/Video"]
+layout_mode = 2
+min_value = 0.5
+max_value = 1.0
+step = 0.05
+value = 1.0
+
+[node name="ParticleQualityLabel" type="Label" parent="Panel/VBox/Tabs/Video"]
+layout_mode = 2
+text = "Particle Quality"
+
+[node name="ParticleQualityOption" type="OptionButton" parent="Panel/VBox/Tabs/Video"]
+layout_mode = 2
+
+[node name="ShakeLabel" type="Label" parent="Panel/VBox/Tabs/Video"]
+layout_mode = 2
+text = "Camera Shake %"
+
+[node name="ShakeSlider" type="HSlider" parent="Panel/VBox/Tabs/Video"]
+layout_mode = 2
+max_value = 100.0
+step = 5.0
+value = 100.0
+
+[node name="FovLabel" type="Label" parent="Panel/VBox/Tabs/Video"]
+layout_mode = 2
+text = "FOV Effect %"
+
+[node name="FovSlider" type="HSlider" parent="Panel/VBox/Tabs/Video"]
+layout_mode = 2
+max_value = 100.0
+step = 5.0
+value = 100.0
+
+[node name="Controls" type="VBoxContainer" parent="Panel/VBox/Tabs"]
+layout_mode = 2
+
+[node name="Scroll" type="ScrollContainer" parent="Panel/VBox/Tabs/Controls"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="Rows" type="VBoxContainer" parent="Panel/VBox/Tabs/Controls/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="Heading" type="Label" parent="Panel/VBox/Tabs/Controls/Scroll/Rows"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "CONTROLS"
+
+[node name="RemapHint" type="Label" parent="Panel/VBox/Tabs/Controls/Scroll/Rows"]
+layout_mode = 2
+text = "Select a row, then press a key, pad button, or axis"
+
+[node name="RemapRows" type="VBoxContainer" parent="Panel/VBox/Tabs/Controls/Scroll/Rows"]
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="DeadzoneLabel" type="Label" parent="Panel/VBox/Tabs/Controls/Scroll/Rows"]
+layout_mode = 2
+text = "Stick Deadzone"
+
+[node name="DeadzoneSlider" type="HSlider" parent="Panel/VBox/Tabs/Controls/Scroll/Rows"]
+layout_mode = 2
+min_value = 0.05
+max_value = 0.5
+step = 0.01
+value = 0.2
+
+[node name="SensitivityLabel" type="Label" parent="Panel/VBox/Tabs/Controls/Scroll/Rows"]
+layout_mode = 2
+text = "Steering Sensitivity"
+
+[node name="SensitivitySlider" type="HSlider" parent="Panel/VBox/Tabs/Controls/Scroll/Rows"]
+layout_mode = 2
+min_value = 0.5
+max_value = 2.0
+step = 0.05
+value = 1.0
+
+[node name="VibrationToggle" type="CheckButton" parent="Panel/VBox/Tabs/Controls/Scroll/Rows"]
+layout_mode = 2
+button_pressed = true
+text = "Vibration  •  controller stub"
+
+[node name="Accessibility" type="VBoxContainer" parent="Panel/VBox/Tabs"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Heading" type="Label" parent="Panel/VBox/Tabs/Accessibility"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "ACCESSIBILITY"
+
+[node name="SpeedLinesToggle" type="CheckButton" parent="Panel/VBox/Tabs/Accessibility"]
+layout_mode = 2
+button_pressed = true
+text = "Speed Lines"
+
+[node name="TierIconsToggle" type="CheckButton" parent="Panel/VBox/Tabs/Accessibility"]
+layout_mode = 2
+button_pressed = true
+text = "Drift Tier Color + Icon Labels"
+
+[node name="TierLegend" type="Label" parent="Panel/VBox/Tabs/Accessibility"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.25, 0.9, 1, 1)
+text = "◆ T1 CYAN    ▲ T2 AMBER    ★ T3 MAGENTA"
+
+[node name="Gameplay" type="VBoxContainer" parent="Panel/VBox/Tabs"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Heading" type="Label" parent="Panel/VBox/Tabs/Gameplay"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "GAMEPLAY"
+
+[node name="SpeedometerToggle" type="CheckButton" parent="Panel/VBox/Tabs/Gameplay"]
+layout_mode = 2
+button_pressed = true
+text = "Show Speedometer"
+
+[node name="BackButton" type="Button" parent="Panel/VBox"]
+layout_mode = 2
+text = "BACK"

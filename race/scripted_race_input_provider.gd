@@ -2,7 +2,8 @@ class_name ScriptedRaceInputProvider
 extends InputProvider
 
 ## Temporary deterministic racing-line follower for Phase 5 race flow/sims.
-## TODO(phase-6): Replace with AIController/AINavigator/AIDriver composition.
+## Phase 5 deterministic follower retained for post-finish player cruise/tests;
+## active AI racers use AIController/AINavigator/AIDriver composition.
 
 const LOOKAHEAD_DISTANCE: float = 8.0
 const STEER_GAIN: float = 3.0
@@ -120,4 +121,3 @@ func _compute_steer_toward_line() -> float:
 	to_target = to_target.normalized()
 	var angle: float = atan2(forward.cross(to_target).y, forward.dot(to_target))
 	return clampf(angle * STEER_GAIN, -1.0, 1.0)
-

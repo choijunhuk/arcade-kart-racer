@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="DriverData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/schemas/driver_data.gd" id="1_driver"]
+
+[resource]
+script = ExtResource("1_driver")
+id = &"nyx_calder"
+display_name = "Nyx Calder"
+driver_color = Color(0.95, 0.22, 0.72, 1)
+stat_mods = {&"handling": 0.03, &"acceleration": -0.03}
+voice_set = &"nyx"

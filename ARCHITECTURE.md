@@ -1,6 +1,6 @@
 # Arcade Kart Racer Architecture
 
-This document is the repository-specific architecture contract through Phase 8. It
+This document is the repository-specific architecture contract through Phase 9. It
 translates sections 6–8 of `KART_RACING_DEV_PROMPT.md` into the concrete paths
 used by this project. Later phases must update this document before changing a
 major boundary or dependency direction.
@@ -20,8 +20,8 @@ major boundary or dependency direction.
 6. Scenes assemble nodes. Scripts own one focused behavior and stay below 400
    lines unless a documented exception is necessary.
 7. Phase delivery is additive: kart physics, drift, track rules, race flow, AI,
-   items, and Phase 8 camera/game-feel presentation are live. Final UI styling
-   and audio playback remain behind their Phase 9/10 seams.
+   items, camera/game-feel presentation, and Phase 9 UI are live. Audio playback
+   remains behind its Phase 10 seam.
 
 ## Runtime composition
 
@@ -43,13 +43,14 @@ major boundary or dependency direction.
   physics time/draw calls/rendered objects/physics tick display, callable
   watches, and runtime sliders.
 
-The main scene is now a minimal start prompt; accepting it stores the default
-`RaceConfig` and changes to this Phase 8 runtime tree:
+The main scene now boots the data-driven Phase 9 menu. Selection screens store
+content identifiers in `GameState`; the difficulty screen resolves the selected
+resources, builds `pending_race_config`, and changes to this runtime tree:
 
 ```text
 scenes/main.tscn                                      [main.gd]
 └── Main (Node)
-    └── Center/VBox/StartButton
+    └── MainMenu (Control)
 
 race/race.tscn                                       [race_manager.gd]
 └── RaceScene (Node3D / RaceManager)
@@ -69,8 +70,10 @@ race/race.tscn                                       [race_manager.gd]
     ├── RaceCamera
     ├── SpeedLines          (CanvasLayer, central 40% transparent)
     ├── HUD                  (CanvasLayer)
-    │   └── DriftMeter
+    │   ├── Minimap          (Line2D + cached kart dots, 10 Hz)
+    │   └── DriftMeter / optional Speedometer
     ├── PauseMenu            (CanvasLayer, PROCESS_MODE_ALWAYS)
+    │   └── SettingsMenu     (embedded; preserves paused tree)
     └── ResultsScreen        (CanvasLayer)
 ```
 
@@ -607,8 +610,64 @@ Phase 8 presentation composition is deliberately split into small owners:
 - `SpeedLines` is a CanvasLayer/ColorRect shader overlay driven by
   `speed_ratio² + boost`; its central 40% square is always transparent and the
   accessibility `speed_lines` setting can make its intensity zero.
-- The temporary HUD and results UI use Tween for position punch, lap slide,
-  roulette rotation, and staggered result rows. Final art remains Phase 9.
+- The final HUD and results UI retain Tween position punch, lap slide, roulette
+  rotation, and staggered result rows while using the shared Phase 9 Theme.
+
+### Phase 9 UI flow and ownership
+
+Every full-screen menu uses `ui/theme/default_theme.tres`. `MenuScreen` owns
+the shared Back action, scene requests, deferred initial focus, and explicit
+vertical/grid focus-neighbor wiring. Mouse uses the same `Button.pressed`
+signals as keyboard/gamepad activation.
+
+```text
+scenes/main.tscn
+  -> MainMenu
+     -> ModeSelect
+        -> DriverSelect  -- scan res://data/drivers/*.tres
+           -> KartSelect -- scan res://data/karts/*.tres
+              -> TrackSelect -- scan res://data/tracks/*.tres + SaveManager best
+                 -> DifficultySelect -- scan res://data/ai/*.tres
+                    -> RaceConfigBuilder -> GameState.pending_race_config
+                       -> race/race.tscn -> COUNTDOWN
+                          -> ResultsScreen
+                             -> restart | TrackSelect | MainMenu
+
+Race PauseMenu -> embedded SettingsMenu -> PauseMenu
+                 (SceneTree.paused remains true)
+```
+
+`ResourceScanner.scan_tres()` accepts one directory (plus an optional injected
+listing for deterministic tests), recognizes `.tres`, exported `.tres.remap`
+aliases normalized back to their logical `.tres` paths, and `.res`, then sorts
+before loading. Selection screens filter that generic result to their typed
+schema. Adding a driver/kart/track/difficulty is therefore a data-file change,
+not a menu registry edit.
+
+`RaceConfigBuilder` lives in `race/`, not `ui/`, so `RaceManager` never depends
+on presentation code. It builds the final config and applies allowlisted,
+clamped driver modifiers to a deep `KartData` duplicate. `RaceManager` assigns
+the chosen driver to the player and deterministic roster drivers to AI karts;
+`KartVisuals` colors the existing capsule placeholder through a duplicated
+material.
+
+`GameState.change_scene()` validates the PackedScene and adds a root-level
+`TransitionOverlay`, which fades to opaque, changes the current scene, then
+fades away. In-race Settings does not use this path: PauseMenu embeds the same
+`settings_menu.tscn`, and both run `PROCESS_MODE_ALWAYS`.
+
+`SettingsManager.update_setting()` applies and persists one value immediately.
+`remap_action()` serializes key, joypad-button, and signed joypad-axis events,
+uses pure `RemapLogic` to swap conflicts, rebuilds `InputMap`, and saves the
+same remap dictionary. Presentation consumers read their owned settings:
+camera reads shake/FOV strength, `SpeedLines` reads accessibility, HUD reads
+speedometer visibility, `PlayerInputProvider` reads steering sensitivity, and
+`ParticleBudgetController` applies the three quality ratios on `video` changes.
+
+The minimap caches the racing line's defensive baked-point copy, projects X/Z
+with one aspect-preserving scale, and updates only kart dots at 10 Hz. HUD reads
+`LapTracker`, `PositionTracker`, `ItemManager.get_cooldown_ratio()`, and kart
+presentation APIs; gameplay truth remains outside UI.
 
 ### Phase 8 signal wiring
 
@@ -823,6 +882,13 @@ its `Curve3D` from arc points at `_ready()` — but everything else about it
   loads the real kart/race/HUD/results/speed-line/perf-probe scenes and proves
   hit-to-camera decay, 0% shake transform stability, shader flash, Tween starts,
   audio ratio hooks, and the 8-kart particle caps.
+- Phase 9 adds pure unit coverage for deterministic resource scans,
+  `RaceConfig` building/driver modifiers, remap swaps, minimap projection,
+  cooldown ratios, baked-point copies, and result ordering/record metadata.
+  Integration tests drive focused `ui_accept` controls across the complete
+  MainMenu -> selection -> difficulty flow, instantiate the chosen race at
+  `COUNTDOWN`, reload persisted settings/remaps, preserve pause through embedded
+  Settings, verify final HUD/minimap regions, and restart from Results.
 - Windowed performance is measured by `tools/perf_check.sh 12 30`, which opens
   `scenes/test/perf_probe.tscn`, discards two warm-up seconds, then prints mean
   real-time FPS, worst frame milliseconds, GPU-particle count, and renderer.
@@ -1258,5 +1324,22 @@ its `Curve3D` from arc points at `_ready()` — but everything else about it
 - `SkidMark` is top-level and indexed. Keeping it parented for lifecycle but
   detached for transform inheritance fixes moving/local detached quads without
   introducing a global effect manager for persistent marks.
-- Temporary HUD/results motion changes only Tween state and anchoring. Theme,
-  contrast, typography, navigation polish, and settings UI remain Phase 9.
+- Phase 8's temporary HUD/results motion changed only Tween state and anchoring;
+  Phase 9 replaced its theme, layout, navigation, settings, minimap, and columns.
+
+### Phase 9
+
+- `core/resource_scanner.gd` is shared Core infrastructure because both UI and
+  race composition may consume typed data directories; placing it below `ui/`
+  would invert the established Race -> Core/Data dependency direction.
+- Driver tuning mutates only deep `KartData` duplicates and only five allowlisted
+  fields, clamped to ±5%. Shared `.tres` resources remain immutable across races.
+- The DebugOverlay keeps its Phase 8 top-right rectangle; the item slot starts
+  below it while the threat banner is centered, so development instrumentation
+  never hides required race information.
+- `RaceResults.Entry.kart_name` remains the stable scene-node identifier used by
+  the headless simulator. Phase 9 adds `kart_display_name` and `driver_name`
+  rather than changing that field's meaning.
+- The default Godot font is intentional for this offline implementation run.
+  `assets/fonts/README.md` records the Phase 13 official-source font/license
+  replacement requirement.

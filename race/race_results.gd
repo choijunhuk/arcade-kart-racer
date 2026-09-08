@@ -6,9 +6,12 @@ extends Node
 class Entry extends RefCounted:
 	var kart: KartController
 	var kart_name: String = ""
+	var kart_display_name: String = ""
+	var driver_name: String = ""
 	var rank: int = 0
 	var total_time_seconds: float = -1.0
 	var best_lap_seconds: float = -1.0
+	var is_new_record: bool = false
 	var hit_count: int = 0
 	var item_use_count: int = 0
 
@@ -46,15 +49,25 @@ func setup(
 ## Builds ordered immutable-style result entries and writes player bests once.
 func finalize(ranking: Array[KartController], finish_times: Dictionary) -> Array[Entry]:
 	_entries.clear()
+	var previous_player_best_ms: int = _save_manager.get_best_lap_ms(_track_id) if _save_manager != null else -1
 	for index: int in range(ranking.size()):
 		var kart: KartController = ranking[index]
 		var id: int = kart.get_instance_id()
 		var entry: Entry = Entry.new()
 		entry.kart = kart
 		entry.kart_name = String(kart.name)
+		var kart_data: KartData = kart.get_kart_data()
+		var driver_data: DriverData = kart.get_driver_data()
+		entry.kart_display_name = kart_data.display_name if kart_data != null else entry.kart_name
+		entry.driver_name = driver_data.display_name if driver_data != null else "Unknown Driver"
 		entry.rank = index + 1
 		entry.total_time_seconds = float(finish_times.get(id, -1.0))
 		entry.best_lap_seconds = float(_best_laps.get(id, -1.0))
+		var best_lap_ms: int = roundi(entry.best_lap_seconds * 1000.0)
+		entry.is_new_record = (
+			kart == _player_kart and best_lap_ms > 0
+			and (previous_player_best_ms < 0 or best_lap_ms < previous_player_best_ms)
+		)
 		entry.hit_count = int(_hit_counts.get(id, 0))
 		entry.item_use_count = int(_item_counts.get(id, 0))
 		_entries.append(entry)

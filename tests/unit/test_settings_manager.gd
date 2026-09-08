@@ -59,6 +59,108 @@ func test_joypad_motion_remap_round_trip_preserves_device_axis_and_direction() -
 	assert_eq(decoded_motion.axis_value, -1.0)
 
 
+func test_update_setting_persists_shake_zero_across_a_service_reload() -> void:
+	var writer: SettingsManagerService = SettingsManagerService.new(SETTINGS_PATH, false)
+	autofree(writer)
+	writer.load_settings()
+	assert_true(writer.has_method("update_setting"))
+	if not writer.has_method("update_setting"):
+		return
+
+	assert_eq(writer.call("update_setting", &"gameplay", &"shake_strength", 0.0), OK)
+	var reader: SettingsManagerService = SettingsManagerService.new(SETTINGS_PATH, false)
+	autofree(reader)
+	reader.load_settings()
+
+	assert_almost_eq(reader.get_shake_strength(), 0.0, 0.001)
+
+
+func test_remap_conflict_swaps_bindings_and_persists_them() -> void:
+	var original_accelerate: Array[InputEvent] = InputMap.action_get_events(InputActions.ACCELERATE)
+	var original_brake: Array[InputEvent] = InputMap.action_get_events(InputActions.BRAKE)
+	var accelerate_key: InputEventKey = _make_key(KEY_J)
+	var brake_key: InputEventKey = _make_key(KEY_K)
+	var accelerate_joypad: InputEventJoypadButton = _make_joypad_button(JOY_BUTTON_A)
+	var brake_joypad: InputEventJoypadButton = _make_joypad_button(JOY_BUTTON_B)
+	InputMap.action_erase_events(InputActions.ACCELERATE)
+	InputMap.action_add_event(InputActions.ACCELERATE, accelerate_key)
+	InputMap.action_add_event(InputActions.ACCELERATE, accelerate_joypad)
+	InputMap.action_erase_events(InputActions.BRAKE)
+	InputMap.action_add_event(InputActions.BRAKE, brake_key)
+	InputMap.action_add_event(InputActions.BRAKE, brake_joypad)
+	var manager: SettingsManagerService = SettingsManagerService.new(SETTINGS_PATH, true)
+	add_child_autofree(manager)
+	await wait_process_frames(1)
+
+	assert_eq(manager.remap_action(InputActions.ACCELERATE, brake_key), OK)
+	var accelerate_events: Array[InputEvent] = InputMap.action_get_events(InputActions.ACCELERATE)
+	var brake_events: Array[InputEvent] = InputMap.action_get_events(InputActions.BRAKE)
+	assert_eq(accelerate_events.size(), 2)
+	assert_eq(brake_events.size(), 2)
+	if accelerate_events.size() != 2 or brake_events.size() != 2:
+		_restore_action(InputActions.ACCELERATE, original_accelerate)
+		_restore_action(InputActions.BRAKE, original_brake)
+		return
+	assert_eq((accelerate_events[0] as InputEventKey).physical_keycode, KEY_K)
+	assert_eq((accelerate_events[1] as InputEventJoypadButton).button_index, JOY_BUTTON_A)
+	assert_eq((brake_events[0] as InputEventKey).physical_keycode, KEY_J)
+	assert_eq((brake_events[1] as InputEventJoypadButton).button_index, JOY_BUTTON_B)
+
+	assert_eq(manager.remap_action(InputActions.ACCELERATE, brake_joypad), OK)
+	accelerate_events = InputMap.action_get_events(InputActions.ACCELERATE)
+	brake_events = InputMap.action_get_events(InputActions.BRAKE)
+	assert_eq(accelerate_events.size(), 2)
+	assert_eq(brake_events.size(), 2)
+	if accelerate_events.size() != 2 or brake_events.size() != 2:
+		_restore_action(InputActions.ACCELERATE, original_accelerate)
+		_restore_action(InputActions.BRAKE, original_brake)
+		return
+	assert_eq((accelerate_events[0] as InputEventKey).physical_keycode, KEY_K)
+	assert_eq((accelerate_events[1] as InputEventJoypadButton).button_index, JOY_BUTTON_B)
+	assert_eq((brake_events[0] as InputEventKey).physical_keycode, KEY_J)
+	assert_eq((brake_events[1] as InputEventJoypadButton).button_index, JOY_BUTTON_A)
+
+	var reader: SettingsManagerService = SettingsManagerService.new(SETTINGS_PATH, false)
+	autofree(reader)
+	reader.load_settings()
+	var remaps: Dictionary = reader.get_setting(&"controls", &"remaps", {}) as Dictionary
+	assert_eq(int(remaps["accelerate"][0]["physical_keycode"]), KEY_K)
+	assert_eq(int(remaps["accelerate"][1]["button_index"]), JOY_BUTTON_B)
+	assert_eq(int(remaps["brake"][0]["physical_keycode"]), KEY_J)
+	assert_eq(int(remaps["brake"][1]["button_index"]), JOY_BUTTON_A)
+	_restore_action(InputActions.ACCELERATE, original_accelerate)
+	_restore_action(InputActions.BRAKE, original_brake)
+	reader.apply_section(&"controls")
+	accelerate_events = InputMap.action_get_events(InputActions.ACCELERATE)
+	brake_events = InputMap.action_get_events(InputActions.BRAKE)
+	assert_eq(accelerate_events.size(), 2)
+	assert_eq((accelerate_events[0] as InputEventKey).physical_keycode, KEY_K)
+	assert_eq((accelerate_events[1] as InputEventJoypadButton).button_index, JOY_BUTTON_B)
+	assert_eq(brake_events.size(), 2)
+	assert_eq((brake_events[0] as InputEventKey).physical_keycode, KEY_J)
+	assert_eq((brake_events[1] as InputEventJoypadButton).button_index, JOY_BUTTON_A)
+	_restore_action(InputActions.ACCELERATE, original_accelerate)
+	_restore_action(InputActions.BRAKE, original_brake)
+
+
 func _remove_test_file() -> void:
 	if FileAccess.file_exists(SETTINGS_PATH):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(SETTINGS_PATH))
+
+
+func _make_key(physical_keycode: Key) -> InputEventKey:
+	var event: InputEventKey = InputEventKey.new()
+	event.physical_keycode = physical_keycode
+	return event
+
+
+func _make_joypad_button(button_index: JoyButton) -> InputEventJoypadButton:
+	var event: InputEventJoypadButton = InputEventJoypadButton.new()
+	event.button_index = button_index
+	return event
+
+
+func _restore_action(action: StringName, events: Array[InputEvent]) -> void:
+	InputMap.action_erase_events(action)
+	for event: InputEvent in events:
+		InputMap.action_add_event(action, event)

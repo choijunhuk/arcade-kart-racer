@@ -3,10 +3,16 @@ extends GutTest
 const FRAME_COUNT_TO_TARGET: int = 12
 
 var _strengths: Dictionary[StringName, float] = {}
+var _original_sensitivity: Variant
 
 
 func before_each() -> void:
 	_strengths.clear()
+	_original_sensitivity = SettingsManager.get_setting(&"controls", &"steering_sensitivity", 1.0)
+
+
+func after_each() -> void:
+	SettingsManager.set_setting(&"controls", &"steering_sensitivity", _original_sensitivity)
 
 
 func test_steer_smoothly_approaches_digital_input() -> void:
@@ -52,6 +58,17 @@ func test_edge_inputs_fire_once_per_press() -> void:
 	assert_true(pressed.item)
 	assert_false(held.drift_pressed)
 	assert_false(held.item)
+
+
+func test_steering_sensitivity_scales_the_smoothing_step() -> void:
+	_strengths[InputActions.STEER_RIGHT] = 1.0
+	SettingsManager.set_setting(&"controls", &"steering_sensitivity", 0.5)
+	var provider: PlayerInputProvider = PlayerInputProvider.new(0)
+	provider.set_strength_override(_read_strength)
+
+	var first_frame: InputFrame = provider.get_frame()
+
+	assert_almost_eq(first_frame.steer, (8.0 / 60.0) * 0.5, 0.001)
 
 
 func _read_strength(action: StringName, device_id: int) -> float:

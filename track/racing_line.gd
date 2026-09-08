@@ -66,6 +66,12 @@ func length() -> float:
 	return _length
 
 
+## Returns a defensive local-space baked-point copy for minimap presentation.
+func get_baked_points() -> PackedVector3Array:
+	_ensure_baked()
+	return _points.duplicate()
+
+
 ## Nearest-point search for the racing-line offset under `global_pos`. Full
 ## scan when `hint_offset < 0`, otherwise a local window search around the
 ## baked index for `hint_offset` (spec §26). Handles wrap around the seam.

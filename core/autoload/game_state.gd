@@ -3,6 +3,9 @@ extends Node
 
 signal scene_change_requested(scene_path: String)
 
+const TRANSITION_SCENE: PackedScene = preload("res://ui/components/transition_overlay.tscn")
+const TRANSITION_NODE_NAME: StringName = &"SceneTransition"
+
 enum Mode {
 	BOOT,
 	SANDBOX,
@@ -49,4 +52,11 @@ func change_scene(scene_path: String) -> Error:
 		push_error("Cannot change to missing scene: %s" % scene_path)
 		return ERR_FILE_NOT_FOUND
 	scene_change_requested.emit(scene_path)
-	return get_tree().change_scene_to_file(scene_path)
+	var root: Window = get_tree().root
+	if root.get_node_or_null(NodePath(String(TRANSITION_NODE_NAME))) != null:
+		return ERR_BUSY
+	var overlay: TransitionOverlay = TRANSITION_SCENE.instantiate() as TransitionOverlay
+	overlay.name = TRANSITION_NODE_NAME
+	root.add_child(overlay)
+	overlay.transition_to(scene_path)
+	return OK

@@ -73,6 +73,14 @@ func set_lod_enabled(enabled: bool) -> void:
 			particles.emitting = false
 
 
+## Applies the user-selected visual density without restarting emitters.
+func set_quality_ratio(ratio: float) -> void:
+	for particles: GPUParticles3D in _sparks:
+		particles.amount_ratio = clampf(ratio, 0.0, 1.0)
+	for particles: GPUParticles3D in _smoke:
+		particles.amount_ratio = clampf(ratio, 0.0, 1.0)
+
+
 func _tier_color(tier: int) -> Color:
 	match tier:
 		2:

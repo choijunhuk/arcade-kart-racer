@@ -13,6 +13,24 @@ const AUDIO_BUS_KEYS: Dictionary = {
 	"sfx": "SFX",
 	"engine": "Engine",
 }
+const REMAPPABLE_ACTIONS: Array[StringName] = [
+	InputActions.ACCELERATE,
+	InputActions.BRAKE,
+	InputActions.STEER_LEFT,
+	InputActions.STEER_RIGHT,
+	InputActions.DRIFT,
+	InputActions.USE_ITEM,
+	InputActions.LOOK_BACK,
+	InputActions.PAUSE,
+	&"ui_accept",
+	&"ui_cancel",
+	&"ui_left",
+	&"ui_right",
+	&"ui_up",
+	&"ui_down",
+]
+const MIN_RENDER_SCALE: float = 0.5
+const MAX_RENDER_SCALE: float = 1.0
 
 var settings_path: String = DEFAULT_SETTINGS_PATH
 var apply_on_load: bool = true
@@ -96,14 +114,7 @@ func load_settings() -> Dictionary:
 ## Persists complete settings, applies them, and announces each changed section.
 func save_settings(values: Dictionary) -> Error:
 	_settings = _merge_with_defaults(values)
-	var config: ConfigFile = ConfigFile.new()
-	for section_key: Variant in _settings:
-		var section: String = str(section_key)
-		var section_values: Dictionary = _settings[section]
-		for setting_key: Variant in section_values:
-			var key: String = str(setting_key)
-			config.set_value(section, key, section_values[key])
-	var save_error: Error = config.save(settings_path)
+	var save_error: Error = _persist_current_settings()
 	if save_error != OK:
 		return save_error
 	if apply_on_load:
@@ -128,6 +139,32 @@ func set_setting(section: StringName, key: StringName, value: Variant) -> void:
 	if apply_on_load:
 		apply_section(section)
 	settings_changed.emit(section)
+
+
+## Changes, applies, announces, and persists one setting atomically enough for UI use.
+func update_setting(section: StringName, key: StringName, value: Variant) -> Error:
+	if _settings.is_empty():
+		load_settings()
+	set_setting(section, key, value)
+	return _persist_current_settings()
+
+
+## Rebinds one action and swaps any conflicting action's prior binding.
+func remap_action(action: StringName, event: InputEvent) -> Error:
+	if not InputMap.has_action(action):
+		return ERR_DOES_NOT_EXIST
+	var encoded: Dictionary = serialize_input_event(event)
+	if encoded.is_empty():
+		return ERR_INVALID_PARAMETER
+	if _settings.is_empty():
+		load_settings()
+	var controls: Dictionary = _settings.get("controls", {}) as Dictionary
+	controls["remaps"] = RemapLogic.swap_conflict(_capture_remaps(), action, encoded)
+	_settings["controls"] = controls
+	if apply_on_load:
+		_apply_controls()
+	settings_changed.emit(&"controls")
+	return _persist_current_settings()
 
 
 ## Applies every supported setting section to the active Godot runtime.
@@ -215,21 +252,47 @@ func _merge_with_defaults(values: Dictionary) -> Dictionary:
 	return merged
 
 
+func _persist_current_settings() -> Error:
+	var config: ConfigFile = ConfigFile.new()
+	for section_key: Variant in _settings:
+		var section: String = str(section_key)
+		var section_values: Dictionary = _settings[section]
+		for setting_key: Variant in section_values:
+			var key: String = str(setting_key)
+			config.set_value(section, key, section_values[key])
+	return config.save(settings_path)
+
+
+func _capture_remaps() -> Dictionary:
+	var remaps: Dictionary = {}
+	for action: StringName in REMAPPABLE_ACTIONS:
+		if not InputMap.has_action(action):
+			continue
+		var encoded_events: Array[Dictionary] = []
+		for event: InputEvent in InputMap.action_get_events(action):
+			var encoded: Dictionary = serialize_input_event(event)
+			if not encoded.is_empty():
+				encoded_events.append(encoded)
+		remaps[String(action)] = encoded_events
+	return remaps
+
+
 func _apply_audio() -> void:
 	var audio: Dictionary = _settings.get("audio", {})
+	AudioManager.ensure_audio_buses()
 	for setting_key: Variant in AUDIO_BUS_KEYS:
-		var bus_name: String = AUDIO_BUS_KEYS[setting_key]
-		var bus_index: int = AudioServer.get_bus_index(bus_name)
-		if bus_index < 0:
-			continue
 		var linear: float = clampf(float(audio.get(setting_key, 1.0)), MIN_VOLUME, MAX_VOLUME)
-		AudioServer.set_bus_volume_db(bus_index, linear_to_db(linear))
+		AudioManager.set_bus_volume(StringName(AUDIO_BUS_KEYS[setting_key]), linear)
 
 
 func _apply_video() -> void:
+	var video: Dictionary = _settings.get("video", {})
+	if is_inside_tree():
+		get_tree().root.scaling_3d_scale = clampf(
+			float(video.get("render_scale", 1.0)), MIN_RENDER_SCALE, MAX_RENDER_SCALE,
+		)
 	if DisplayServer.get_name() == "headless":
 		return
-	var video: Dictionary = _settings.get("video", {})
 	var fullscreen: bool = bool(video.get("fullscreen", false))
 	var mode: DisplayServer.WindowMode = DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED
 	DisplayServer.window_set_mode(mode)

@@ -1,0 +1,21 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://ui/components/stat_bar.gd" id="1_stat"]
+
+[node name="StatBar" type="HBoxContainer"]
+custom_minimum_size = Vector2(190, 22)
+mouse_filter = 2
+script = ExtResource("1_stat")
+
+[node name="Name" type="Label" parent="."]
+custom_minimum_size = Vector2(76, 0)
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 14
+text = "STAT"
+
+[node name="Value" type="ProgressBar" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+show_percentage = false

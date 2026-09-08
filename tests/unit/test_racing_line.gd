@@ -107,3 +107,18 @@ func test_tangent_and_right_are_perpendicular_unit_vectors() -> void:
 	assert_almost_eq(tangent.length(), 1.0, 0.01)
 	assert_almost_eq(right.length(), 1.0, 0.01)
 	assert_almost_eq(tangent.dot(right), 0.0, 0.01)
+
+
+func test_baked_points_returns_a_defensive_copy_for_minimap_consumers() -> void:
+	var line: RacingLine = _build_circle_line()
+	assert_true(line.has_method("get_baked_points"))
+	if not line.has_method("get_baked_points"):
+		return
+	var points: PackedVector3Array = line.call("get_baked_points") as PackedVector3Array
+	var original_size: int = points.size()
+	points.clear()
+
+	var second_read: PackedVector3Array = line.call("get_baked_points") as PackedVector3Array
+
+	assert_gt(original_size, 8)
+	assert_eq(second_read.size(), original_size)

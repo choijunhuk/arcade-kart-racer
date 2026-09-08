@@ -1,5 +1,165 @@
 # Development Log
 
+## Phase 9 보고 — UI
+
+### 구현된 기능
+
+- 하나의 `ui/theme/default_theme.tres`로 Panel, Button normal/hover/pressed/
+  disabled/focus, Label, HSlider/VSlider, OptionButton 스타일을 통일했다. Focus는
+  4 px amber ring으로 보이며, 오프라인 샌드박스에서는 공식 폰트 다운로드가
+  불가능해 Godot 기본 폰트를 사용한다.
+- `scenes/main.tscn`은 실제 MainMenu를 부팅한다. Play → Single Race →
+  DriverSelect → KartSelect → TrackSelect → DifficultySelect → Race 순서이며,
+  Time Trial/Grand Prix는 Phase 12 표기와 함께 비활성화했다. 모든 화면은
+  초기 focus, wraparound 이웃, `ui_accept`/`ui_cancel`, mouse `pressed`를
+  지원하고 `TransitionOverlay`가 `GameState.change_scene()` 전후를 fade한다.
+- `ResourceScanner.scan_tres()`가 `data/drivers|karts|tracks|ai`의 `.tres`만
+  파일명 순으로 읽는다. 오리지널 드라이버 8종(Aurora Vale, Bramble Knox,
+  Cinder Rook, Echo Meridian, Flint Harbor, Luma Circuit, Nyx Calder,
+  Orin Gale)을 추가했고 각자 고유 색과 ±3~5% stat modifier를 가진다.
+  `RaceConfigBuilder`가 선택을 조립하고 allowlist + ±5% clamp로 복제된
+  `KartData`에 modifier를 적용한다. `KartVisuals`는 기존 capsule driver에
+  선택 색을 적용한다.
+- TrackSelect는 preview placeholder, 기본 lap 수, `SaveManager` best lap을
+  표시한다. DifficultySelect가 driver/kart/track/difficulty를 실제
+  `RaceConfig`로 만들고 `GameState.pending_race_config` 및 last selection에
+  저장한 뒤 레이스로 이동한다.
+- Settings는 Audio(Master/Music/SFX/Engine), Video(resolution/fullscreen/
+  VSync/render scale/particle quality/shake/FOV), Controls(14개 action remap,
+  deadzone/sensitivity/vibration stub), Accessibility(speed lines/tier color+
+  icon), Gameplay(speedometer)를 제공한다. 변경은 즉시 적용되고
+  `settings.cfg`에 저장된다. key/joy button/signed axis를 직렬화하며 충돌은
+  두 action의 기존 binding을 swap한다. Pause의 동일 Settings 인스턴스는
+  `PROCESS_MODE_ALWAYS`로 동작하며 Back 후에도 tree를 paused 상태로 유지한다.
+- 최종 HUD는 좌상 position + lap, 우측 DebugOverlay 아래 item roulette/
+  cooldown/shield, 좌하 10 Hz `Line2D` minimap + 8 kart dots, 하단 drift meter
+  + 설정형 speedometer, 중앙 countdown/WRONG WAY/FINAL LAP/FINISH, 상단 중앙
+  threat warning을 표시한다. 기존 position punch/lap slide/roulette Tween을
+  유지하고 EventBus 및 read-only tracker/kart/item API만 읽는다.
+- Pause는 Continue/Restart/Settings/Quit to Menu를 제공한다. Results는 rank,
+  driver, kart, total time, best lap과 SaveManager 이전 기록 기준 `NEW RECORD`
+  badge를 표시하고 staggered Tween 후 Restart/Track Select/Main Menu focus를
+  제공한다.
+
+### 생성/수정된 주요 파일
+
+- 공통/데이터: `core/resource_scanner.gd`, `race/race_config_builder.gd`,
+  `data/drivers/*.tres`, `data/schemas/driver_data.gd`,
+  `assets/fonts/README.md`.
+- 메뉴/테마: `ui/theme/default_theme.tres`, `ui/menus/{menu_screen,main_menu,
+  mode_select,driver_select,kart_select,track_select,difficulty_select,
+  settings_menu,remap_row,pause_menu}.{gd,tscn}`,
+  `ui/components/{stat_bar,transition_overlay}.{gd,tscn}`.
+- 레이스 UI: `ui/hud/{hud,drift_meter,minimap,minimap_projection}.{gd,tscn}`,
+  `ui/results/{results_screen,results_ordering}.{gd,tscn}`.
+- 런타임: `core/autoload/{game_state,settings_manager,save_manager}.gd`,
+  `core/input/player_input_provider.gd`, `kart/{kart_controller,kart_visuals}.gd`,
+  `items/item_manager.gd`, `race/{race_manager,race_results}.gd`,
+  `track/racing_line.gd`, particle effect controllers.
+- 검증: `tests/unit/test_phase9_ui_logic.gd`,
+  `tests/integration/test_phase9_{ui_content,menu_flow,settings,hud,results}.gd`
+  및 기존 boundary test 확장.
+
+### 핵심 설계 결정과 이유
+
+- `RaceConfigBuilder`/`ResourceScanner`를 UI 하위가 아니라 `race/`와 `core/`에
+  뒀다. RaceManager가 driver modifier/roster를 적용할 때 Race → UI 역방향
+  의존을 만들지 않기 위해서다.
+- driver modifier는 공유 `.tres`를 바꾸지 않고 deep duplicate에만 적용한다.
+  허용 필드도 speed/acceleration/handling/drift/weight 5개로 제한한다.
+- `RaceResults.Entry.kart_name`은 AI sim이 쓰는 node identity로 유지하고,
+  화면용 `kart_display_name`/`driver_name`을 별도 필드로 추가했다.
+- minimap은 top-down Viewport를 새로 렌더하지 않는다. RacingLine baked X/Z를
+  한 번 aspect-preserving 정규화하고 kart dot만 10 Hz로 갱신한다.
+- 메뉴의 script export(`back_scene_path`)는 `.tscn`에서 script 지정 뒤에
+  직렬화한다. 반대 순서는 Godot가 property를 버려 Back navigation이 비는
+  것을 integration test가 발견했다.
+- Pause Settings는 scene change가 아니라 동일 화면을 embed한다. 따라서
+  설정 변경/Back 중에도 live RaceManager와 `SceneTree.paused=true`를 보존한다.
+
+### 검증
+
+- ✅ import: `HOME=$PWD/.tmp-home godot --headless --path . --import` exit 0,
+  신규 script UID 생성/추적.
+- ✅ parse: `HOME=$PWD/.tmp-home godot --headless --path . --quit` exit 0,
+  project `SCRIPT ERROR` 0. macOS certificate diagnostic은 기존 sandbox 환경
+  메시지이며 exit code와 project parse에 영향을 주지 않았다.
+- ✅ GUT: **349/349 tests**, **1,825 assertions**, 0 failures. Phase 8 merge
+  baseline 307개 대비 Phase 9 behavior test 42개 추가.
+- ✅ gamepad flow: synthetic `ui_accept` press/release만으로 MainMenu → Mode →
+  Aurora Vale → Heavy → Ridgeline → Easy를 선택하고 실제 `race.tscn`이 해당
+  config로 `RaceState.COUNTDOWN`에 도달했다. `ui_cancel` Back도 별도 검증했다.
+- ✅ persistence: shake 0 service reload, remap swap 저장 후 새 service의
+  `apply_section("controls")`, SaveManager last selection/best lap을 검증했다.
+- ✅ pause/results: Pause → Settings → Back이 paused 유지; Results → Restart가
+  live manager의 COUNTDOWN으로 복귀; Track Select 요청과 NEW RECORD를 검증했다.
+- ✅ tracks: `HOME=$PWD/.tmp-home tools/validate_tracks.sh` 4/4
+  (`test_loop`, `test_loop_hills`, `test_hairpin`, `track_01`).
+- ✅ 정적 상한: project `.gd` 전부 400줄 이하(최대 기존
+  `kart/kart_physics.gd` 399, 변경된 `race/race_manager.gd` 392);
+  `project.godot`에 `[network]`/TLS section 없음.
+- ⚠️ 시각/실기: headless integration은 composition/focus/state를 검증하지만
+  사람 눈의 contrast/layout와 실제 물리 gamepad feel을 증명하지 않는다.
+  아래 플레이 지시는 사용자 windowed 판정 항목이다.
+
+### 현재 문제점 / 알려진 제한
+
+- 공식 CC0/OFL font를 이 sandbox에서 공식 source로 다운로드할 network가
+  없어 Godot 기본 font를 사용한다. license 포함 번들은 Phase 13 대상이다.
+- vibration toggle은 저장되는 stub이며 실제 rumble 요청은 아직 없다.
+- driver portrait와 track preview는 색상 placeholder다. Time Trial/Grand Prix는
+  의도적으로 disabled다.
+- Phase 10 전이므로 실제 메뉴/BGM/engine/SFX 재생은 아직 없다.
+
+### TODO / PLACEHOLDER 목록
+
+- TODO(phase-10): 메뉴/레이스/결과 BGM, engine/drift/item SFX와 volume bus를
+  실제 stream 재생에 연결한다.
+- TODO(phase-12): Time Trial과 Grand Prix 메뉴를 활성화하고 각 전용 flow를
+  구현한다.
+- TODO(phase-13): 공식-source CC0/OFL font + license, driver portrait, track
+  preview, 최종 UI art/localization을 교체한다.
+- TODO(phase-13): vibration setting을 실제 controller haptics에 연결한다.
+- PLACEHOLDER(phase-13): 기존 test track의 fixed-roll bank와 Track01 jump
+  landing은 최종 authored geometry/art pass 대상이다.
+
+### 다음 Phase 계획
+
+Phase 10에서 메뉴/레이스/결과 음악, engine pitch, drift squeal, item/impact/
+countdown/final-lap SFX와 AudioManager bus/pool을 실제 재생에 연결한다.
+사용자 Phase 9 플레이 판정/승인 전에는 시작하지 않는다.
+
+### 사용자에게 필요한 결정
+
+아래 pad-only run-through에서 메뉴 focus, 설정 즉시 반영, HUD 가독성,
+결과 flow가 실제 화면에서도 자연스러운지 판정하고 Phase 9 승인 여부를 알려준다.
+
+### 플레이 지시
+
+```text
+1. windowed 실행: /opt/homebrew/bin/godot --path .
+2. 마우스를 쓰지 말고 D-pad/좌스틱 + A만 사용한다.
+   PLAY → SINGLE RACE → 드라이버 → 카트 → RIDGELINE CIRCUIT → 난이도를
+   선택한다. B가 매 선택 화면에서 정확히 이전 화면으로 가는지도 확인한다.
+3. COUNTDOWN에서 RT/A 가속 타이밍으로 start boost를 시도한다.
+4. 3랩 동안 다음을 pad로 모두 수행한다.
+   - 좌스틱 코너링 + RB/X drift 유지/해제 → tier mini turbo
+   - item box 획득 → roulette 종료 → LB/Y item 사용 → 공격/방어
+   - boost pad, jump/trick, shortcut, AI 추월 경쟁, 낙하 후 respawn
+   - Start로 Pause → SETTINGS. Shake 0%, FOV 0%, speed lines off,
+     speedometer off/on, volume/particle quality를 바꾸고 B로 복귀한다.
+     레이스가 계속 paused인지 확인한 뒤 Continue한다.
+5. HUD에서 position/lap, item cooldown, minimap 8 dots/player 강조,
+   WRONG WAY/FINAL LAP/FINISH/threat warning을 확인한다. F3 DebugOverlay가
+   item panel이나 필수 HUD를 가리지 않아야 한다.
+6. 3랩 완주 후 Results의 position/driver/kart/total/best lap과 첫 기록의
+   NEW RECORD를 확인한다.
+7. Results에서 RESTART → COUNTDOWN을 확인하고 다시 Results/메뉴 경로에서
+   TRACK SELECT와 MAIN MENU가 각각 올바른 화면으로 가는지 확인한다.
+8. 앱을 종료/재실행해 설정과 리맵이 유지되는지 확인한다. 바꾼 binding과
+   충돌하던 action은 서로 swap되어 둘 다 조작 가능해야 한다.
+```
+
 ## Phase 8 보고 — 카메라 & Game Feel
 
 ### 구현된 기능

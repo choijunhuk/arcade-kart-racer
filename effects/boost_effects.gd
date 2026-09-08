@@ -32,3 +32,8 @@ func _on_boost_ended() -> void:
 func set_lod_enabled(enabled: bool) -> void:
 	_lod_enabled = enabled
 	_exhaust.emitting = _boost_active and _lod_enabled
+
+
+## Applies the user-selected visual density without restarting the exhaust.
+func set_quality_ratio(ratio: float) -> void:
+	_exhaust.amount_ratio = clampf(ratio, 0.0, 1.0)

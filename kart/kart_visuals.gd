@@ -6,11 +6,13 @@ extends Node3D
 const WHEEL_RADIUS: float = 0.28
 const MIN_BOB_SPEED_RATIO: float = 0.25
 const BOB_NOISE_SEED: int = 3_141
+const DRIVER_MATERIAL_ROUGHNESS: float = 0.75
 
 @export var feel_tuning: FeelTuning = preload("res://data/tuning/feel_default.tres")
 
 @onready var _controller: KartController = get_parent() as KartController
 @onready var _body_mesh: MeshInstance3D = $Body
+@onready var _driver_mesh: MeshInstance3D = $Driver
 @onready var _wheel_fl: Node3D = $WheelFL
 @onready var _wheel_fr: Node3D = $WheelFR
 @onready var _wheel_rl: Node3D = $WheelRL
@@ -40,6 +42,7 @@ func _ready() -> void:
 	_bob_noise.seed = BOB_NOISE_SEED
 	_bob_noise.frequency = 1.0
 	_install_hit_flash_material()
+	apply_driver_data(_controller.get_driver_data())
 	if not EventBus.kart_hit.is_connected(_on_kart_hit):
 		EventBus.kart_hit.connect(_on_kart_hit)
 
@@ -58,6 +61,16 @@ func _process(delta: float) -> void:
 	_update_hit_visual()
 	_update_trick_visual(delta)
 	_update_hit_flash(delta)
+
+
+## Applies the selected driver's color to the placeholder capsule mesh.
+func apply_driver_data(driver: DriverData) -> void:
+	if driver == null:
+		return
+	var material: StandardMaterial3D = StandardMaterial3D.new()
+	material.albedo_color = driver.driver_color
+	material.roughness = DRIVER_MATERIAL_ROUGHNESS
+	_driver_mesh.material_override = material
 
 
 func _update_body_pose(delta: float) -> void:

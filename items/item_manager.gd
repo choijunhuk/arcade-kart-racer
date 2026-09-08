@@ -22,6 +22,7 @@ var _karts: Array[KartController] = []
 var _slots: Dictionary[int, ItemSlot] = {}
 var _previous_item_ids: Dictionary[int, StringName] = {}
 var _cooldowns: Dictionary[int, float] = {}
+var _cooldown_durations: Dictionary[int, float] = {}
 var _items_by_id: Dictionary[StringName, ItemData] = {}
 var _pools: Dictionary[String, ObjectPool] = {}
 var _live_items: Array[ItemBase] = []
@@ -93,6 +94,7 @@ func register_kart(kart: KartController) -> void:
 	_karts.append(kart)
 	_slots[kart.get_instance_id()] = slot
 	_cooldowns[kart.get_instance_id()] = 0.0
+	_cooldown_durations[kart.get_instance_id()] = 0.0
 	_rebuild_context()
 
 
@@ -103,6 +105,7 @@ func unregister_kart(kart: KartController) -> void:
 	_karts.erase(kart)
 	_slots.erase(kart.get_instance_id())
 	_cooldowns.erase(kart.get_instance_id())
+	_cooldown_durations.erase(kart.get_instance_id())
 	_previous_item_ids.erase(kart.get_instance_id())
 	_rebuild_context()
 
@@ -171,6 +174,7 @@ func use_item(kart: KartController, frame: InputFrame) -> bool:
 	if item.is_projectile():
 		active_projectiles.append(item)
 	_cooldowns[kart.get_instance_id()] = item_data.cooldown
+	_cooldown_durations[kart.get_instance_id()] = item_data.cooldown
 	EventBus.item_used.emit(kart, item_data.id)
 	item.activate(frame if frame != null else InputFrame.zero())
 	return true
@@ -184,6 +188,17 @@ func get_active_projectiles() -> Array[ItemBase]:
 ## Returns the current projectile registry size for HUD/debug watches.
 func get_active_projectile_count() -> int:
 	return active_projectiles.size()
+
+
+## Returns normalized remaining cooldown for a registered kart's HUD.
+func get_cooldown_ratio(kart: KartController) -> float:
+	if kart == null:
+		return 0.0
+	var kart_id: int = kart.get_instance_id()
+	var duration: float = float(_cooldown_durations.get(kart_id, 0.0))
+	if duration <= 0.0:
+		return 0.0
+	return clampf(float(_cooldowns.get(kart_id, 0.0)) / duration, 0.0, 1.0)
 
 
 ## Returns dormant instances for a scene-keyed pool.
@@ -220,6 +235,7 @@ func reset() -> void:
 	_slots.clear()
 	_previous_item_ids.clear()
 	_cooldowns.clear()
+	_cooldown_durations.clear()
 	_position_tracker = null
 	_racing_line = null
 	_collision_resolver = null

@@ -1,0 +1,27 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://ui/hud/minimap.gd" id="1_script"]
+[ext_resource type="Theme" path="res://ui/theme/default_theme.tres" id="2_theme"]
+
+[node name="Minimap" type="Control"]
+custom_minimum_size = Vector2(260, 200)
+mouse_filter = 2
+theme = ExtResource("2_theme")
+script = ExtResource("1_script")
+
+[node name="Background" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="TrackLine" type="Line2D" parent="."]
+width = 4.0
+default_color = Color(0.18, 0.72, 0.94, 0.92)
+closed = true
+antialiased = true
+
+[node name="Dots" type="Node2D" parent="."]

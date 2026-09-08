@@ -65,6 +65,33 @@ func test_record_race_result_only_replaces_bests_with_better_values() -> void:
 	assert_eq(int(improved["best_positions"]["test_loop"]), 2)
 
 
+func test_best_lap_lookup_returns_saved_milliseconds_or_negative_one() -> void:
+	var manager: SaveManagerService = SaveManagerService.new(SAVE_PATH)
+	autofree(manager)
+	assert_true(manager.has_method("get_best_lap_ms"))
+	if not manager.has_method("get_best_lap_ms"):
+		return
+	assert_eq(int(manager.call("get_best_lap_ms", &"test_loop")), -1)
+	assert_eq(manager.record_race_result(&"test_loop", 12_345, 2), OK)
+
+	assert_eq(int(manager.call("get_best_lap_ms", &"test_loop")), 12_345)
+
+
+func test_last_selection_round_trip_persists_all_three_content_ids() -> void:
+	var manager: SaveManagerService = SaveManagerService.new(SAVE_PATH)
+	autofree(manager)
+	assert_true(manager.has_method("save_last_selection"))
+	if not manager.has_method("save_last_selection"):
+		return
+
+	assert_eq(manager.call("save_last_selection", &"aurora_vale", &"medium", &"track_01_ridgeline_circuit"), OK)
+
+	var reloaded: Dictionary = manager.load_data()
+	assert_eq(reloaded["last_selection"]["driver"], "aurora_vale")
+	assert_eq(reloaded["last_selection"]["kart"], "medium")
+	assert_eq(reloaded["last_selection"]["track"], "track_01_ridgeline_circuit")
+
+
 func _write_text(path: String, contents: String) -> void:
 	var file: FileAccess = FileAccess.open(path, FileAccess.WRITE)
 	assert_not_null(file)

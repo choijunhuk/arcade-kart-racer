@@ -56,6 +56,25 @@ func test_use_starts_cooldown_and_rejects_reuse_until_it_expires() -> void:
 	assert_true(bool(manager.call("use_item", kart, InputFrame.new())))
 
 
+func test_cooldown_ratio_counts_down_from_one_to_zero() -> void:
+	var manager: Node = _make_manager()
+	if manager == null:
+		return
+	assert_true(manager.has_method("get_cooldown_ratio"))
+	if not manager.has_method("get_cooldown_ratio"):
+		return
+	var kart: KartController = _make_kart_with_slot("CooldownKart")
+	manager.call("register_kart", kart)
+	var item: ItemData = preload("res://data/items/nitro_can.tres")
+	manager.call("give_item", kart, item)
+	manager.call("use_item", kart, InputFrame.new())
+	assert_almost_eq(float(manager.call("get_cooldown_ratio", kart)), 1.0, 0.001)
+	manager.call("_physics_process", item.cooldown * 0.5)
+	assert_almost_eq(float(manager.call("get_cooldown_ratio", kart)), 0.5, 0.001)
+	manager.call("_physics_process", item.cooldown * 0.5)
+	assert_almost_eq(float(manager.call("get_cooldown_ratio", kart)), 0.0, 0.001)
+
+
 func test_projectile_cap_rejects_new_use_and_preserves_the_slot() -> void:
 	var manager: Node = _make_manager()
 	if manager == null:

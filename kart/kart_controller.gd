@@ -6,6 +6,7 @@ extends CharacterBody3D
 signal state_changed(old_state: int, new_state: int)
 const ENGINE_BOOST_PITCH_ADD: float = 0.3
 @export var kart_data: KartData = preload("res://data/karts/medium.tres")
+@export var driver_data: DriverData
 @export var tuning: PhysicsTuning = preload("res://data/tuning/physics_default.tres")
 @onready var _physics: KartPhysics = $KartPhysics
 @onready var _ground_rays: Node3D = $GroundRays
@@ -149,6 +150,14 @@ func get_state() -> int:
 	return state
 func get_kart_data() -> KartData:
 	return kart_data
+## Returns the driver identity used by results and presentation.
+func get_driver_data() -> DriverData:
+	return driver_data
+## Rebinds the driver identity and refreshes its placeholder color when ready.
+func set_driver_data(data: DriverData) -> void:
+	driver_data = data
+	if is_node_ready():
+		($Visuals as KartVisuals).apply_driver_data(data)
 ## Rebinds KartData for sandbox weight-class comparisons.
 func set_kart_data(data: KartData) -> void:
 	kart_data = data
