@@ -22,6 +22,12 @@ var _tick_interval: float = 1.0 / 30.0
 var _tick_accumulator: float = 0.0
 var _last_lane_offset: float = 0.0
 var _item_slot_view: ItemSlotView = ItemSlotView.new()
+## Stamped onto each freshly computed `InputFrame` (mirrors
+## `PlayerInputProvider`'s own counter) so `ItemSlot.capture_input`'s edge
+## dedup can tell "a new AI decision" apart from "the same frame object
+## re-polled by `KartController` before the next AI tick" (spec §13.2:
+## `AIInputProvider` serves one frame across multiple physics ticks).
+var _frame_tick: int = 0
 
 
 ## Wires every dependency and rolls this kart's fixed random seed. Call once
@@ -97,6 +103,8 @@ func _run_tick(dt: float) -> void:
 		bias = clampf(bias + dodge_side * AIDriver.AVOID_STRENGTH, _profile.lane_offset_min, _profile.lane_offset_max)
 	var nav: AINavigator.NavResult = _navigator.compute(_kart.global_position, _kart.get_speed(), _profile, bias, dt, _rng)
 	var frame: InputFrame = _driver.compute_frame(_kart, _profile, nav, sensor_report, _context, dt)
+	_frame_tick += 1
+	frame.tick = _frame_tick
 	_evaluate_item_use(frame, sensor_report, nav, dt)
 	_input_provider.set_frame(frame)
 	_last_lane_offset = nav.lane_offset
