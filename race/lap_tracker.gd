@@ -29,9 +29,12 @@ var _checkpoints: Array[Checkpoint] = []
 var _racing_line: RacingLine
 var _records: Dictionary[int, KartRecord] = {}
 var _race_time: float = 0.0
+var _race_active: bool = true
 
 
 func _physics_process(delta: float) -> void:
+	if not _race_active:
+		return
 	_race_time += delta
 	for key: int in _records.keys():
 		var record: KartRecord = _records[key]
@@ -63,6 +66,17 @@ func register_kart(kart: KartController) -> void:
 
 func unregister_kart(kart: KartController) -> void:
 	_records.erase(kart.get_instance_id())
+
+
+## Clears every registration and resets the race clock for an in-place restart.
+func reset() -> void:
+	_records.clear()
+	_race_time = 0.0
+
+
+## Enables checkpoint timing/wrong-way updates only while the race is live.
+func set_race_active(active: bool) -> void:
+	_race_active = active
 
 
 func get_lap(kart: KartController) -> int:

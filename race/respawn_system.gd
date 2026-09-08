@@ -50,6 +50,11 @@ func unregister_kart(kart: KartController) -> void:
 	_registrations.erase(kart.get_instance_id())
 
 
+## Clears all kart registrations for an in-place race restart.
+func clear_karts() -> void:
+	_registrations.clear()
+
+
 ## Connects a KillZone once to this system's request path.
 func register_kill_zone(zone: KillZone) -> void:
 	if not zone.body_fell.is_connected(_on_kill_zone_body_fell):

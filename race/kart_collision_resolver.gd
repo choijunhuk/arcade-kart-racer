@@ -44,6 +44,11 @@ func unregister_kart(kart: KartController) -> void:
 	_karts.erase(kart)
 
 
+## Clears all kart registrations for an in-place race restart.
+func clear_karts() -> void:
+	_karts.clear()
+
+
 ## Pure normal impulse split. The kart receiving the larger opposing mass
 ## receives the larger velocity change, while separating pairs receive none.
 static func compute_impulse(

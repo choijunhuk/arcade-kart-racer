@@ -27,6 +27,7 @@ func test_race_scene_delegates_each_race_responsibility_to_a_child_node() -> voi
 	var manager: Node = _make_race_manager()
 	if manager == null:
 		return
+	autofree(manager)
 	assert_not_null(manager.get_node_or_null("LapTracker"))
 	assert_not_null(manager.get_node_or_null("PositionTracker"))
 	assert_not_null(manager.get_node_or_null("RespawnSystem"))

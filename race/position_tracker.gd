@@ -7,6 +7,7 @@ extends Node
 
 const UPDATE_INTERVAL_TICKS: int = 12 ## 60 Hz / 5 Hz
 const HYSTERESIS_METERS: float = 0.5
+const MIN_UPDATE_HZ: float = 0.1
 
 class KartRecord extends RefCounted:
 	var kart: KartController
@@ -24,11 +25,15 @@ var _records: Dictionary[int, KartRecord] = {}
 var _order: Array[KartRecord] = []
 var _previous_ranking: Array[int] = []
 var _tick: int = 0
+var _update_interval_ticks: int = UPDATE_INTERVAL_TICKS
+var _race_active: bool = true
 
 
 func _physics_process(_delta: float) -> void:
+	if not _race_active:
+		return
 	_tick += 1
-	if _tick % UPDATE_INTERVAL_TICKS != 0:
+	if _tick % _update_interval_ticks != 0:
 		return
 	_update_all()
 
@@ -66,6 +71,30 @@ func unregister_kart(kart: KartController) -> void:
 	if record != null:
 		_order.erase(record)
 	_records.erase(kart.get_instance_id())
+
+
+## Clears participant progress/ranking for an in-place race restart.
+func reset() -> void:
+	_records.clear()
+	_order.clear()
+	_previous_ranking.clear()
+	_tick = 0
+
+
+## Applies the RaceTuning ranking cadence against the project physics rate.
+func set_update_hz(update_hz: float) -> void:
+	var ticks_per_second: int = int(ProjectSettings.get_setting("physics/common/physics_ticks_per_second", 60))
+	_update_interval_ticks = maxi(1, roundi(float(ticks_per_second) / maxf(update_hz, MIN_UPDATE_HZ)))
+
+
+## Enables ranking updates only while racing/finishing.
+func set_race_active(active: bool) -> void:
+	_race_active = active
+
+
+## Refreshes progress immediately before final ranking/results collection.
+func force_update() -> void:
+	_update_all()
 
 
 func get_position(kart: KartController) -> int:
