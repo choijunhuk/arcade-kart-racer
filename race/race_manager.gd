@@ -37,9 +37,8 @@ const LEGAL_TRANSITIONS: Dictionary = {
 @onready var _hud: RaceHud = $HUD
 @onready var _pause_menu: PauseMenu = $PauseMenu
 @onready var _results_screen: ResultsScreen = $ResultsScreen
-@onready var _feedback_effects: FeedbackEffects = $FeedbackEffects
-@onready var _hit_stop: HitStop = $HitStop
 @onready var _particle_budget: ParticleBudgetController = $ParticleBudgetController
+@onready var _speed_lines: SpeedLines = $SpeedLines
 
 var _state: int = RaceState.LOADING
 var _paused_from_state: int = RaceState.RACING
@@ -153,6 +152,7 @@ func _begin_loading(is_restart: bool) -> void:
 	var observed_kart: KartController = _player_kart if _player_kart != null else _karts[0]
 	_camera.set_target(observed_kart)
 	_particle_budget.configure(_karts, _camera)
+	_speed_lines.set_target(observed_kart)
 	_hud.bind(_player_kart, _lap_tracker, _position_tracker, _karts.size(), _config.laps, _item_manager)
 	_pause_menu.bind(self)
 	_pause_menu.hide_menu()

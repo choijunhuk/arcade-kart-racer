@@ -14,6 +14,7 @@ suspension_stiffness = 18.0
 suspension_damping = 8.0
 maximum_wheel_steer_degrees = 28.0
 drift_wheel_jitter = 0.02
+drift_wheel_jitter_frequency = 24.0
 body_roll_steer_degrees = 5.0
 squash_vertical_scale = 0.45
 squash_horizontal_scale = 1.15

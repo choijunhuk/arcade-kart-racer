@@ -38,6 +38,7 @@ extends Resource
 @export var suspension_damping: float = 8.0
 @export var maximum_wheel_steer_degrees: float = 28.0
 @export var drift_wheel_jitter: float = 0.02
+@export var drift_wheel_jitter_frequency: float = 24.0
 @export var body_roll_steer_degrees: float = 5.0
 @export var squash_vertical_scale: float = 0.45
 @export var squash_horizontal_scale: float = 1.15

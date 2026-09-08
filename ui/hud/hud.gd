@@ -8,6 +8,8 @@ const GO_DISPLAY_SECONDS: float = 1.0
 const ROULETTE_SPIN_RADIANS_PER_SECOND: float = 10.0
 const SHIELD_FULL_SECONDS: float = 8.0
 
+@export var tuning: FeelTuning = preload("res://data/tuning/feel_default.tres")
+
 @onready var _position_label: Label = $PositionLabel
 @onready var _lap_label: Label = $LapLabel
 @onready var _countdown_label: Label = $CountdownLabel
@@ -27,6 +29,11 @@ var _kart_count: int = 1
 var _total_laps: int = 1
 var _go_display_remaining: float = 0.0
 var _item_manager: ItemManager
+var _position_tween: Tween
+var _lap_tween: Tween
+var _roulette_tween: Tween
+var _roulette_was_active: bool = false
+var _lap_base_position: Vector2 = Vector2.ZERO
 
 
 func _ready() -> void:
@@ -36,10 +43,13 @@ func _ready() -> void:
 	EventBus.lap_completed.connect(_on_lap_completed)
 	EventBus.kart_finished.connect(_on_kart_finished)
 	EventBus.threat_warning.connect(_on_threat_warning)
+	EventBus.position_changed.connect(_on_position_changed)
 	_wrong_way_label.visible = false
 	_message_label.text = ""
 	_threat_warning.visible = false
 	_shield_timer.visible = false
+	_position_label.pivot_offset = _position_label.size * 0.5
+	_lap_base_position = _lap_label.position
 
 
 func _process(delta: float) -> void:
@@ -86,6 +96,8 @@ func _exit_tree() -> void:
 		EventBus.kart_finished.disconnect(_on_kart_finished)
 	if EventBus.threat_warning.is_connected(_on_threat_warning):
 		EventBus.threat_warning.disconnect(_on_threat_warning)
+	if EventBus.position_changed.is_connected(_on_position_changed):
+		EventBus.position_changed.disconnect(_on_position_changed)
 
 
 func _on_countdown_tick(value: int) -> void:
@@ -107,7 +119,10 @@ func _on_wrong_way(kart: Node, active: bool) -> void:
 
 
 func _on_lap_completed(kart: Node, lap: int, _lap_time_seconds: float) -> void:
-	if kart == _player_kart and lap == _total_laps - 1:
+	if kart != _player_kart:
+		return
+	_animate_lap_slide()
+	if lap == _total_laps - 1:
 		_message_label.text = "FINAL LAP"
 
 
@@ -125,6 +140,28 @@ func _on_threat_warning(target_kart: Node, item_id: StringName, _seconds: float)
 	_threat_warning.visible = true
 
 
+func _on_position_changed(kart: Node, _old_position: int, _new_position: int) -> void:
+	if kart != _player_kart:
+		return
+	if _position_tween != null:
+		_position_tween.kill()
+	_position_label.scale = Vector2.ONE * tuning.position_punch_scale
+	_position_tween = create_tween()
+	_position_tween.tween_property(
+		_position_label, "scale", Vector2.ONE, tuning.position_punch_seconds,
+	).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+func _animate_lap_slide() -> void:
+	if _lap_tween != null:
+		_lap_tween.kill()
+	_lap_label.position = _lap_base_position - Vector2(tuning.lap_slide_distance, 0.0)
+	_lap_tween = create_tween()
+	_lap_tween.tween_property(
+		_lap_label, "position", _lap_base_position, tuning.lap_slide_seconds,
+	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+
 func _update_item_hud(delta: float) -> void:
 	if _player_kart == null:
 		return
@@ -132,11 +169,11 @@ func _update_item_hud(delta: float) -> void:
 	if slot.roulette_active:
 		var result: ItemData = slot.get_roulette_result()
 		_item_icon.texture = result.icon if result != null else null
-		_item_icon.rotation += ROULETTE_SPIN_RADIANS_PER_SECOND * delta
+		_start_roulette_tween()
 		_roulette_label.text = "ROULETTE"
 		_item_name.text = "???"
 	else:
-		_item_icon.rotation = 0.0
+		_stop_roulette_tween()
 		_roulette_label.text = ""
 		var held: ItemData = slot.get_item_data()
 		_item_icon.texture = held.icon if held != null else null
@@ -144,3 +181,24 @@ func _update_item_hud(delta: float) -> void:
 	var shield_remaining: float = _player_kart.get_shield_remaining()
 	_shield_timer.visible = shield_remaining > 0.0
 	_shield_timer.value = clampf(shield_remaining / SHIELD_FULL_SECONDS, 0.0, 1.0) * 100.0
+	_roulette_was_active = slot.roulette_active
+
+
+func _start_roulette_tween() -> void:
+	if _roulette_was_active:
+		return
+	if _roulette_tween != null:
+		_roulette_tween.kill()
+	_roulette_tween = create_tween().set_loops()
+	_roulette_tween.tween_property(
+		_item_icon, "rotation", _item_icon.rotation + TAU, tuning.roulette_turn_seconds,
+	).as_relative().set_trans(Tween.TRANS_LINEAR)
+
+
+func _stop_roulette_tween() -> void:
+	if not _roulette_was_active:
+		return
+	if _roulette_tween != null:
+		_roulette_tween.kill()
+	_roulette_tween = null
+	_item_icon.rotation = 0.0
