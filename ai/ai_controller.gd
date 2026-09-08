@@ -53,8 +53,16 @@ func _physics_process(delta: float) -> void:
 	_tick_accumulator += delta
 	if _tick_accumulator < _tick_interval:
 		return
-	_tick_accumulator -= _tick_interval
-	_run_tick(_tick_interval)
+	# Drain the whole accumulated span (not one fixed `_tick_interval`) and
+	# feed AIDriver/AINavigator the *real* elapsed game-time. Godot's
+	# `Engine.time_scale` (used by the headless sim up to 8x, spec §13.8)
+	# scales `delta` itself, so subtracting only a fixed nominal interval
+	# each physics frame would silently understate every timer/derivative
+	# term downstream (stuck timers, PD `kd`, EMA smoothing) once a single
+	# scaled `delta` exceeds one tick's worth.
+	var elapsed: float = _tick_accumulator
+	_tick_accumulator = 0.0
+	_run_tick(elapsed)
 
 
 ## Returns the input provider driving this AI's kart.
@@ -84,7 +92,7 @@ func _run_tick(dt: float) -> void:
 	var bias: float = clampf(avoid_bias + overtake_bias, _profile.lane_offset_min, _profile.lane_offset_max)
 	var nav: AINavigator.NavResult = _navigator.compute(_kart.global_position, _kart.get_speed(), _profile, bias, dt, _rng)
 	var frame: InputFrame = _driver.compute_frame(_kart, _profile, nav, sensor_report, _context, dt)
-	_evaluate_item_use(frame, sensor_report, nav)
+	_evaluate_item_use(frame, sensor_report, nav, dt)
 	_input_provider.set_frame(frame)
 	_last_lane_offset = nav.lane_offset
 
@@ -93,7 +101,7 @@ func _run_tick(dt: float) -> void:
 ## a real `ItemSlot` exists; `view.has_item()` is always false so this never
 ## actually fires, but the full Sensors->Navigator->Driver->ItemBrain pipeline
 ## from spec §13.2 is exercised structurally.
-func _evaluate_item_use(frame: InputFrame, sensor_report: AISensors.SensorReport, nav: AINavigator.NavResult) -> void:
+func _evaluate_item_use(frame: InputFrame, sensor_report: AISensors.SensorReport, nav: AINavigator.NavResult, dt: float) -> void:
 	var view: ItemSlotView = ItemSlotView.new()
 	var use_profile: AIItemUseProfile = AIItemUseProfile.new()
 	var decision_context: AIItemBrain.ItemDecisionContext = AIItemBrain.ItemDecisionContext.new()
@@ -104,7 +112,7 @@ func _evaluate_item_use(frame: InputFrame, sensor_report: AISensors.SensorReport
 	decision_context.is_boosting = _kart.is_boosting()
 	decision_context.incoming_projectile = sensor_report.incoming_projectile
 	decision_context.rank = _context.position_tracker.get_position(_kart) if _context.position_tracker != null else 8
-	frame.item = _item_brain.should_use(view, use_profile, _profile, decision_context, _tick_interval)
+	frame.item = _item_brain.should_use(view, use_profile, _profile, decision_context, dt)
 
 
 func _item_box_anchors() -> Array[Node3D]:
