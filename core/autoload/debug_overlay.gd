@@ -101,7 +101,11 @@ func _create_slider_row(name: StringName, minimum: float, maximum: float) -> HSl
 
 func _update_stats() -> void:
 	var lines: PackedStringArray = PackedStringArray([
-		"FPS: %d" % int(Engine.get_frames_per_second()),
+		"FPS: %d" % int(Performance.get_monitor(Performance.TIME_FPS)),
+		"Frame: %.2f ms" % (Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0),
+		"Physics: %.2f ms" % (Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0),
+		"Draw calls: %d" % int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
+		"Objects: %d" % int(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME)),
 		"Physics tick: %d" % _physics_tick,
 	])
 	for watch_name: StringName in _watches:

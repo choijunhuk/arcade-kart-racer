@@ -1,11 +1,9 @@
 extends Node
-
 ## Headless AI-only race simulation (spec §13.8). Every kart is
 ## AIController-driven (`RaceConfig.player_slot = -1`); validates finish
 ## rate, per-kart respawn/wall-hit budgets, and difficulty pacing without a
 ## human. `tools/run_sim.sh` runs this once per `--difficulty`; comparing the
 ## three summaries is how the Phase 6 DoD checks Easy > Normal > Hard.
-
 const RACE_SCENE: PackedScene = preload("res://race/race.tscn")
 const MEDIUM_KART: KartData = preload("res://data/karts/medium.tres")
 const DIFFICULTY_PROFILES: Dictionary[StringName, AIDifficultyProfile] = {
@@ -41,7 +39,6 @@ const ITEM_IDS: Array[String] = [
 	"rocket_dart", "hunter_drone", "spike_mine", "nitro_can",
 	"aegis_bubble", "pulse_blast", "storm_beacon",
 ]
-
 var _kart_names_by_id: Dictionary[int, String] = {}
 var _respawns: Dictionary[String, int] = {}
 var _wall_head_on_counts: Dictionary[String, int] = {}
@@ -59,12 +56,8 @@ var _current_position_tracker: PositionTracker
 var _lap1_completions: Dictionary[String, bool] = {}
 var _lap1_last_kart_name: String = ""
 var _current_kart_count: int = 0
-
-
 func _ready() -> void:
 	call_deferred("_run")
-
-
 func _run() -> void:
 	Engine.time_scale = SIM_TIME_SCALE
 	EventBus.kart_respawned.connect(_on_kart_respawned)
@@ -105,8 +98,6 @@ func _run() -> void:
 	}
 	print(JSON.stringify(payload))
 	get_tree().quit(1 if failed else 0)
-
-
 ## Parses `--laps N --karts N --races N --difficulty easy|normal|hard
 ## --track NAME`, clamping numeric values to safe bounds and falling back to
 ## the default for an unrecognized difficulty/track name.
@@ -150,8 +141,6 @@ static func parse_options(args: PackedStringArray) -> Dictionary:
 				options["strict_balance"] = raw_value == "on"
 		index += 2
 	return options
-
-
 ## Returns true when any kart is missing a non-negative finish time.
 static func has_unfinished(times: Dictionary) -> bool:
 	if times.is_empty():
@@ -160,8 +149,6 @@ static func has_unfinished(times: Dictionary) -> bool:
 		if float(value) < 0.0:
 			return true
 	return false
-
-
 ## Spec §13.8 DoD: every kart must finish, no kart may respawn more than
 ## twice, and no kart's wall head-ons may exceed the per-lap budget.
 static func _race_failed(race_output: Dictionary, laps: int) -> bool:
@@ -174,8 +161,6 @@ static func _race_failed(race_output: Dictionary, laps: int) -> bool:
 		if float(count) > MAX_HEAD_ON_PER_LAP * float(laps):
 			return true
 	return false
-
-
 ## Mean per-lap finish time across every finisher in every race (spec §13.8:
 ## this is what separates Easy/Normal/Hard when `tools/run_sim.sh` is run
 ## once per difficulty and the three summaries are compared).
@@ -227,8 +212,6 @@ static func _summarize(race_outputs: Array[Dictionary], laps: int) -> Dictionary
 		## a control to see how much of the gain is item-driven.
 		"mean_lap1_rank8_gain": lap1_rank8_gain_total / race_count if race_count > 0.0 else 0.0,
 	}
-
-
 ## Returns whether the exact Phase 7 balance thresholds are both met. Uses
 ## the lap-1-rank-8 metric (rank by race position at the end of lap 1), not
 ## the grid-slot-8 metric, since the latter is mostly regression to the mean.
@@ -237,8 +220,6 @@ static func items_balance_pass(summary: Dictionary) -> bool:
 		float(summary.get("average_rank_one_hits_per_race", INF)) <= MAX_RANK_ONE_HITS_PER_RACE
 		and float(summary.get("mean_lap1_rank8_gain", -INF)) >= MIN_RANK_EIGHT_GAIN
 	)
-
-
 ## Evaluates balance only for the specified 20-race, 8-kart, 3-lap sample.
 static func should_evaluate_item_balance(options: Dictionary) -> bool:
 	return (
@@ -247,8 +228,6 @@ static func should_evaluate_item_balance(options: Dictionary) -> bool:
 		and int(options.get("karts", 0)) == DEFAULT_KARTS
 		and int(options.get("laps", 0)) == DEFAULT_LAPS
 	)
-
-
 func _run_one_race(
 	laps: int, kart_count: int, race_number: int, difficulty: AIDifficultyProfile,
 	track_scene: PackedScene, items_enabled: bool,
@@ -280,7 +259,6 @@ func _run_one_race(
 		var physics: KartPhysics = kart.get_node("KartPhysics") as KartPhysics
 		physics.wall_head_on.connect(_on_wall_head_on.bind(kart))
 	var rank_eight_name: String = String(manager.get_karts().back().name) if kart_count >= DEFAULT_KARTS else ""
-
 	var max_ticks: int = roundi(
 		(float(laps) * MAX_SECONDS_PER_LAP + FLOW_MARGIN_SECONDS)
 		* float(PHYSICS_TICKS_PER_SECOND) / SIM_TIME_SCALE
@@ -289,7 +267,6 @@ func _run_one_race(
 		if manager.get_state() == RaceState.RESULTS:
 			break
 		await get_tree().physics_frame
-
 	var finish_order: Array[String] = []
 	var times: Dictionary[String, float] = {}
 	for kart: KartController in manager.get_karts():
@@ -319,8 +296,6 @@ func _run_one_race(
 	}
 	manager.free()
 	return output
-
-
 ## Connects every TrackShortcut's `kart_entered` once the race's track scene
 ## exists, so "shortcut takes" can be counted without RaceManager/PositionTracker
 ## exposing a dedicated signal for it.
@@ -332,8 +307,6 @@ func _register_shortcut_tracking(manager: RaceManager) -> void:
 	for child: Node in shortcuts.get_children():
 		if child is TrackShortcut:
 			(child as TrackShortcut).kart_entered.connect(_on_shortcut_entered)
-
-
 func _reset_metrics() -> void:
 	_kart_names_by_id.clear()
 	_respawns.clear()
@@ -348,35 +321,25 @@ func _reset_metrics() -> void:
 	_current_position_tracker = null
 	_lap1_completions.clear()
 	_lap1_last_kart_name = ""
-
-
 func _on_kart_respawned(kart: Node) -> void:
 	var kart_name: String = String(_kart_names_by_id.get(kart.get_instance_id(), ""))
 	if not kart_name.is_empty():
 		_respawns[kart_name] = int(_respawns.get(kart_name, 0)) + 1
-
-
 func _on_wall_head_on(kart: KartController) -> void:
 	var kart_name: String = String(_kart_names_by_id.get(kart.get_instance_id(), ""))
 	if kart_name.is_empty():
 		return
 	_wall_head_on_counts[kart_name] = int(_wall_head_on_counts.get(kart_name, 0)) + 1
 	_wall_head_on_count += 1
-
-
 func _on_item_used(_kart: Node, item_id: StringName) -> void:
 	var key: String = String(item_id)
 	_items_used[key] = int(_items_used.get(key, 0)) + 1
-
-
 func _on_item_hit(_source_kart: Node, target_kart: Node, item_id: StringName) -> void:
 	var key: String = String(item_id)
 	_item_hits[key] = int(_item_hits.get(key, 0)) + 1
 	if _current_position_tracker != null and target_kart is KartController:
 		if _current_position_tracker.get_position(target_kart as KartController) == 1:
 			_rank_one_hits += 1
-
-
 ## Records the last kart to complete lap 1 across all karts: the one still
 ## running last once every kart has finished lap 1, i.e. rank 8 by race
 ## position rather than by grid slot.
@@ -389,16 +352,10 @@ func _on_lap_completed(kart: Node, lap: int, _lap_time_seconds: float) -> void:
 	_lap1_completions[kart_name] = true
 	if _lap1_completions.size() == _current_kart_count:
 		_lap1_last_kart_name = kart_name
-
-
 func _on_drift_started(_kart: Node, _direction: int) -> void:
 	_drift_started_count += 1
-
-
 func _on_drift_ended(_kart: Node, released_tier: int) -> void:
 	if released_tier >= 3:
 		_tier3_release_count += 1
-
-
 func _on_shortcut_entered(_body: Node3D) -> void:
 	_shortcut_take_count += 1

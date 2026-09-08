@@ -1,6 +1,6 @@
 # Arcade Kart Racer Architecture
 
-This document is the repository-specific architecture contract through Phase 5. It
+This document is the repository-specific architecture contract through Phase 8. It
 translates sections 6–8 of `KART_RACING_DEV_PROMPT.md` into the concrete paths
 used by this project. Later phases must update this document before changing a
 major boundary or dependency direction.
@@ -19,9 +19,9 @@ major boundary or dependency direction.
    player, AI, replay, network peer, or test double.
 6. Scenes assemble nodes. Scripts own one focused behavior and stay below 400
    lines unless a documented exception is necessary.
-7. Phase delivery is additive: kart physics, drift, track rules, and race flow are
-   live; items, proper AI, final camera feel, and final UI remain behind their
-   later-phase seams.
+7. Phase delivery is additive: kart physics, drift, track rules, race flow, AI,
+   items, and Phase 8 camera/game-feel presentation are live. Final UI styling
+   and audio playback remain behind their Phase 9/10 seams.
 
 ## Runtime composition
 
@@ -39,11 +39,12 @@ major boundary or dependency direction.
 - `AudioManager` — `core/autoload/audio_manager.gd`: Master/Music/SFX/Engine
   bus setup, linear volume accessors, and a reusable SFX-player pool.
 - `DebugOverlay` — `core/autoload/debug_overlay.tscn` with
-  `core/autoload/debug_overlay.gd`: F3 overlay, FPS/physics tick display,
-  callable watches, and runtime sliders.
+  `core/autoload/debug_overlay.gd`: right-anchored F3 overlay, FPS/frame time/
+  physics time/draw calls/rendered objects/physics tick display, callable
+  watches, and runtime sliders.
 
 The main scene is now a minimal start prompt; accepting it stores the default
-`RaceConfig` and changes to this Phase 5 runtime tree:
+`RaceConfig` and changes to this Phase 8 runtime tree:
 
 ```text
 scenes/main.tscn                                      [main.gd]
@@ -59,10 +60,14 @@ race/race.tscn                                       [race_manager.gd]
     ├── KartCollisionResolver
     ├── Countdown
     ├── RaceResults
+    ├── FeedbackEffects     (pooled item/wall/landing bursts)
+    ├── HitStop             (local windowed play only)
+    ├── ParticleBudgetController
     ├── Karts
     │   ├── PlayerKart       (PlayerInputProvider)
-    │   └── DummyKart x N    (ScriptedRaceInputProvider, Phase 5 only)
+    │   └── AiKart x N       (AIController, up to 12 for perf probe)
     ├── RaceCamera
+    ├── SpeedLines          (CanvasLayer, central 40% transparent)
     ├── HUD                  (CanvasLayer)
     │   └── DriftMeter
     ├── PauseMenu            (CanvasLayer, PROCESS_MODE_ALWAYS)
@@ -102,6 +107,7 @@ Kart (CharacterBody3D, layer 2 / mask 1)  [kart_controller.gd]
 ├── HitReactor (Node)         [hit_reactor.gd]
 ├── DriftController (Node)    [drift_controller.gd]
 ├── BoostController (Node)    [boost_controller.gd]
+├── ItemSlot (Node)           [item_slot.gd]
 ├── DriftEffects (Node3D)     [effects/drift_effects.gd] tier sparks + terrain-tinted smoke
 ├── BoostEffects (Node3D)     [effects/boost_effects.gd] exhaust particles
 └── Visuals (Node3D)          [kart_visuals.gd]
@@ -110,13 +116,14 @@ Kart (CharacterBody3D, layer 2 / mask 1)  [kart_controller.gd]
     └── WheelFL / WheelFR / WheelRL / WheelRR (Node3D pivot + static-tilt Mesh child)
 ```
 
-`ItemSlot` and `KartAudio` remain later slots. `DriftController` and
+`KartAudio` remains a Phase 10 slot. `DriftController` and
 `BoostController` own their own gameplay state (see the Drift and Boost
 subsections below) and hand `KartPhysics` only the immutable
 `DriftResult`/`BoostResult` value objects each tick; `KartPhysics` remains the
 sole writer of motion. `DriftEffects`/`BoostEffects`/`SkidMark` subscribe to
-controller signals and read-only APIs only — no physics writes, capped at six
-`GPUParticles3D` nodes per kart (spec §17, coding rule 6).
+controller signals and read-only APIs only — no physics writes. Each kart now
+has five `GPUParticles3D` nodes, below the per-kart cap of six and allowing the
+12-kart performance probe to remain at the total cap of 60 (spec §17/§26).
 
 #### Drift (`kart/drift_controller.gd`, spec §10)
 
@@ -188,9 +195,11 @@ Every step is real as of Phase 3:
 without `KartController` routing the spec by hand.
 
 `KartVisuals` and `RaceCamera` read only `KartController`'s public API
-(`get_speed`, `get_lateral_speed`, `get_air_time`, `get_forward`, hit state and
-progress, plus inherited `get_velocity`) inside `_process()`, never
-`_physics_process()`, and never write back into physics state (coding rule 6).
+(`get_speed`, lateral/speed ratios, raw input snapshot values, landing speed,
+`get_forward`, drift/boost/hit state, plus inherited `get_velocity`) inside
+`_process()`, never `_physics_process()`, and never write back into physics
+state (coding rule 6). `get_engine_pitch_ratio()` and
+`get_drift_squeal_ratio()` expose Phase 10 audio inputs without playing audio.
 
 #### Physics model (`kart/kart_physics.gd`)
 
@@ -229,11 +238,22 @@ progress, plus inherited `get_velocity`) inside `_process()`, never
 
 #### Camera (`camera/race_camera.gd`, spec §16)
 
-`RaceCamera` extends `Camera3D` directly rather than being a kart child, and
-reads only the target's public API. It implements spring-follow position,
-velocity-direction look, speed-squared FOV, a sideways offset opposite the
-active drift direction (lerped, from `get_drift_direction()`), and a
-spring-damped FOV kick while `is_boosting()`. Shake and look-back are Phase 8.
+`RaceCamera` remains a root-level `Camera3D`, not a kart child. It follows a
+target with exponential spring weight, faces flat velocity (blended toward
+body forward during drift), adds the opposite-side drift offset and ±2° roll,
+and rotates 180° over 0.15 seconds while the read-only input snapshot holds
+`look_back`. A physics-space ray from the target focus to the desired camera
+position resolves wall clipping without changing the established Camera3D
+scene identity.
+
+`CameraFov` (`camera/camera_fov.gd`) owns the pure
+`base + speed_add * speed_ratio² + boost_spring * boost_add` model.
+`CameraShake` (`camera/camera_shake.gd`) owns deterministic FastNoiseLite
+sampling, `trauma²` amplitude, clamp, and linear decay. `RaceCamera` maps
+EventBus sources to trauma: wall head-on 0.5; landing vertical speed 0.2–0.5;
+target kart hit 0.6; and item explosion distance falloff. SettingsManager's
+0–100 `shake_strength` and `fov_effect_strength` values normalize to 0–1 and
+scale only presentation output; zero retains stable chase-camera play.
 
 ### Race
 
@@ -243,8 +263,9 @@ only composition and legal transitions:
 reachable only from `COUNTDOWN`/`RACING`. It resolves
 `GameState.pending_race_config` or creates the Track 01 / 3-lap / 8-kart /
 medium fallback, instantiates the track, places karts on ordered StartGrid
-slots, registers them with the four delegated runtime systems, and binds the
-camera/HUD to the player. Every transition emits
+slots (procedurally extended to 12 only for the performance probe), registers
+them with the delegated runtime systems, and binds presentation to the player
+or the first AI observer in an all-AI race. Every transition emits
 `EventBus.race_state_changed(old, new)`; only the first
 `COUNTDOWN -> RACING` edge emits `race_started`.
 
@@ -562,6 +583,46 @@ physics or race truth. `AudioManager` subscribes to events rather than
 containing gameplay rules. `DebugOverlay` is a development-only observer and
 runtime tuning surface.
 
+Phase 8 presentation composition is deliberately split into small owners:
+
+- `KartVisuals` applies body roll/pitch, noise + landing suspension bob, wheel
+  spin/steer/rear jitter, trick/hit transforms, squash, and the two-pulse
+  `effects/hit_flash.gdshader` emission. It changes only visual descendants.
+- `SkidStripBuffer` is fixed-capacity chronological storage;
+  `SkidMark.build_strip_geometry()` emits one indexed `ArrayMesh` whose
+  neighboring quads share edge vertices, with oldest-to-newest alpha fade.
+  `SkidMark` is top-level so the strip stays in world space while its kart moves.
+- `DriftEffects` covers drift/off-road/hard-brake terrain-tinted smoke and
+  tier-colored spark restarts. `BoostEffects` owns one exhaust emitter.
+- `ParticleBudgetController` caches kart effect references at composition,
+  validates ≤6 emitters per kart and ≤60 total, and disables kart-local
+  emitters beyond 80 m from the active camera without discarding effect state.
+- `FeedbackEffects` owns a 12-instance `ObjectPool` of
+  `impact_effect.tscn`; pooled CPU-particle bursts render item explosions,
+  wall sparks, and landing dust without consuming the GPU-emitter budget.
+- `HitStop` restores the prior `Engine.time_scale` after three physics ticks
+  for a 0.05 s/60 Hz request. It is disabled by tuning, network mode, and the
+  headless EventBus path (which has no presentation and must keep simulations
+  deterministic).
+- `SpeedLines` is a CanvasLayer/ColorRect shader overlay driven by
+  `speed_ratio² + boost`; its central 40% square is always transparent and the
+  accessibility `speed_lines` setting can make its intensity zero.
+- The temporary HUD and results UI use Tween for position punch, lap slide,
+  roulette rotation, and staggered result rows. Final art remains Phase 9.
+
+### Phase 8 signal wiring
+
+| Emitter | Event/API | Presentation consumers |
+|---|---|---|
+| `KartPhysics` → `KartController` | `EventBus.wall_head_on(kart)` | `RaceCamera` trauma 0.5; `FeedbackEffects` wall sparks |
+| `KartPhysics` → `KartController` | `EventBus.kart_landed(kart, vertical_speed)` | `RaceCamera` 0.2–0.5 trauma; `KartVisuals` read API bob; `FeedbackEffects` dust |
+| `HitReactor` | `EventBus.kart_hit(kart, hit_type)` | `RaceCamera` trauma 0.6; `KartVisuals` flash/deformation; `RaceResults` stats |
+| `ItemBase` → `ItemManager` | `EventBus.item_exploded(world_position)` | `RaceCamera` distance falloff; `FeedbackEffects` pooled burst |
+| `ItemBase` | `EventBus.item_hit(source, target, id)` | `HitStop` local windowed request; `RaceResults`/sim stats |
+| `DriftController` | local drift signals + read API | `DriftEffects`, `SkidMark`, `KartVisuals`, HUD meter |
+| `BoostController` | local boost signals + read API | `BoostEffects`, `RaceCamera` FOV, `SpeedLines` |
+| `PositionTracker`/`LapTracker` | `position_changed` / `lap_completed` | temporary HUD Tweens |
+
 The allowed direction is:
 
 ```text
@@ -755,6 +816,17 @@ its `Curve3D` from arc points at `_ready()` — but everything else about it
   telegraph + drift cancel, leader-strike target/immunity/rank-1 lock), and
   the AI item rule table against the real slot; `tests/integration/
   test_phase7_items.gd` runs a real `race.tscn` with items on end to end.
+- Phase 8 adds pure unit coverage for trauma clamp/decay/squared amplitude,
+  source interpolation/falloff, FOV formula/settings scaling, skid ring-buffer
+  capacity and shared-edge mesh indices, particle budgets/80 m LOD, and
+  hit-stop tick restore/disabled/network/headless gates. Integration coverage
+  loads the real kart/race/HUD/results/speed-line/perf-probe scenes and proves
+  hit-to-camera decay, 0% shake transform stability, shader flash, Tween starts,
+  audio ratio hooks, and the 8-kart particle caps.
+- Windowed performance is measured by `tools/perf_check.sh 12 30`, which opens
+  `scenes/test/perf_probe.tscn`, discards two warm-up seconds, then prints mean
+  real-time FPS, worst frame milliseconds, GPU-particle count, and renderer.
+  Headless mode is intentionally not accepted as renderer performance evidence.
 - Track contract: `tools/validate_tracks.sh` runs `track/track_validator.gd`
   headlessly against `test_loop.tscn`, `test_loop_hills.tscn`,
   `test_hairpin.tscn`, and `track_01_ridgeline_circuit.tscn`.
@@ -1166,3 +1238,25 @@ its `Curve3D` from arc points at `_ready()` — but everything else about it
   a held state), so there is no AI-only "just call `use_item` directly"
   shortcut that could drift out of sync with the cooldown/roulette guards
   `ItemManager.use_item` and `ItemSlot` already enforce for the player.
+
+### Phase 8
+
+- `RaceCamera` stays a `Camera3D`; clipping uses a physics-space ray instead of
+  changing the scene root to `SpringArm3D`. This preserves every existing scene
+  and typed test while satisfying the same wall-clipping contract.
+- Camera shake and FOV are scene-independent `RefCounted` models. Their pure
+  math is directly testable, while `RaceCamera` owns only target composition,
+  EventBus mapping, and applying the returned presentation offsets.
+- The boost exhaust was consolidated from two GPU emitters to one. Four drift
+  emitters plus one boost emitter gives five per kart: 40 in an 8-kart race and
+  exactly 60 in the 12-kart performance probe. Pooled impacts use CPU particles
+  so short bursts do not violate that hard GPU-node count.
+- Hit-stop is tick-restored rather than Timer/await-driven and records the prior
+  time scale. Event-driven activation is skipped in network mode and headless
+  simulations; direct requests remain testable, while screenless AI validation
+  keeps its deterministic time axis.
+- `SkidMark` is top-level and indexed. Keeping it parented for lifecycle but
+  detached for transform inheritance fixes moving/local detached quads without
+  introducing a global effect manager for persistent marks.
+- Temporary HUD/results motion changes only Tween state and anchoring. Theme,
+  contrast, typography, navigation polish, and settings UI remain Phase 9.

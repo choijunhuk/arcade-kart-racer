@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=15 format=3]
 
 [ext_resource type="Script" path="res://scenes/test/kart_sandbox.gd" id="1_sandbox"]
 [ext_resource type="PackedScene" path="res://track/tracks/test_loop/test_loop.tscn" id="2_track"]
@@ -11,6 +11,10 @@
 [ext_resource type="Script" path="res://race/lap_tracker.gd" id="10_lap_tracker"]
 [ext_resource type="Script" path="res://race/position_tracker.gd" id="11_position_tracker"]
 [ext_resource type="Script" path="res://items/item_manager.gd" id="12_items"]
+[ext_resource type="Script" path="res://effects/feedback_effects.gd" id="13_feedback"]
+[ext_resource type="Script" path="res://effects/hit_stop.gd" id="14_hit_stop"]
+[ext_resource type="Script" path="res://effects/particle_budget_controller.gd" id="15_particle_budget"]
+[ext_resource type="PackedScene" path="res://effects/speed_lines.tscn" id="16_speed_lines"]
 
 [node name="KartSandbox" type="Node3D"]
 script = ExtResource("1_sandbox")
@@ -39,6 +43,17 @@ script = ExtResource("11_position_tracker")
 
 [node name="ItemManager" type="Node" parent="."]
 script = ExtResource("12_items")
+
+[node name="FeedbackEffects" type="Node3D" parent="."]
+script = ExtResource("13_feedback")
+
+[node name="HitStop" type="Node" parent="."]
+script = ExtResource("14_hit_stop")
+
+[node name="ParticleBudgetController" type="Node" parent="."]
+script = ExtResource("15_particle_budget")
+
+[node name="SpeedLines" parent="." instance=ExtResource("16_speed_lines")]
 
 [node name="HUD" type="CanvasLayer" parent="."]
 

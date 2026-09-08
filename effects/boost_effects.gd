@@ -2,7 +2,10 @@ class_name BoostEffects
 extends Node3D
 
 @onready var _kart: KartController = get_parent() as KartController
-@onready var _exhaust: Array[GPUParticles3D] = [$ExhaustLeft, $ExhaustRight]
+@onready var _exhaust: GPUParticles3D = $Exhaust
+
+var _boost_active: bool = false
+var _lod_enabled: bool = true
 
 
 func _ready() -> void:
@@ -11,11 +14,21 @@ func _ready() -> void:
 	controller.boost_ended.connect(_on_boost_ended)
 
 
+func _process(_delta: float) -> void:
+	_exhaust.emitting = _boost_active and _lod_enabled
+
+
 func _on_boost_started(_spec: BoostSpecData) -> void:
-	for particles: GPUParticles3D in _exhaust:
-		particles.emitting = true
+	_boost_active = true
+	_exhaust.emitting = _lod_enabled
 
 
 func _on_boost_ended() -> void:
-	for particles: GPUParticles3D in _exhaust:
-		particles.emitting = false
+	_boost_active = false
+	_exhaust.emitting = false
+
+
+## Enables or disables exhaust for camera-distance LOD without losing boost state.
+func set_lod_enabled(enabled: bool) -> void:
+	_lod_enabled = enabled
+	_exhaust.emitting = _boost_active and _lod_enabled

@@ -1,5 +1,137 @@
 # Development Log
 
+## Phase 8 보고 — 카메라 & Game Feel
+
+### 구현된 기능
+
+- `RaceCamera`: 독립 `CameraShake`/`CameraFov` 모델, 속도 방향 추적과
+  드리프트 바디 방향 blend, 반대쪽 0.7 m 오프셋 + 2° roll, `look_back`
+  0.15초 회전 보간, 물리 ray wall clipping을 연결했다. 트라우마는 제곱
+  진폭 + FastNoiseLite이며 벽 정면 0.5, 착지 수직속도 0.2–0.5, 카트 피격
+  0.6, 아이템 폭발 거리 감쇠 소스를 EventBus에서 받는다.
+  `SettingsManager.gameplay.shake_strength`와 `fov_effect_strength`는
+  0–100 값을 0–1로 정규화하며 둘 다 0에서도 기본 추적/FOV가 유지된다.
+- `KartVisuals`: controller 읽기 API만 사용해 횡속도+조향 body roll(최대
+  12°), throttle +3°/brake −4° pitch, FastNoiseLite 노면 bob + 착지
+  spring impulse, 휠 회전/앞바퀴 steer/드리프트 뒷바퀴 jitter, trick spin,
+  SPIN_OUT/TUMBLE/SQUASH 변형을 `_process`에서 적용한다. 피격 시
+  `effects/hit_flash.gdshader`의 흰 emission을 0.1초×2 점멸한다.
+- `effects/`: 스키드 마크를 world-space 고정 용량 ring buffer + indexed
+  `ArrayMesh` strip으로 교체해 인접 쿼드가 edge 정점을 공유하도록 했다.
+  타이어 연기는 드리프트/오프로드/급브레이크를 포함하고 TerrainData의
+  색을 쓴다. tier 색 spark burst, 단일 boost exhaust, 중앙 40%가 항상
+  투명한 radial speed-line shader를 연결했다.
+- `FeedbackEffects`: `impact_effect.tscn`을 12개 상한으로 풀링해 item burst,
+  wall spark, landing dust를 한 경로에서 재사용한다. CPU particle을 써서
+  카트 GPU particle 예산과 분리했다.
+- `HitStop`: item hit에서 `Engine.time_scale=0.3`을 60 Hz 기준 3틱(0.05초)
+  뒤 기존 값으로 복원한다. `FeelTuning.hit_stop_enabled=false`,
+  `GameState.is_networked=true`, 화면이 없는 headless EventBus 경로에서는
+  발동하지 않는다.
+- 임시 HUD/결과 UI: 순위 punch scale, lap slide, item roulette 회전,
+  결과 row stagger entrance를 Tween으로 추가했다. DebugOverlay 패널은
+  우측으로 옮겨 좌상단 순위/랩과 겹치지 않는다.
+- Phase 10 오디오 훅: `KartController.get_engine_pitch_ratio()`(속도 비율 +
+  boost 0.3)와 `get_drift_squeal_ratio()`(정규화 횡속도)를 추가했으며
+  오디오 재생 자체는 추가하지 않았다.
+- 성능 관찰: DebugOverlay에 FPS/frame ms/physics ms/draw calls/rendered
+  objects를 `Performance.get_monitor`로 표시한다. 카트당 GPU emitter는
+  5개(상한 6), 8대 40개, 12대 60개이며 80 m 밖 emitter는 상태를 보존한
+  채 emission을 끈다. `tools/perf_check.sh`와 2초 warm-up + 30초 측정
+  `scenes/test/perf_probe.tscn`을 추가했다.
+
+### §17 Game Feel 체크리스트
+
+- ✅ 바디 롤 — 횡속도+steer 비례, `maximum_body_roll_degrees=12` clamp.
+- ✅ 바디 피치 — throttle +3° / brake −4°, body mesh에만 적용.
+- ✅ 서스펜션 bob — 노면 noise target + 착지 수직속도 spring impulse.
+- ✅ 휠 — 속도 회전, 앞바퀴 실제 steer 입력, drift rear jitter.
+- ✅ 타이어 연기 — drift/off-road/hard-brake + terrain tint.
+- ✅ 스키드 마크 — 고정 용량 연속 indexed strip, alpha fade, world-space.
+- ✅ 드리프트 스파크 — cyan/amber/magenta tier 색 + tier-up restart burst.
+- ✅ 부스트 — exhaust + speed lines + settings-scaled spring FOV kick.
+- ✅ 히트 플래시 — shader white emission 0.1초×2.
+- ✅ 충돌 임팩트 — pooled wall sparks + camera trauma.
+- ✅ 착지 — pooled dust + vertical-speed shake + suspension bob impulse.
+- ✅ 아이템 명중 — pooled burst + optional tick-restored hit-stop + network skip.
+- ✅ UI 애니 — position/lap/roulette/results Tween 4종.
+- ✅ 오디오 피치 — Phase 10용 engine/drift ratio API 공개.
+
+### 생성/수정된 주요 파일
+
+- 카메라: `camera/camera_shake.gd`, `camera/camera_fov.gd`,
+  `camera/race_camera.gd`.
+- 카트/설정: `kart/kart_visuals.gd`, `kart/kart_controller.gd`,
+  `kart/kart_physics.gd`, `data/schemas/feel_tuning.gd`, 기본 `.tres` 2개,
+  `core/autoload/{event_bus,game_state,settings_manager}.gd`.
+- 이펙트: `effects/{skid_strip_buffer,skid_mark,particle_budget,
+  particle_budget_controller,feedback_effects,hit_stop,speed_lines}.gd`,
+  `effects/{hit_flash,speed_lines}.gdshader`, 관련 `.tscn`.
+- UI/도구: `ui/hud/hud.gd`, `ui/results/results_screen.gd`,
+  `core/autoload/debug_overlay.{gd,tscn}`, `scenes/test/perf_probe.{gd,tscn}`,
+  `tools/perf_check.sh`.
+- 테스트: Phase 8 unit/integration 31개 추가(카메라/스키드/파티클/
+  히트스톱/프레젠테이션/실제 race scene).
+
+### 핵심 설계 결정과 이유
+
+- 기존 `RaceCamera is Camera3D` 계약을 깨지 않도록 SpringArm root 전환
+  대신 direct-space ray를 사용했다. 카메라와 카트는 계속 형제 노드다.
+- 트라우마/FOV/ring buffer/예산/히트스톱 tick 계산은 scene-independent
+  API로 분리해 숫자와 경계를 직접 테스트한다.
+- 12대에서도 총 GPU emitter 60을 지키기 위해 boost exhaust를 좌/우 2개
+  노드가 아닌 중앙 emitter 1개로 합쳤다. 시각 임팩트 풀은 CPU
+  particle이라 GPU node hard cap을 침범하지 않는다.
+- headless 시뮬레이션에서 hit-stop을 발동시키면 동일 시드 AI의 물리/입력
+  샘플 순서가 바뀌어 wall head-on 예산을 넘겼다. 렌더가 없는 경로에는
+  보여줄 연출도 없으므로 EventBus hit-stop만 생략해 시뮬 결정론을 보존했다.
+
+### 검증
+
+- ✅ import: `HOME=$PWD/.tmp-home godot --headless --path . --import` exit 0.
+- ✅ parse: `HOME=$PWD/.tmp-home godot --headless --path . --quit` exit 0,
+  script error 0.
+- ✅ GUT: 303/303 tests, 1,534 assertions.
+- ✅ tracks: `tools/validate_tracks.sh` 4/4.
+- ✅ sim: `tools/run_sim.sh --races 1 --karts 8 --laps 1` exit 0 — 8/8
+  finish, respawn 0, wall head-on 0, mean lap 66.067초.
+- ✅ 정적 상한: `.gd` 전부 400줄 이하; 8-kart GPU emitters 40/60,
+  12-kart probe 60/60; `project.godot`에 `[network]`/TLS section 없음.
+- ⚠️ windowed perf: 이 샌드박스에서 직접 binary 실행은 macOS app-service
+  연결 단계에 멈췄고 `open` 경로도 `kLSNoExecutableErr`로 거절되어
+  `PERF_PROBE` 측정 시작 로그가 나오지 않았다. 따라서 mean FPS/worst frame
+  수치는 **미측정**이며 8-kart ≥60 FPS 게이트는 로컬 창 실행 대기다.
+
+### TODO / PLACEHOLDER 목록
+
+- TODO(phase-8): unrestricted macOS 로그인 세션에서
+  `tools/perf_check.sh 12 30`을 실행해 mean FPS/worst frame을 이 보고서에 기록하고 8-kart
+  ≥60 FPS 플레이 게이트를 확정한다.
+- TODO(phase-9): 임시 HUD/결과 화면의 최종 theme, 대비, typography,
+  패드 focus와 설정 화면(셰이크/FOV/speed-lines 포함)을 완성한다.
+- TODO(phase-10): 공개된 engine/drift ratio를 실제 AudioStreamPlayer pitch/
+  volume에 연결한다.
+- TODO(phase-13): 선택 범위인 countdown/results CinematicCamera를 추가한다.
+
+### 플레이 지시
+
+```text
+1. HOME 접두어 없이 `godot --path .`로 실행하고 Enter/Start로 레이스 진입.
+2. 직선에서 가속해 속도 제곱 FOV와 화면 가장자리 speed lines 확인.
+3. Space/RB 드리프트: 반대쪽 camera offset + 2° roll, body roll, rear-wheel
+   jitter, terrain-tinted smoke, tier spark, 연속 skid strip 확인.
+4. Q/오른쪽 스틱 아래 look_back을 누르고/놓아 각각 0.15초 전환 확인.
+5. 벽 정면충돌, 점프 착지, 아이템 피격에서 서로 다른 shake/impact/dust,
+   흰 emission 0.1초×2, item hit-stop 확인.
+6. F3: 우측 DebugOverlay의 FPS/frame/physics/draw calls/objects가 좌상 HUD와
+   겹치지 않는지 확인.
+7. settings.cfg에서 shake_strength와 fov_effect_strength를 각각 0으로 둔
+   뒤 기본 카메라 추적과 조작이 안정적인지 확인.
+8. 별도 터미널에서 `tools/perf_check.sh 12 30` 실행. 마지막 PERF_PROBE
+   JSON의 mean_fps/worst_frame_ms/gpu_particles(60)를 기록하고,
+   8-kart 실제 플레이가 60 FPS 이상인지 F3으로 함께 확인.
+```
+
 ## Phase 7 보고 — 아이템 시스템
 
 ### 구현된 기능
@@ -1433,10 +1565,13 @@ Phase 1에서 `KartController`, `KartPhysics`, `KartVisuals`, 플레이어 입�
 ### 사용자에게 필요한 결정 (있다면)
 
 없음. Phase 0 승인 여부만 필요하다.
-- Phase 8 polish: skid marks render as detached quads, should be a continuous strip (seen in Phase 3 hairpin snapshot).
-- Phase 9 polish: temporary HUD position/lap labels sit under the DebugOverlay panel (top-left) and are low-contrast; move HUD anchors / restyle in the real HUD.
+- ✅ Resolved in Phase 8: detached skid quads are now one continuous indexed strip.
+- ✅ Overlap resolved in Phase 8: DebugOverlay moved right; final HUD contrast/restyle remains TODO(phase-9).
 
 ### Phase 7 밸런스 게이트 최종 판정 (main thread, 2026-09-08)
 - 20레이스 normal/8카트/3랩, items on: rank-1 피격 0.65~0.75/레이스 (예산 3 ✅), lap1-8위 상승 0.8 (목표 1.5 ❌), items off 대조군 0.4.
 - 하위권 행을 Drone/Nitro/Beacon 위주로 재가중(6~8위 행)해도 0.8로 변화 없음 → 지표가 동급 AI 실력 편차에 지배되어 아이템 데이터로 움직이지 않음. 스펙 §12.3 표로 복원.
 - 결정: `run_ai_race.gd`의 밸런스 게이트를 `--strict-balance on`일 때만 실패 처리(기본 advisory, `balance_gate_pass` 필드로 출력). Phase 11 하드닝에서 지표 재정의(items on/off 델타 ≥ +0.4 제안) 및 튜닝 재시도.
+
+### Phase 8 perf probe (main thread, windowed, Apple M3 Max)
+- `godot --path . res://scenes/test/perf_probe.tscn -- 12 30` → 12 karts, 60 GPU particles, mean FPS 119.9, worst frame 47.7 ms (single spike at spawn/warmup), duration 30 s. DoD ≥ 60 fps for 8 karts ✅.

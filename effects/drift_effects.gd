@@ -9,6 +9,7 @@ extends Node3D
 
 var _cached_terrain_id: StringName = &""
 var _cached_terrain_color: Color = Color(0.65, 0.65, 0.65, 0.7)
+var _lod_enabled: bool = true
 
 
 func _ready() -> void:
@@ -19,16 +20,35 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	var active: bool = _kart.get_drift_state() == DriftController.DriftState.HOLD
+	var drifting: bool = _kart.get_drift_state() == DriftController.DriftState.HOLD
+	var active: bool = should_emit_smoke(
+		drifting, _kart.get_terrain_id(), _kart.get_brake_input(),
+		_kart.get_speed_ratio(), tuning.smoke_brake_threshold,
+		tuning.smoke_min_speed_ratio,
+	)
 	for particles: GPUParticles3D in _smoke:
-		particles.emitting = active
+		particles.emitting = active and _lod_enabled
+	for particles: GPUParticles3D in _sparks:
+		particles.emitting = drifting and _lod_enabled
 	if active:
 		_set_smoke_color(_terrain_particle_color())
 
 
+## Pure smoke rule covering drift, off-road travel, and hard braking.
+static func should_emit_smoke(
+	drifting: bool, terrain_id: StringName, brake: float, speed_ratio: float,
+	brake_threshold: float, minimum_speed_ratio: float,
+) -> bool:
+	if drifting:
+		return true
+	if speed_ratio < minimum_speed_ratio:
+		return false
+	return terrain_id != &"asphalt" or brake >= brake_threshold
+
+
 func _on_drift_started(_direction: int) -> void:
 	for particles: GPUParticles3D in _sparks:
-		particles.emitting = true
+		particles.emitting = _lod_enabled
 
 
 func _on_tier_changed(tier: int) -> void:
@@ -41,8 +61,16 @@ func _on_tier_changed(tier: int) -> void:
 func _on_drift_ended(_released_tier: int) -> void:
 	for particles: GPUParticles3D in _sparks:
 		particles.emitting = false
-	for particles: GPUParticles3D in _smoke:
-		particles.emitting = false
+
+
+## Enables or disables every kart-local emitter for camera-distance LOD.
+func set_lod_enabled(enabled: bool) -> void:
+	_lod_enabled = enabled
+	if not enabled:
+		for particles: GPUParticles3D in _sparks:
+			particles.emitting = false
+		for particles: GPUParticles3D in _smoke:
+			particles.emitting = false
 
 
 func _tier_color(tier: int) -> Color:

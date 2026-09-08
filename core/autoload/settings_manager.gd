@@ -6,6 +6,7 @@ signal settings_changed(section: StringName)
 const DEFAULT_SETTINGS_PATH: String = "user://settings.cfg"
 const MIN_VOLUME: float = 0.0
 const MAX_VOLUME: float = 1.0
+const STRENGTH_PERCENT_MAX: float = 100.0
 const AUDIO_BUS_KEYS: Dictionary = {
 	"master": "Master",
 	"music": "Music",
@@ -46,8 +47,30 @@ func default_settings() -> Dictionary:
 			"remaps": {},
 		},
 		"accessibility": {"speed_lines": true, "drift_tier_icons": true},
-		"gameplay": {"camera_shake": 1.0, "fov_effect": 1.0, "speedometer": true},
+		"gameplay": {
+			"camera_shake": 1.0,
+			"fov_effect": 1.0,
+			"shake_strength": 100.0,
+			"fov_effect_strength": 100.0,
+			"speedometer": true,
+		},
 	}
+
+
+## Returns camera shake strength normalized from its stored 0-100 percent value.
+func get_shake_strength() -> float:
+	return clampf(
+		float(get_setting(&"gameplay", &"shake_strength", STRENGTH_PERCENT_MAX)) / STRENGTH_PERCENT_MAX,
+		0.0, 1.0,
+	)
+
+
+## Returns FOV effect strength normalized from its stored 0-100 percent value.
+func get_fov_effect_strength() -> float:
+	return clampf(
+		float(get_setting(&"gameplay", &"fov_effect_strength", STRENGTH_PERCENT_MAX)) / STRENGTH_PERCENT_MAX,
+		0.0, 1.0,
+	)
 
 
 ## Loads all sections, filling absent values from defaults and optionally applying them.

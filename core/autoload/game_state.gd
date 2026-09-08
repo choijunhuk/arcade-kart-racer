@@ -15,6 +15,7 @@ var selected_driver_id: StringName = &""
 var selected_kart_id: StringName = &""
 var selected_track_id: StringName = &""
 var pending_race_config: RaceConfig
+var is_networked: bool = false
 
 
 ## Stores the content identifiers selected for the next race session.
@@ -31,6 +32,7 @@ func reset_session() -> void:
 	selected_kart_id = &""
 	selected_track_id = &""
 	pending_race_config = null
+	is_networked = false
 
 
 ## Announces a validated scene transition request for the bootstrap coordinator.

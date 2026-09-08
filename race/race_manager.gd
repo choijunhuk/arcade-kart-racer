@@ -11,6 +11,7 @@ const DEFAULT_KART: KartData = preload("res://data/karts/medium.tres")
 const DEFAULT_AI_DIFFICULTY: AIDifficultyProfile = preload("res://data/ai/normal.tres")
 const DEFAULT_LAPS: int = 3
 const DEFAULT_KART_COUNT: int = 8
+const MAX_KART_COUNT: int = 12
 const FINISHED_SPEED_RATIO: float = 0.5
 
 const LEGAL_TRANSITIONS: Dictionary = {
@@ -36,6 +37,8 @@ const LEGAL_TRANSITIONS: Dictionary = {
 @onready var _hud: RaceHud = $HUD
 @onready var _pause_menu: PauseMenu = $PauseMenu
 @onready var _results_screen: ResultsScreen = $ResultsScreen
+@onready var _particle_budget: ParticleBudgetController = $ParticleBudgetController
+@onready var _speed_lines: SpeedLines = $SpeedLines
 
 var _state: int = RaceState.LOADING
 var _paused_from_state: int = RaceState.RACING
@@ -146,7 +149,10 @@ func _begin_loading(is_restart: bool) -> void:
 	_register_track_elements()
 	_race_results.setup(_config.track.id, _karts, _player_kart)
 	_countdown.setup(tuning, _karts)
-	_camera.set_target(_player_kart)
+	var observed_kart: KartController = _player_kart if _player_kart != null else _karts[0]
+	_camera.set_target(observed_kart)
+	_particle_budget.configure(_karts, _camera)
+	_speed_lines.set_target(observed_kart)
 	_hud.bind(_player_kart, _lap_tracker, _position_tracker, _karts.size(), _config.laps, _item_manager)
 	_pause_menu.bind(self)
 	_pause_menu.hide_menu()
@@ -160,7 +166,7 @@ func _validate_config() -> void:
 		push_warning("RaceConfig track is invalid; using track_01")
 		_config.track = DEFAULT_TRACK
 	_config.laps = maxi(1, _config.laps)
-	_config.kart_count = clampi(_config.kart_count, 1, TrackRoot.MIN_GRID_SLOTS)
+	_config.kart_count = clampi(_config.kart_count, 1, MAX_KART_COUNT)
 	if _config.player_slot >= 0:
 		_config.player_slot = clampi(_config.player_slot, 0, _config.kart_count - 1)
 	if _config.player_kart == null:
@@ -191,7 +197,7 @@ func _setup_systems() -> void:
 
 
 func _spawn_karts() -> void:
-	var grid: Array[Transform3D] = _track.get_start_grid()
+	var grid: Array[Transform3D] = _track.get_start_grid(_config.kart_count)
 	_ai_controllers.clear()
 	_ai_context = _make_ai_context()
 	var race_rng: RandomNumberGenerator = RandomNumberGenerator.new()

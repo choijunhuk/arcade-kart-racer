@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=17 format=3]
 
 [ext_resource type="Script" path="res://race/race_manager.gd" id="1_manager"]
 [ext_resource type="Script" path="res://race/lap_tracker.gd" id="2_laps"]
@@ -12,6 +12,10 @@
 [ext_resource type="PackedScene" path="res://ui/menus/pause_menu.tscn" id="10_pause"]
 [ext_resource type="PackedScene" path="res://ui/results/results_screen.tscn" id="11_results_screen"]
 [ext_resource type="Script" path="res://items/item_manager.gd" id="12_items"]
+[ext_resource type="Script" path="res://effects/feedback_effects.gd" id="13_feedback"]
+[ext_resource type="Script" path="res://effects/hit_stop.gd" id="14_hit_stop"]
+[ext_resource type="Script" path="res://effects/particle_budget_controller.gd" id="15_particle_budget"]
+[ext_resource type="PackedScene" path="res://effects/speed_lines.tscn" id="16_speed_lines"]
 
 [node name="RaceScene" type="Node3D"]
 script = ExtResource("1_manager")
@@ -37,10 +41,21 @@ script = ExtResource("6_countdown")
 [node name="RaceResults" type="Node" parent="."]
 script = ExtResource("7_results")
 
+[node name="FeedbackEffects" type="Node3D" parent="."]
+script = ExtResource("13_feedback")
+
+[node name="HitStop" type="Node" parent="."]
+script = ExtResource("14_hit_stop")
+
+[node name="ParticleBudgetController" type="Node" parent="."]
+script = ExtResource("15_particle_budget")
+
 [node name="Karts" type="Node3D" parent="."]
 
 [node name="RaceCamera" parent="." instance=ExtResource("8_camera")]
 current = true
+
+[node name="SpeedLines" parent="." instance=ExtResource("16_speed_lines")]
 
 [node name="HUD" parent="." instance=ExtResource("9_hud")]
 

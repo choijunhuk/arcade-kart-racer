@@ -19,10 +19,14 @@ layer = 100
 script = ExtResource("1_overlay")
 
 [node name="Panel" type="PanelContainer" parent="."]
-offset_left = 12.0
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -432.0
 offset_top = 12.0
-offset_right = 332.0
-offset_bottom = 132.0
+offset_right = -12.0
+offset_bottom = 220.0
+grow_horizontal = 0
 theme_override_styles/panel = SubResource("StyleBox_panel")
 
 [node name="Margin" type="MarginContainer" parent="Panel"]

@@ -1,9 +1,7 @@
 extends Node3D
-
 ## Phase 2 driving sandbox: swaps tracks and weight classes, spawns bump-test
 ## dummies, and composes collision/respawn systems without moving those
 ## responsibilities into KartController.
-
 const RESET_KEY: Key = KEY_R
 const TRACK_KEY: Key = KEY_T
 const DUMMY_KEY: Key = KEY_B
@@ -38,7 +36,6 @@ const SANDBOX_ITEMS: Array[ItemData] = [
 	preload("res://data/items/storm_beacon.tres"),
 ]
 const SANDBOX_ITEM_SEED: int = 707
-
 @onready var _kart: KartController = $Kart
 @onready var _camera: RaceCamera = $RaceCamera
 @onready var _collision_resolver: KartCollisionResolver = $KartCollisionResolver
@@ -46,8 +43,9 @@ const SANDBOX_ITEM_SEED: int = 707
 @onready var _lap_tracker: LapTracker = $LapTracker
 @onready var _position_tracker: PositionTracker = $PositionTracker
 @onready var _item_manager: ItemManager = $ItemManager
+@onready var _particle_budget: ParticleBudgetController = $ParticleBudgetController
+@onready var _speed_lines: SpeedLines = $SpeedLines
 @onready var _lap_label: Label = $HUD/LapLabel
-
 const WATCH_NAMES: Array[StringName] = [
 	&"speed", &"speed_ratio", &"state", &"grounded", &"lateral", &"terrain",
 	&"slipstream", &"hit", &"invulnerable", &"air_time",
@@ -59,7 +57,6 @@ const WATCH_NAMES: Array[StringName] = [
 const SLIDER_NAMES: Array[StringName] = [
 	&"max_speed", &"acceleration", &"base_turn_rate", &"grip", &"drag", &"brake_force", &"gravity", &"hover_height",
 ]
-
 var _input_provider: PlayerInputProvider = PlayerInputProvider.new()
 var _track: TrackRoot
 var _track_index: int = 0
@@ -68,12 +65,11 @@ var _ai_karts: Array[KartController] = []
 var _ai_controllers: Array[AIController] = []
 var _ai_context: AIRaceContext
 var _sandbox_item_index: int = 0
-
-
 func _ready() -> void:
 	_track = $TestLoop as TrackRoot
 	_kart.set_input_provider(_input_provider)
 	_camera.set_target(_kart)
+	_speed_lines.set_target(_kart)
 	_collision_resolver.register_kart(_kart)
 	_configure_respawn_for_kart(_kart)
 	_register_track_kill_zones()
@@ -81,16 +77,13 @@ func _ready() -> void:
 	_item_manager.setup(_position_tracker, _track.get_racing_line(), _collision_resolver, SANDBOX_ITEM_SEED)
 	_item_manager.register_kart(_kart)
 	_register_kart_progress(_kart)
+	_refresh_particle_budget()
 	_register_track_item_boxes()
 	_reset_to_grid()
 	_register_debug_overlay()
 	($HUD/DriftMeter as DriftMeter).set_controller(_kart.drift_controller)
-
-
 func _process(_delta: float) -> void:
 	_lap_label.text = "LAP %d/%d" % [mini(_lap_tracker.get_lap(_kart) + 1, _lap_tracker.total_laps), _lap_tracker.total_laps]
-
-
 ## Prevents DebugOverlay from calling stale watch/slider callables that
 ## capture this sandbox after it is freed (e.g. between test runs).
 func _exit_tree() -> void:
@@ -98,8 +91,6 @@ func _exit_tree() -> void:
 		DebugOverlay.unwatch(watch_name)
 	for slider_name: StringName in SLIDER_NAMES:
 		DebugOverlay.remove_slider(slider_name)
-
-
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		var key_event: InputEventKey = event as InputEventKey
@@ -129,19 +120,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			_:
 				return
 		get_viewport().set_input_as_handled()
-
-
 ## Teleports the kart back to the first start-grid marker and clears momentum.
 func _reset_to_grid() -> void:
 	var grid_slot: Marker3D = _track.get_node("StartGrid/Grid01") as Marker3D
 	_kart.global_transform = grid_slot.global_transform
 	_kart.reset_motion_arcade()
-
-
 func _switch_track() -> void:
 	_select_track((_track_index + 1) % TRACK_SCENES.size())
-
-
 func _select_track(index: int) -> void:
 	_track_index = index
 	remove_child(_track)
@@ -160,18 +145,15 @@ func _select_track(index: int) -> void:
 	_configure_respawn_for_kart(_kart)
 	for dummy: KartController in _dummy_karts:
 		_configure_respawn_for_kart(dummy)
+	_refresh_particle_budget()
 	# AI controllers cache the previous track's RacingLine/shortcuts/item boxes
 	# at setup() time (spec §13.2); rather than re-wiring them in place, just
 	# clear and let the next `A` press respawn fresh ones for the new track.
 	_clear_ai_karts()
 	_reset_to_grid()
-
-
 func _swap_kart_data(index: int) -> void:
 	var data: KartData = KART_DATA[index].duplicate(true) as KartData
 	_kart.set_kart_data(data)
-
-
 func _spawn_dummy_karts() -> void:
 	_clear_dummy_karts()
 	var forward: Vector3 = _kart.get_forward()
@@ -190,8 +172,6 @@ func _spawn_dummy_karts() -> void:
 		_item_manager.register_kart(dummy)
 		_register_kart_progress(dummy)
 		_configure_respawn_for_kart(dummy)
-
-
 func _clear_dummy_karts() -> void:
 	for dummy: KartController in _dummy_karts:
 		_collision_resolver.unregister_kart(dummy)
@@ -200,8 +180,7 @@ func _clear_dummy_karts() -> void:
 		remove_child(dummy)
 		dummy.queue_free()
 	_dummy_karts.clear()
-
-
+	_refresh_particle_budget()
 ## Spawns 7 AIController-driven karts on the current track (spec §13/§26
 ## play gate). `_kart` (the player) becomes their rubber-band reference.
 func _spawn_ai_karts() -> void:
@@ -233,8 +212,7 @@ func _spawn_ai_karts() -> void:
 		_item_manager.register_kart(ai_kart)
 		_register_kart_progress(ai_kart)
 		_configure_respawn_for_kart(ai_kart)
-
-
+	_refresh_particle_budget()
 func _clear_ai_karts() -> void:
 	for ai_kart: KartController in _ai_karts:
 		_collision_resolver.unregister_kart(ai_kart)
@@ -244,44 +222,33 @@ func _clear_ai_karts() -> void:
 		ai_kart.queue_free()
 	_ai_karts.clear()
 	_ai_controllers.clear()
-
-
+	_refresh_particle_budget()
 func _configure_respawn_for_kart(kart: KartController) -> void:
 	_respawn_system.register_kart(kart, _get_respawn_transform)
-
-
 func _register_track_kill_zones() -> void:
 	var container: Node = _track.get_node("KillZones")
 	for child: Node in container.get_children():
 		if child is KillZone:
 			_respawn_system.register_kill_zone(child as KillZone)
-
-
 ## Racing-line-oriented respawn (spec §14.5): the last checkpoint's
 ## RespawnPoint, stepping back along the line if another kart occupies it.
 func _get_respawn_transform(kart: KartController) -> Transform3D:
 	return RespawnSystem.resolve_respawn_transform(kart, _lap_tracker, _track.get_racing_line(), _all_karts())
-
-
 func _all_karts() -> Array[KartController]:
 	var karts: Array[KartController] = [_kart]
 	karts.append_array(_dummy_karts)
 	karts.append_array(_ai_karts)
 	return karts
-
-
+func _refresh_particle_budget() -> void:
+	_particle_budget.configure(_all_karts(), _camera)
 ## (Re)binds LapTracker/PositionTracker to the current track. Call before
 ## registering any kart and again whenever `_track` changes.
 func _setup_progress_for_track() -> void:
 	_lap_tracker.setup(_track)
 	_position_tracker.setup(_track, _lap_tracker)
-
-
 func _register_kart_progress(kart: KartController) -> void:
 	_lap_tracker.register_kart(kart)
 	_position_tracker.register_kart(kart)
-
-
 ## Connects every track pickup to the race-local item manager.
 func _register_track_item_boxes() -> void:
 	var container: Node = _track.get_node_or_null("ItemBoxes")
@@ -290,14 +257,10 @@ func _register_track_item_boxes() -> void:
 	for child: Node in container.get_children():
 		if child is ItemBox:
 			_item_manager.register_item_box(child as ItemBox)
-
-
 func _give_next_sandbox_item() -> void:
 	_kart.item_slot.clear_item()
 	_item_manager.give_item(_kart, SANDBOX_ITEMS[_sandbox_item_index])
 	_sandbox_item_index = (_sandbox_item_index + 1) % SANDBOX_ITEMS.size()
-
-
 func _register_debug_overlay() -> void:
 	DebugOverlay.watch(&"speed", func() -> String: return "%.1f" % _kart.get_speed())
 	DebugOverlay.watch(&"speed_ratio", func() -> String: return "%.2f" % _kart.get_speed_ratio())
@@ -327,7 +290,6 @@ func _register_debug_overlay() -> void:
 	DebugOverlay.watch(&"roulette", func() -> bool: return _kart.item_slot.roulette_active)
 	DebugOverlay.watch(&"active_projectiles", func() -> int: return _item_manager.get_active_projectile_count())
 	DebugOverlay.watch(&"shield", func() -> String: return "%.2f" % _kart.get_shield_remaining())
-
 	DebugOverlay.add_slider(&"max_speed", 5.0, 60.0,
 		func() -> float: return _kart.kart_data.max_speed,
 		func(value: float) -> void: _kart.kart_data.max_speed = value,
@@ -360,8 +322,6 @@ func _register_debug_overlay() -> void:
 		func() -> float: return _kart.tuning.hover_height,
 		func(value: float) -> void: _kart.tuning.hover_height = value,
 	)
-
-
 func _state_name(state: int) -> String:
 	match state:
 		KartState.GROUNDED:
