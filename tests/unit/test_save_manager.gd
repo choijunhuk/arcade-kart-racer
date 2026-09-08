@@ -47,6 +47,24 @@ func test_corrupt_primary_recovers_valid_backup_and_restores_primary() -> void:
 	assert_eq(int((restored as Dictionary)["version"]), SaveManagerService.CURRENT_VERSION)
 
 
+func test_record_race_result_only_replaces_bests_with_better_values() -> void:
+	var manager: SaveManagerService = SaveManagerService.new(SAVE_PATH)
+	autofree(manager)
+	assert_true(manager.has_method("record_race_result"))
+	if not manager.has_method("record_race_result"):
+		return
+	assert_eq(manager.call("record_race_result", &"test_loop", 12000, 3), OK)
+	assert_eq(manager.call("record_race_result", &"test_loop", 14000, 5), OK)
+	var unchanged: Dictionary = manager.load_data()
+	assert_eq(int(unchanged["best_laps"]["test_loop"]), 12000)
+	assert_eq(int(unchanged["best_positions"]["test_loop"]), 3)
+
+	assert_eq(manager.call("record_race_result", &"test_loop", 11000, 2), OK)
+	var improved: Dictionary = manager.load_data()
+	assert_eq(int(improved["best_laps"]["test_loop"]), 11000)
+	assert_eq(int(improved["best_positions"]["test_loop"]), 2)
+
+
 func _write_text(path: String, contents: String) -> void:
 	var file: FileAccess = FileAccess.open(path, FileAccess.WRITE)
 	assert_not_null(file)
