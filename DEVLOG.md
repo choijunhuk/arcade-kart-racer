@@ -1,5 +1,183 @@
 # Development Log
 
+## Phase 4 보고 — 트랙 시스템 & 체크포인트
+
+### 구현된 기능
+
+- `RacingLine`(`track/racing_line.gd`): `Curve3D`를 로컬 포인트 배열 +
+  누적거리 테이블로 한 번 베이크(`bake()`, 모든 쿼리가 지연 호출)하고
+  `length()`, `offset_at(global_pos, hint_offset := -1.0)`(힌트가 없으면
+  전체 탐색, 있으면 `hint_window` 범위의 근접 탐색, §26), `sample(offset)`,
+  `tangent_at(offset)`, `right_at(offset)`, `curvature_at(offset)`(3점 원
+  근사), `max_curvature_in(offset, distance)`를 제공한다.
+- `Checkpoint`(Area3D, 레이어5/마스크2) + `RespawnPoint`: 순서/오프셋은
+  `Track._configure_checkpoints()`가 자식 순서로 부여하고, 통과 시 생성
+  `body_passed(body, index)`만 방출한다(Track은 Kart를 참조하지 않음).
+- `LapTracker`(`race/lap_tracker.gd`): §14.3 규칙대로 순차 통과만 인정,
+  뒤로 재진입 무시, 체크포인트 하나라도 누락하면 랩 미증가. 역주행은
+  `dot(forward, tangent) < -0.3`이 1.5초 지속되면 `EventBus.wrong_way`.
+  완주 시 로컬 `kart_finished(kart, time)` 시그널. 순수 정적 함수
+  `evaluate_checkpoint_transition()`으로 전이 규칙을 씬 트리 없이
+  단위테스트했다.
+- `PositionTracker`(`race/position_tracker.gd`): 5Hz(틱 카운터) 갱신,
+  진행도 = `lap*lap_length + clamp(offset, cp[next-1].offset, cp[next].offset)`,
+  지름길 위에서는 `TrackShortcut.progress_at()`로 대체. 순위는 완주(시간
+  오름차순) 우선, 미완주는 진행도 내림차순 + 0.5m 히스테리시스. 순수 정적
+  함수 `rank_karts()`로 가짜 진행도 제공자만으로 단위테스트했다.
+- `RespawnSystem`: 정적 `resolve_respawn_transform()` 추가 — 마지막 통과
+  체크포인트의 RespawnPoint를 레이싱 라인 방향으로 정렬하고, 다른 카트가
+  점유 중이면 3m씩 뒤로 재탐색(§14.5). 기존 콜러블 기반 `register_kart()`
+  API는 그대로 두어 Phase 2의 그리드 폴백 TODO를 이 리졸버 호출로 대체했다.
+- 신규 트랙 요소: `ItemBox`(획득 시 숨김 → 3초 후 재생성, 회전 애니메이션,
+  틱 카운터 기반), `Hazard` + `HazardRelay`(KillZone/RespawnSystem과 동일한
+  브릿지 패턴으로 `KartController.apply_hit()` 호출), `MovingObstacle`
+  (AnimatableBody3D, `Path3D`의 베이크된 커브를 매 틱 직접 샘플링, 레이어1
+  충돌), `TrackShortcut`(`entry/exit offset`, `alt_curve`, `required_speed`,
+  `risk`, `progress_at()`; Godot 내장 `Shortcut` 리소스 클래스와 이름이
+  충돌해 `TrackShortcut`으로 명명).
+- `race/race_config.gd`: §14.2 스키마만 추가(매니저는 Phase 5).
+  `race/start_grid.gd`: 앵커 1개로 8슬롯 2열 스태거 그리드를 생성하는 순수
+  정적 함수(부족한 트랙의 StartGrid를 `Track.get_start_grid()`가 자동 패딩).
+- `track_validator.gd`: §15.5 전 항목을 실제로 검증(이전엔 경고로 skip하던
+  아이템박스 개수/근접, 킬존 커버리지 포함) — 지오메트리 AABB와 킬존
+  콜리전의 XZ 사각형 유니온/포함 검사.
+- `tools/track_builder.gd`: RacingLine을 따라 오리엔티드 박스 도로/벽
+  세그먼트를 생성하는 정적 유틸리티. `tools/place_checkpoints.gd`: N등분
+  오프셋에 Checkpoint를 배치하고 씬을 재저장하는 headless 툴.
+- **Track 01 "Ridgeline Circuit"**(`track/tracks/track_01_ridgeline_circuit/`,
+  §15.7): 랩 길이 1,498.9m(680m 직선 2개 + 20m 반경 180도 턴 2개). 서쪽
+  턴 = 드리프트 Tier 3 헤어핀, 남쪽 직선에 S커브 시케인, 북쪽 반환
+  직선에 점프대 + 착지(연속 도로, 안정성 우선), 헤어핀을 가로지르는 오프로드
+  지름길(`TrackShortcut` + `dirt.tres` OffroadZone), 움직이는 장애물 2기
+  (레이싱 라인에서 살짝 벗어난 위치로 스윕), 부스트 패드 3연속, 아이템
+  박스 3세트(5/5/4), 체크포인트 8개, 스타트그리드 8슬롯, 가드레일 없는
+  절벽 코너(동쪽 아크의 마지막 9% 구간에 외벽 미생성) + 그 아래를 덮는
+  킬존 평면. `Track01`(`extends TrackRoot`)이 `super._ready()` 이후
+  `TrackBuilder`로 도로/벽 지오메트리를 절차적으로 생성한다.
+- 샌드박스: 키 `5`로 Track01 로드, `LapTracker`/`PositionTracker` 노드
+  추가 및 트랙 전환 시 재바인딩, ItemBox 획득 시 "item box collected" 출력,
+  DebugOverlay에 `lap`/`next_checkpoint`/`progress`/`wrong_way` watch 추가,
+  HUD에 "LAP x/3" 라벨.
+
+### 생성/수정된 파일
+
+- `track/racing_line.gd`(재작성), `track/track.gd`(체크포인트 설정 +
+  조회 API), `track/track_validator.gd`(§15.5 전체 구현),
+  `track/track_template.tscn`(RacingLine 스크립트 연결)
+- `track/elements/checkpoint.gd(.tscn)`, `item_box.gd(.tscn)`,
+  `hazard.gd(.tscn)`, `moving_obstacle.gd(.tscn)`, `shortcut.gd(.tscn)`
+- `race/lap_tracker.gd`, `race/position_tracker.gd`, `race/race_config.gd`,
+  `race/start_grid.gd`, `race/hazard_relay.gd`, `race/respawn_system.gd`(수정)
+- `tools/track_builder.gd`, `tools/place_checkpoints.gd`,
+  `tools/validate_tracks.sh`(track_01 추가)
+- `track/tracks/track_01_ridgeline_circuit/`(신규 3파일),
+  `data/tracks/track_01.tres`
+- `track/tracks/test_loop/test_loop.tscn`, `test_loop_hills.tscn`,
+  `test_hairpin.tscn`: Checkpoint 스크립트 연결 + 아이템박스 6개 추가
+  (§15.5 전체 검증 통과 목적)
+- `scenes/test/kart_sandbox.gd(.tscn)`: 키 5, LapTracker/PositionTracker,
+  ItemBox 릴레이, HUD 라벨
+- 테스트: `tests/unit/test_racing_line.gd`, `test_lap_tracker.gd`,
+  `test_position_tracker.gd`, `test_start_grid.gd`, `test_item_box.gd`,
+  `test_respawn_resolver.gd`; `tests/integration/test_lap_tracker_wiring.gd`,
+  `test_track01_auto_drive.gd`, `test_track01_race_rules.gd`,
+  `test_kart_sandbox.gd`(키 5 케이스 추가)
+
+### 핵심 설계 결정과 이유
+
+- `LapTracker.register_kart()`는 `next_checkpoint_index`를 0이 아닌 1로
+  초기화한다. 체크포인트 0은 시작선이자 완주선이라 0으로 시작하면 스타트
+  그리드 겹침만으로 "0랩 완주"가 성립해 버린다.
+- `RacingLine`은 자기 `_ready()`에서 베이크하지 않는다. `test_hairpin`과
+  `track_01`이 `super._ready()` 없이 `_ready()`를 완전히 재정의해 커브를
+  직접 만들기 때문에, 베이크는 모든 public 쿼리가 지연 호출하는
+  `_ensure_baked()`로 옮겼다.
+- `Track._configure_checkpoints()`는 `Checkpoint._ready()`가 아니라
+  `Track._ready()`에 있다. 자식이 부모보다 먼저 ready되므로 `Track`은
+  형제 노드인 `RacingLine`이 이미 준비됐음을 보장받지만, `Checkpoint`는
+  자기 형제(`RacingLine`)에 대해 그런 보장이 없고, 위로 참조하는 것은
+  §29 규칙 5 위반이기도 하다.
+- `ItemBox`는 `body_entered` 콜백 안에서 `CollisionShape3D.disabled`를
+  직접 대입하지 않고 `set_deferred()`로 미룬다. 같은 물리 쿼리를 플러시
+  중인 Area3D의 충돌 상태를 동기적으로 바꾸면 엔진이
+  `flushing_queries` 단언을 낸다.
+- 신규 Shortcut 요소는 코드상 `TrackShortcut`으로 명명했다(파일명은
+  `shortcut.gd`/`shortcut.tscn` 그대로). Godot 내장 `Shortcut`
+  Resource(InputMap/BaseButton, GUT 자체 UI에서도 사용)와 클래스명이
+  충돌해 정적 타입 리졸버가 새 `Node3D` 기반 클래스 대신 내장 클래스를
+  가리켜 모든 `as Shortcut` 캐스트가 하드 실패했다.
+- Track01의 도로/벽 지오메트리는 `Geometry` 노드 자체의 스크립트가 아니라
+  트랙 루트 스크립트(`Track01._build_geometry()`, `super._ready()` 이후)에서
+  생성한다. `Geometry`와 `RacingLine`은 형제 노드라 `Geometry`가 먼저
+  ready될 수도 있어 그 안에서는 베이크된 커브를 안전하게 쓸 수 없다.
+- 이 프로젝트의 모든 커브(Track01의 장애물 경로/지름길 대체 경로 포함)는
+  `.tscn`에 `Curve3D`를 직접 직렬화하지 않고 코드로 생성한다. 손으로 쓴
+  `_data` 포맷은 문서화되어 있지 않고 실제로 파싱 실패를 냈다.
+
+### 실행 방법
+
+```sh
+/opt/homebrew/bin/godot --path .
+```
+
+`scenes/main.tscn` → `kart_sandbox.tscn`. 키 `5`로 Track01 로드, F3으로
+DebugOverlay에서 `lap`/`next_checkpoint`/`progress`/`wrong_way` 확인 가능.
+
+### 테스트 방법 및 결과 (run_tests / run_sim / validate_tracks 실제 출력 요약)
+
+- `/opt/homebrew/bin/godot --headless --path . --import` — exit 0.
+- `/opt/homebrew/bin/godot --headless --path . --quit` — exit 0, `ERROR`/
+  `SCRIPT ERROR` 없음(0 파싱 에러).
+- `tools/run_tests.sh` — GUT, **30 scripts / 138 tests / 138 passing**,
+  611 asserts, 0 failures(Phase 3까지 baseline 103 → +35).
+- `tools/validate_tracks.sh` — `test_loop`, `test_loop_hills`,
+  `test_hairpin`, `track_01_ridgeline_circuit` **4개 트랙 모두
+  TRACK VALIDATION PASSED**(§15.5 전 항목: 체크포인트≥4/오프셋 단조증가,
+  그리드≥8/10m 이내, RespawnPoint 지면 히트, 레이싱라인 폐곡선, 아이템
+  박스≥6/8m 이내, 킬존 커버리지 전부 실검증).
+- `tools/run_sim.sh` — Phase 6 전까지 미구현 placeholder, exit 0.
+- 최대 `.gd` 파일: `kart/kart_physics.gd` 395줄(≤400 유지).
+- 통합 테스트로 Track01 실제 씬을 3랩 드리프트 자동주행(완주 확인,
+  도로 아래로 크게 추락하지 않음), 역주행 세트/클리어, 체크포인트
+  스킵 시 랩 미증가, 절벽 낙하 후 마지막 통과 체크포인트 RespawnPoint로
+  리스폰을 각각 직접 검증했다.
+
+### 현재 문제점 / 알려진 버그
+
+- Track01의 점프대는 실제 착지 갭 없이 연속 도로 위에 배치했다(그레이박스
+  단순화 — §15.7이 요구하는 "점프대+트릭"은 구조적으로 존재하지만, 실제
+  단차/갭이 있는 착지 지형은 Phase 8/13 비주얼 패스로 미룬다).
+- 헤어핀을 가로지르는 지름길의 트리거 박스는 스크립트 주행 경로와 겹치지
+  않도록 의도적으로 좁게 잡았다 — 실제(사람/AI) 드라이버가 지름길을 타는
+  느낌은 아직 플레이테스트하지 않았다.
+- 이동 장애물은 레이싱 라인 중앙을 완전히 피하도록 편향 배치했다 —
+  "장애물을 피해야 한다"는 긴장감은 AI 회피 로직이 생기는 Phase 6 전까지
+  약하다.
+
+### TODO / PLACEHOLDER 목록
+
+- TODO(phase-5): `RaceConfig`를 실제로 소비하는 `RaceManager`, 카운트다운,
+  결과 화면.
+- TODO(phase-7): `ItemBox.collected` → 실제 아이템 부여/효과. 지금은
+  숨김/재생성 + 제네릭 시그널만 존재.
+- TODO(phase-6): AI가 `TrackShortcut.risk`를 이용해 지름길 진입 여부를
+  판단하는 로직. 지금은 지름길 진행도 계산만 존재.
+- PLACEHOLDER: Track01 점프대 착지 구간은 갭 없는 평지(비주얼 패스에서
+  실제 착지 지형으로 교체 예정).
+
+### 다음 Phase 계획
+
+Phase 5에서 `RaceManager` 상태 머신(LOADING→COUNTDOWN→RACING→FINISHING→
+RESULTS→PAUSED), `RaceConfig` 소비, 카운트다운 + 스타트 부스트, 그리드
+스폰, 임시 HUD/결과 화면, 일시정지/재시작, `SaveManager` 베스트랩 기록을
+구현한다. 사용자 승인 전에는 시작하지 않는다.
+
+### 사용자에게 필요한 결정 (있다면)
+
+없음. Phase 4 승인 여부만 필요하다.
+
+---
+
 ## Phase 3 보고 — 드리프트 & 부스트
 
 ### 구현된 기능
