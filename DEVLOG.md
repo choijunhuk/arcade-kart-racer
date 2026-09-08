@@ -1,5 +1,231 @@
 # Development Log
 
+## Phase 7 보고 — 아이템 시스템
+
+### 구현된 기능
+
+- `items/base/`에 추상 `ItemBase`(Node3D — `setup(data, owner_kart,
+  context)`/`activate(frame)`/`tick(dt)`/`on_hit(target)`/`expire()`,
+  `finished` 시그널)와 `ItemContext`(RefCounted — karts/PositionTracker/
+  RacingLine/RNG/ItemManager 읽기 전용 접근)를 두고, 그 위에 7개 카테고리
+  베이스를 구현했다: `projectile_item`(직선 이동, `max_bounces`까지 벽
+  반사, 수명, 카트 레이어 히트), `homing_item`(랭킹상 바로 앞 카트를
+  타겟으로 레이싱라인을 따라 측면 조향), `trap_item`(드롭/투척, arm
+  딜레이, 수명, 소유자별 동시 개수 제한), `boost_item`(즉시
+  `BoostController.request()`, `ignores_offroad`), `shield_item`(카트에
+  일정 시간 부착, `HitReactor.consume_shield()`로 1회 흡수), `area_item`
+  (0.3초 텔레그래프 후 반경 Bump + `DriftController.cancel()`),
+  `leader_strike_item`(자신 제외 1위 타겟, 3초 `EventBus.threat_warning`
+  경고 후 SQUASH, 경고 중 부스트패드/아이템박스 통과 시 면역, 자신이
+  1위면 사용 불가).
+- `items/instances/<id>/`에 7개 아이템 실체(rocket_dart, hunter_drone,
+  spike_mine, nitro_can, aegis_bubble, pulse_blast, storm_beacon)를
+  플레이스홀더 메시로 구현하고 각각 `data/items/<id>.tres`의 `scene`
+  필드에 연결했다.
+- `items/item_manager.gd`(레이스당 1개, `race.tscn`/`kart_sandbox.tscn`에
+  배치): 아이템박스 `collected` 신호 → `ItemTable.pick`(순위 정규화 +
+  직전 아이템 가중치 0.5배)으로 즉시 결과 결정 → `ItemSlot.begin_roulette`
+  1.2초 리빌 → 사용 시 `use_item`이 아이템 씬별 `ObjectPool`에서 인스턴스를
+  꺼내 `setup`/`can_spawn`/`can_activate`/`activate`까지 진행하고,
+  발사체/유도 아이템은 `active_projectiles` 레지스트리에 등록한다.
+  `ItemManager._physics_process`가 모든 살아있는 아이템의 `tick()`을
+  직접 구동해(각 아이템 자체 `_physics_process`가 아님) 순서를 결정적으로
+  유지한다. `items/item_table.gd`는 `pick(table, rank_normalized,
+  previous_id, rng)` 순수 정적 함수로 분리해 유닛 테스트했다.
+- `kart/item_slot.gd`(카트 노드): 아이템 1개 + 룰렛 상태 + 입력 엣지
+  1개를 보유하며 `capture_input(frame)`/`consume_use_request()`를
+  플레이어와 AI가 동일하게 사용한다. `ai/item_slot_view.gd`를 이제 실제
+  `ItemSlot`에 바인딩해 `ai/ai_item_brain.gd`의 §13.5 규칙표가 실제로
+  발동하도록 완성했다(Phase 6까지는 null 뷰라 구조만 존재했다).
+  `ai/ai_navigator.gd`의 아이템박스 유혹 바이어스, `ai/ai_sensors.gd`의
+  `_sense_projectile()`(`ItemManager.active_projectiles` 기반 접근/회피
+  판정)도 이번 Phase에서 실제로 연결되어 동작을 확인했다(§13.2/§13.5
+  경로 자체는 Phase 6 골격이 이미 갖춰져 있었다).
+- HUD(`ui/hud/hud.gd`): 아이템 슬롯 아이콘 + 룰렛 회전, 위협 경고 배너
+  ("STORM BEACON INCOMING" 형태, `display_name` 사용), 실드 타이머 링.
+  임팩트 이펙트(`effects/impact_effect.tscn`, 풀링)와 `KartVisuals`의
+  피격 화이트 플래시(0.1초×2)를 연결했다.
+- 샌드박스(`scenes/test/kart_sandbox.gd`): `I` 키로 7종 아이템을 순환
+  지급, DebugOverlay에 `slot_item`/`roulette`/`active_projectiles`/
+  `shield` watch 추가.
+- `tests/sim/run_ai_race.gd`: `--items on|off`(기본 on) 인자, 레이스별
+  `items_used`/`item_hits`/랭크 1위 피격 수/8위 랭크 변화량 통계, 요약에
+  아이템별 명중률과 밸런스 게이트(레이스당 평균 랭크1위 피격 ≤3, 8위
+  평균 랭크 상승 ≥1.5)를 추가했다.
+
+### 발견하고 고친 버그 2건 (Phase 7 범위 아니지만 게이트를 막고 있었음)
+
+1. **AI가 아이템을 절대 쓰지 못하던 근본 원인**: `kart/item_slot.gd`의
+   `capture_input(frame)`은 `frame.tick == _last_input_tick`이면 같은
+   프레임의 반복 폴링으로 보고 무시한다(30Hz AI 틱과 60Hz 물리 틱 사이의
+   프레임 재사용을 걸러내기 위함). 그런데 `ai/ai_driver.gd`의
+   `compute_frame()`은 매번 `InputFrame.zero()`로 새 프레임을 만들면서
+   `tick` 필드를 한 번도 설정하지 않아 항상 `0`이었다 — 그 결과 AI 카트
+   최초 물리 틱 이후로는 진짜 새로운 "지금 아이템 쓰자" 결정도 전부
+   "이미 본 프레임"으로 걸러졌다. `ItemBox.body_entered` →
+   `ItemManager.collect_item_box` → 슬롯 가드/픽 →
+   `ItemManager.use_item` → `AIItemBrain.should_use` 순서로 임시
+   프린트를 넣어 추적한 끝에 `use_item`이 단 한 번도 호출되지 않는다는
+   것을 확인하고 역추적했다. 수정: `ai/ai_controller.gd`가
+   `PlayerInputProvider`처럼 자체 증가 카운터(`_frame_tick`)를 매 AI
+   틱마다 프레임에 새겨 넣는다.
+2. **모든 트랙의 추락 킬존이 1유닛 두께라 관통당했다**: `Area3D` 오버랩
+   판정은 매 물리 틱의 이산적 스냅샷 검사라 스윕 검사가 아니다. 카트가
+   충분히 빠른 속도로 낙하하면(추락 시작 후 얼마 지나지 않아 중력만으로
+   도달 가능하고, 헤드리스 시뮬의 `Engine.time_scale=8`이 틱당 유효
+   낙하거리를 8배로 키운다) 한 틱 만에 1유닛 두께 평면을 완전히
+   통과해버려 `body_entered`가 한 번도 발동하지 않는다. `tools/run_sim.sh
+   --races 12` 재현 결과 카트 하나가 `AIRBORNE` 상태로 Y좌표가 수만
+   단위까지 계속 떨어지며 남은 레이스 내내 랩/피격/리스폰 이벤트가 전혀
+   없는 것을 주기적 위치 로그로 확인했다. `--items off`로도 동일 레이스
+   번호에서 (다른 카트의) 예산 초과 실패가 재현되어 아이템과 무관한
+   Phase 4 트랙 버그로 판단했다 — 다만 20레이스 배치를 처음 돌리면서
+   비로소 드러났다(이전 Phase 6 게이트는 3레이스만 확인). 수정: 4개
+   트랙 전부 `FallPlane`의 `scale.y`를 1→200으로 키우고(윗면 깊이는
+   보존), 어떤 현실적 낙하 속도로도 한 틱에 관통할 수 없게 했다.
+
+### 생성/수정된 파일
+
+- 아이템 신규(이전 세션에서 이미 커밋됨): `items/base/*.gd`(8개),
+  `items/instances/{rocket_dart,hunter_drone,spike_mine,nitro_can,
+  aegis_bubble,pulse_blast,storm_beacon}/*.gd,*.tscn`,
+  `items/item_manager.gd`, `items/item_table.gd`, `kart/item_slot.gd`,
+  `effects/impact_effect.gd,.tscn`, `ui/hud/hud.gd` 확장,
+  `scenes/test/kart_sandbox.gd` 확장, `tests/unit/test_item_*.gd`(7개
+  파일), `tests/unit/test_ai_item_*.gd`(2개 파일),
+  `tests/integration/test_phase7_items.gd`.
+- 이번 세션에서 수정: `ai/ai_controller.gd`(`_frame_tick` 추가로 AI
+  아이템 사용 버그 수정), `ai/ai_sensors.gd`(완료된 기능을 여전히
+  미완성으로 표시하던 stale TODO 주석 제거), `track/tracks/
+  track_01_ridgeline_circuit/*.tscn`,
+  `track/tracks/{test_loop,test_loop_hills,test_hairpin}/*.tscn`
+  (`FallPlane` 두께 수정), `ARCHITECTURE.md`(Items 파이프라인 섹션 +
+  Phase 7 결정 기록), `DEVLOG.md`(이 보고서).
+
+### 핵심 설계 결정과 이유
+
+- `ItemManager`는 아이템 `id`나 카테고리에 대한 `match`/분기를 두지
+  않는다(발사체/유도 아이템의 공용 `active_projectiles` 풀링 레지스트리
+  판정 한 곳만 예외). 모든 동작은 `ItemBase`의 공통 계약
+  (`setup`/`can_spawn`/`can_activate`/`activate`/`tick`)을 통하므로, 새
+  아이템은 `data/items/<id>.tres` + `items/instances/<id>/` 씬만
+  추가하면 되고 `item_manager.gd` 자체는 건드릴 필요가 없다 —
+  `item_manager.gd`를 읽어 이 불변식을 직접 확인했다.
+- 아이템 인스턴스는 자기 `_physics_process`를 쓰지 않고
+  `ItemManager._physics_process`가 `tick(dt)`를 직접 호출한다. 최대 7개
+  아이템이 8대 카트의 `_physics_process`와 동시에 살아있는 상황에서
+  엔진의 노드 트리 처리 순서에 기대지 않고 결정적 순서를 보장하기
+  위함이다.
+- `ItemSlot.capture_input`/`consume_use_request`가 플레이어와 AI의
+  유일한 아이템 사용 경로다. `AIItemBrain`은 `PlayerInputProvider`와
+  동일하게 `InputFrame.item`을 엣지로만 세팅하므로, `ItemManager.use_item`
+  의 쿨다운/룰렛 가드를 AI가 우회할 방법이 없다.
+- 위 "발견한 버그" 절의 두 항목 모두 임시 `print()`로 파이프라인 각
+  단계를 추적해 근본 원인을 좁혔고, 진단이 끝난 뒤 프린트는 모두
+  제거했다(diff에 남아있지 않음).
+
+### 실행 방법
+
+```sh
+godot --path .
+```
+
+메인 메뉴에서 Track01 레이스를 시작하면 아이템박스를 통과했을 때
+1.2초 룰렛이 돌고, `Space`/게임패드 아이템 버튼으로 사용할 수 있다.
+`scenes/test/kart_sandbox.tscn`에서 `I`로 7종 아이템을 순환 지급받아
+바로 테스트할 수 있고, `A`로 추가한 AI 카트들도 실제로 아이템박스를
+찾아가 사용한다(F3 DebugOverlay에서 `active_projectiles` 등 확인).
+
+### 테스트 방법 및 결과 (run_tests / run_sim / validate_tracks 실제 출력 요약)
+
+- `godot --headless --path . --quit` — exit 0, `SCRIPT ERROR` 0.
+- `tools/run_tests.sh` — GUT 9.7.1, **51 scripts / 269 tests / 269
+  passing**, 1448 assertions, 0 failures, 13.9초.
+- `tools/validate_tracks.sh` — `test_loop`, `test_loop_hills`,
+  `test_hairpin`, `track_01_ridgeline_circuit` 모두 `TRACK VALIDATION
+  PASSED` (4/4).
+- `tools/run_sim.sh --races 20 --difficulty normal --karts 8 --laps 3` —
+  **exit 0, `success:true`**. 20레이스 전부 8/8 완주, 리스폰 예산(≤2)
+  초과 0건, 벽 정면충돌 예산(≤9/레이스) 초과 0건, **레이스마다
+  `items_used` 합계 > 0**(1~12개 사용, 평균 약 8.5개).
+  - 밸런스 게이트: `average_rank_one_hits_per_race = 0.55`(예산 ≤3.0,
+    **통과**), `mean_rank_eight_gain = 5.9`(요구 ≥1.5, **통과**).
+  - 아이템별 누적 사용/명중(20레이스 합계): `rocket_dart` 32사용/6명중,
+    `hunter_drone` 12/11, `spike_mine` 35/35, `nitro_can` 22/0(부스트류,
+    명중 대상 아님), `aegis_bubble` 39/0(방어형, 명중 대상 아님),
+    `pulse_blast` 15/27(*), `storm_beacon` 9/8.
+    (*) `pulse_blast`의 명중 수가 사용 수보다 많은 것은 `area_item`
+    한 번의 사용이 반경 내 여러 카트를 동시에 맞힐 수 있기 때문이다
+    (의도된 동작 — `hit_rate_by_item`이 아이템당 평균 1.8명중/사용으로
+    나오는 이유).
+  - `mean_lap_time_seconds ≈ 64.73`(Phase 6 normal 기준 64.51과 거의
+    동일 — 아이템이 전체 페이스를 왜곡하지 않는다).
+- 모든 production `.gd` ≤400줄(`kart/kart_controller.gd` 398줄 최대,
+  `items/item_manager.gd` 302줄). `project.godot`에 `[network]` 섹션
+  없음. 새 아이템 추가에 `.tres` + 인스턴스 씬만 필요함을
+  `item_manager.gd` 직독으로 재확인(코드 분기 없음).
+
+### 현재 문제점 / 알려진 제한
+
+- `aegis_bubble`(실드)과 `nitro_can`(부스트)은 방어/자기강화형이라
+  `item_hits` 통계에 0으로 잡히는 것이 정상이다 — 밸런스 게이트가 보는
+  건 공격형 아이템의 랭크1위 피격 빈도이므로 문제 없다.
+- 랭크1위 피격이 예산(≤3.0/레이스) 대비 매우 낮다(0.55). 게이트는
+  통과하지만, "선두를 따라잡는 손맛"을 더 원한다면 `default_8_karts.tres`
+  의 상위권 공격형 아이템 가중치를 올리는 튜닝 여지가 있다 — 이번
+  세션에서는 게이트가 이미 통과해 데이터 튜닝은 하지 않았다.
+- 아이템/이펙트는 명시적으로 플레이스홀더(단색 프리미티브 메시, 기본
+  파티클)다 — 실제 비주얼 폴리시는 Phase 9 범위.
+
+### TODO / PLACEHOLDER 목록
+
+- TODO(phase-8): 이번에 고친 `FallPlane` 관통 버그는 "낙하 킬존은 항상
+  충분히 두꺼워야 한다"는 일반 원칙을 드러냈다. 새 트랙을 추가할 때마다
+  이 두께를 챙기거나, `track_validator.gd`에 최소 두께 체크를 추가하는
+  걸 고려한다.
+- TODO(phase-9): 아이템/이펙트 비주얼 폴리시(플레이스홀더 메시 →
+  실제 모델/파티클/사운드), 실드 링·위협 배너 등 HUD 요소의 최종 UI화.
+- TODO(phase-9): 난이도 선택 UI에 아이템 on/off 토글 노출(현재는
+  `RaceConfig.items_enabled`를 코드/시뮬레이션 인자로만 제어).
+
+### 다음 Phase 계획
+
+사용자 승인 후 Phase 8/9에서 비주얼 폴리시와 남은 UI 작업을 진행한다.
+
+### 플레이 지시
+
+```text
+1. 프로젝트 루트에서 `godot --path .`를 실행한다.
+2. Track01 레이스를 시작하고 트랙 위 노란 아이템박스를 통과한다 — HUD
+   좌측 아이템 패널에서 1.2초간 아이콘이 회전하는 룰렛을 확인한다.
+3. 룰렛이 멈추면 아이템 버튼(플레이어 입력 매핑의 USE_ITEM, 기본
+   키보드/패드 설정 확인)으로 사용해본다: 발사체(rocket_dart)는 앞으로
+   직진하다 벽에 반사되는지, 부스트(nitro_can)는 즉시 가속하는지,
+   실드(aegis_bubble)는 HUD에 원형 타이머가 뜨는지 확인한다.
+4. 다른 AI 카트에게 맞아본다: 화면이 흰색으로 2회 짧게 깜빡이는 히트
+   플래시가 뜨고, 잠깐 조작이 제한됐다가 정상 복귀하는지 확인한다.
+5. 레이스 도중 3위 밖에 있을 때 "STORM BEACON INCOMING" 같은 위협 경고
+   배너가 화면 상단에 뜨는 순간이 있는지 지켜본다(자신이 1위 타겟일 때).
+6. `scenes/test/kart_sandbox.tscn`을 열어(`godot --path .
+   scenes/test/kart_sandbox.tscn`) `I`를 여러 번 눌러 7종 아이템을
+   순환 지급받아 각각 한 번씩 사용해보고, `A`로 AI 카트 7대를 추가해
+   AI들이 스스로 아이템박스를 찾아가 아이템을 쓰는지 관찰한다(F3
+   DebugOverlay의 `active_projectiles`가 0보다 커지는 순간이 있는지).
+7. "아이템이 레이스를 뒤집을 만큼 강력하면서도, 선두가 일방적으로
+   두들겨 맞지는 않는가?"를 판정 기준으로 삼는다 — 이번 세션 20레이스
+   시뮬레이션에서는 레이스당 평균 1위 피격 0.55회(예산 3회 이내),
+   8위 카트의 평균 랭크 상승 5.9(요구 1.5 이상)로 게이트를 통과했다.
+```
+
+### 사용자에게 필요한 결정
+
+위 플레이 지시로 아이템 사용감(룰렛 → 사용 → 명중 → 피격 반응)이
+자연스러운지, 랭크1위 피격 빈도가 너무 낮게 느껴지는지(현재 게이트는
+통과하지만 여유가 크다) 확인한 뒤 Phase 7 승인 여부와 밸런스 추가 튜닝
+필요 여부를 알려주면 된다.
+
+---
+
 ## Phase 6 보고 — AI 레이서
 
 ### 구현된 기능

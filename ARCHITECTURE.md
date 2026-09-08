@@ -356,12 +356,95 @@ the checkpoint/element contract from spec §15:
 
 ### Items and AI
 
-Item behavior will live in `items/`; Phase 0 created only its directory
-contracts and data schemas, and it stays that way until Phase 7.
 `race/scripted_race_input_provider.gd` still exists — RaceManager now uses it
 only for the FINISHING-state player fallback (a human's kart after they cross
 the line) and can still be used directly by tests/sims that want a
 deterministic non-AI driver. It is no longer the game's default opponent.
+
+#### Items pipeline (spec §12, Phase 7)
+
+```text
+items/
+├── base/
+│   ├── item_base.gd        (Node3D, abstract: setup/activate/tick/on_hit/expire, `finished` signal)
+│   ├── item_context.gd     (RefCounted: read-only karts/PositionTracker/RacingLine/RNG/ItemManager)
+│   ├── projectile_item.gd  (straight motion, wall reflect up to max_bounces, lifetime, kart-layer hit)
+│   ├── homing_item.gd      (targets next kart ahead in rank, follows racing line + lateral steer)
+│   ├── trap_item.gd        (drop/throw, arm delay, lifetime, max simultaneous per owner)
+│   ├── boost_item.gd       (instant BoostController.request(), ignores_offroad)
+│   ├── shield_item.gd      (attaches to owner kart for a duration; HitReactor.consume_shield())
+│   ├── area_item.gd        (0.3s telegraph, then radius Bump + DriftController.cancel())
+│   └── leader_strike_item.gd (targets rank 1, 3s EventBus.threat_warning, then SQUASH; boost-pad/
+│                                item-box immunity during the warning; unusable while owner is rank 1)
+└── instances/<id>/<id>.gd + <id>.tscn   (one instance per data/items/<id>.tres — rocket_dart,
+       hunter_drone, spike_mine, nitro_can, aegis_bubble, pulse_blast, storm_beacon)
+```
+
+Every concrete item is one category base plus a placeholder-mesh scene wired
+to its `data/items/*.tres` (`ItemData.scene`). Adding a new item never
+touches `ItemManager` or any other item's code — it needs only a new `.tres`
+(pointing at an existing or new category base's scene) and, for a genuinely
+new behavior, a new category base; `ItemManager` dispatches purely through
+`ItemData`/`ItemBase`'s common contract and the two pooling-relevant category
+checks (`_is_projectile_category`, for the shared `active_projectiles`
+registry), never a per-item `match`/`id` branch.
+
+`items/item_manager.gd` (one `ItemManager` node per race, owned by
+`race/race.tscn` and `scenes/test/kart_sandbox.tscn`) is the sole owner of
+selection, activation, ticking, and pooling:
+
+```text
+ItemBox.collected(body)
+  -> ItemManager.collect_item_box(kart)
+       rank = PositionTracker.get_position(kart)
+       normalized = ItemTable.normalize_rank(rank, kart_count)   (4/6/12-kart aware)
+       result_id = ItemTable.pick(item_table, normalized, previous_item_id, rng)  (previous x0.5)
+       kart.item_slot.begin_roulette(result)          -- slot stays empty during the 1.2s reveal
+ItemManager._physics_process(delta), every tick:
+  for each registered kart:
+    slot.tick_roulette(delta)                          -- reveal resolves into the held item
+    if slot.consume_use_request(): ItemManager.use_item(kart, kart.get_input_frame_snapshot())
+  for each live ItemBase: item.tick(delta)              -- ItemManager drives ticks, not each
+                                                            item's own _physics_process, so
+                                                            ordering/pooling stay deterministic
+ItemManager.use_item(kart, frame):
+  pool = _pool_for(item_data)                           -- one ObjectPool per item scene
+  item = pool.acquire(); item.setup(data, kart, context); item.can_spawn()/can_activate()
+  slot.clear_item(); _live_items.append(item); active_projectiles += item if projectile/homing
+  EventBus.item_used.emit(kart, item_data.id); item.activate(frame)
+item.finished.emit(item) -> ItemManager._on_item_finished -> _flush_finished -> pool.release(item)
+```
+
+`kart/item_slot.gd` (a node in `kart.tscn`) holds at most one `ItemData`, the
+roulette reveal state, and one pending input-edge request. Both
+`AIItemBrain` (via `ai/item_slot_view.gd`, a read-only value API) and
+`PlayerInputProvider`'s `InputFrame.item` edge drive it through the same
+`capture_input(frame)`/`consume_use_request()` contract — there is no
+separate AI-only or player-only item-use path. `capture_input` dedupes by
+`InputFrame.tick`, so anything that hands a slot a frame (AI or player) must
+stamp a tick that actually changes between decisions (see the Phase 7
+decision log entry below for what happens when it doesn't).
+
+Pooling (`core/object_pool.gd`) is one `ObjectPool` per item *scene*
+(`ItemManager._pool_for`, keyed by `item_data.scene.resource_path`), plus one
+dedicated pool for the shared placeholder `effects/impact_effect.tscn`. A
+projectile/homing item additionally counts against the shared
+`active_projectiles` registry and `max_active_projectiles`, independent of
+its own scene's pool size — `AISensors._sense_projectile()` reads that same
+registry (`ItemManager.get_active_projectiles()`) to drive dodge behavior,
+and `ItemManager.notify_leader_immunity()` walks it to grant `leader_strike`
+immunity when its target passes a boost pad or item box during the warning.
+
+Item-related `EventBus` signals: `item_used(kart, item_id)` (fired once an
+item instance actually activates), `item_hit(source_kart, target_kart,
+item_id)` (fired by a category base's own hit acceptance, spec §17),
+`threat_warning(target_kart, item_id, seconds)` (leader-strike's 3s warning,
+consumed by `RaceHud`'s banner), and `item_defense_triggered(kart)` (a
+target's counter — passing a boost pad/item box — that
+`ItemManager.notify_leader_immunity` listens for). `HitReactor` (unchanged
+node, now also consulted by `shield_item.gd` via `kart.consume_shield()`)
+still owns `EventBus.kart_hit(kart, hit_type)` for hit-reaction
+timing/duration independent of which item caused the hit.
 
 #### AI node tree and tick (spec §13)
 
@@ -424,9 +507,20 @@ bug (decision log). `AIDriver` owns steering (PD), the corner-speed/rubber-band
 throttle-brake governor, stuck/reverse/respawn handling, and start-boost
 timing; `AIDriftPlanner` (split out to keep `ai_driver.gd` under the spec §29
 400-line budget) owns only curvature-gated drift entry/hold/release.
-`AIItemBrain` evaluates a rule table against `ItemSlotView` — a null Phase 6
-stub (`view.has_item()` is always `false`) so the full pipeline runs
-structurally without Phase 7's `ItemSlot` existing yet.
+`AIItemBrain` evaluates a rule table (spec §13.5) against `ItemSlotView`,
+which `AIController.setup()` binds to the kart's real `kart/item_slot.gd`
+(the Phase 6 version bound to nothing and always reported `has_item() ==
+false`, so the rule table ran structurally without ever firing). Eligibility
+per category reads `AISensors.SensorReport`/`AINavigator.NavResult` fields —
+`kart_ahead_in_fire_cone`/`rear_kart_distance` (projectile),
+`kart_ahead_distance` (homing), `at_corner_apex`/`rear_kart_distance` (trap),
+`curvature_ahead` + not already boosting (boost), `incoming_projectile` or
+holding rank 1 (shield), `nearby_kart_count`/`being_overtaken` (area), and
+`rank >= 3` (leader strike, plus "never while owner is rank 1" enforced by
+the item itself). `AINavigator._compute_item_seek_bias` adds a light lateral
+bias toward the nearest item box (spec §13.3) whenever the kart's slot is
+empty, no reveal is in progress, and the track ahead is straight enough
+(`ITEM_SEEK_CURVATURE_MAX`) to safely drift off the racing line for it.
 
 `AIRaceContext` (`ai/ai_race_context.gd`) is the one upward-reaching seam:
 `RaceManager`/`kart_sandbox.gd` build a single shared instance per race
@@ -645,10 +739,22 @@ its `Curve3D` from arc points at `_ready()` — but everything else about it
 ## Testing and verification
 
 - Unit tests: `tools/run_tests.sh` runs GUT over `tests/` recursively.
-- Simulation: `tools/run_sim.sh --laps N --karts N --races N` boots
-  `tests/sim/run_ai_race.tscn` with normal project autoloads, runs real Track 01
-  races with scripted providers at `Engine.time_scale = 4`, prints JSON finish
-  order/times/respawns/head-on count, and exits 1 if any kart is a DNF.
+- Simulation: `tools/run_sim.sh --laps N --karts N --races N [--difficulty
+  E|N|H] [--items on|off]` boots `tests/sim/run_ai_race.tscn` with normal
+  project autoloads, runs real Track 01 races with every kart AI-driven at
+  `Engine.time_scale = 8`, prints one JSON object per race (finish
+  order/times/respawns/head-on counts/items used/item hits/rank-8 rank
+  gain), and exits 1 if any kart is a DNF, any kart exceeds the respawn or
+  wall-head-on budget, or (only for the `--races 20 --difficulty normal`
+  Phase 7 sample) the item balance gate fails — average rank-1 hits per race
+  over 3.0, or the rank-8 kart's mean rank gain under 1.5.
+- Phase 7 unit tests cover `ItemTable.pick` weight sums/rank normalization
+  (4/6/12-kart)/previous-item halving, roulette timing, slot use edge +
+  cooldown, pool reuse, per-category item-base math (reflect count, homing
+  target selection, trap arm delay/owner cap, shield single-absorb, area
+  telegraph + drift cancel, leader-strike target/immunity/rank-1 lock), and
+  the AI item rule table against the real slot; `tests/integration/
+  test_phase7_items.gd` runs a real `race.tscn` with items on end to end.
 - Track contract: `tools/validate_tracks.sh` runs `track/track_validator.gd`
   headlessly against `test_loop.tscn`, `test_loop_hills.tscn`,
   `test_hairpin.tscn`, and `track_01_ridgeline_circuit.tscn`.
@@ -989,3 +1095,74 @@ its `Curve3D` from arc points at `_ready()` — but everything else about it
   physics queries (self-sufficient), and rubber banding only ever needs
   `player_kart` + `PositionTracker`. A field with no consumer is exactly the
   kind of speculative surface spec §29 rule 11 warns against.
+
+### Phase 7
+
+- **`InputFrame.tick` was never assigned for AI karts, silently discarding
+  almost every AI item-use request.** `kart/item_slot.gd`'s
+  `capture_input(frame)` dedupes on `frame.tick == _last_input_tick` so that
+  `AIInputProvider` re-serving the same decision object across the ~2
+  physics ticks between 30 Hz AI ticks doesn't re-fire the same use request.
+  `AIDriver.compute_frame()` builds every frame via `InputFrame.zero()`
+  (`tick` defaults to `0` and nothing set it), so every AI-produced frame
+  compared equal to the previous one from the kart's very first physics
+  tick onward — the guard treated every subsequent genuine "use this item
+  now" decision as a stale repeat and threw it away, for the rest of the
+  race. This was invisible from `AIItemBrain.should_use()` alone (it
+  correctly returned `true` at a normal rate); it only showed up as
+  `items_used` staying `{}` for an entire `tools/run_sim.sh` race, traced by
+  temporarily printing at each pipeline stage (`ItemBox.body_entered` ->
+  `ItemManager.collect_item_box` -> `ItemSlot` guard/pick ->
+  `ItemManager.use_item` -> `AIItemBrain.should_use`) until the last one
+  that never ran pinpointed `ItemManager.use_item`, and from there the edge
+  guard. Fix: `AIController` now stamps its own incrementing `_frame_tick`
+  onto every frame it computes (mirroring `PlayerInputProvider`'s own
+  `_tick` counter), so a genuinely new AI decision is distinguishable from
+  the same object being re-polled.
+- **Every track's `FallPlane` `KillZone` was only 1 world unit thick, and a
+  fast-falling kart tunneled straight through it.** `Area3D` overlap
+  detection is a discrete per-physics-tick shape query, not a continuous/
+  swept test; once a kart's downward speed exceeds roughly
+  `plane_thickness / tick_delta`, its position at the end of one tick can
+  already be entirely past the plane with no tick in between ever having it
+  inside the shape, so `body_entered` never fires and the kart free-falls
+  forever (found via `tools/run_sim.sh --races 12` reproducing a DNF, then
+  periodic position logging showing one kart's Y coordinate at
+  `AIRBORNE`/falling and still dropping tens of thousands of units below the
+  track for the rest of the race, with zero lap/hit/respawn events). At
+  `Engine.time_scale = 8` (spec §13.8) the effective per-tick delta is large
+  enough that ordinary gravity acceleration reaches that speed well within
+  a normal off-track fall, which is why this only ever showed up once the
+  sim ran 20 races instead of 1-3 (a fall off the track edge is otherwise
+  rare enough not to appear in a small sample). Not item-related — it
+  reproduces identically with `--items off` (as a different kart/failure
+  mode, since disabling items changes the shared `RandomNumberGenerator`
+  draw sequence for every later decision) — but it directly blocked the
+  Phase 7 `--races 20` balance-gate run, so it was fixed here rather than
+  deferred: every track's `FallPlane` grows from `scale.y = 1` to `200`
+  (`position.y` adjusted so its top face stays at its original depth), well
+  beyond any plausible single-tick fall distance.
+- `items/base/item_base.gd`'s `tick(dt)` is called by `ItemManager`
+  (`for item in _live_items: item.tick(delta)`), never by the item's own
+  `_physics_process`. Godot's own node tree processing order across ~7
+  simultaneously live pooled items competing with 8 karts' own
+  `_physics_process` calls is not something the engine contracts to be
+  stable release over release; driving every tick from one place keeps
+  item-vs-item and item-vs-kart interactions deterministic and matches how
+  `AIController` already drives its own sub-objects rather than giving them
+  `_physics_process`.
+- `ItemManager` never branches on an item's `id` or a `match` over item
+  categories to run behavior — only the shared "is this a
+  projectile/homing item" check for the `active_projectiles` pooling
+  registry needs the category at all. Every other operation (pool
+  acquire/release, `setup`/`can_spawn`/`can_activate`/`activate`/`tick`)
+  goes through `ItemBase`'s common contract, so a new item is one new
+  `data/items/<id>.tres` plus one `items/instances/<id>/` scene (reusing an
+  existing category base whenever its behavior fits) — never a change to
+  `item_manager.gd` itself.
+- `ItemSlot.capture_input`/`consume_use_request` is the single item-use path
+  for both the player and every AI kart — `AIItemBrain` writes
+  `InputFrame.item` exactly the way `PlayerInputProvider` does (an edge, not
+  a held state), so there is no AI-only "just call `use_item` directly"
+  shortcut that could drift out of sync with the cooldown/roulette guards
+  `ItemManager.use_item` and `ItemSlot` already enforce for the player.
