@@ -5,5 +5,6 @@ extends Resource
 @export var display_name: String = ""
 @export var portrait: Texture2D
 @export var mesh_scene: PackedScene
+@export var driver_color: Color = Color.WHITE
 @export var stat_mods: Dictionary[StringName, float] = {}
 @export var voice_set: StringName = &""

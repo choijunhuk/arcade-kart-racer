@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="DriverData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/schemas/driver_data.gd" id="1_driver"]
+
+[resource]
+script = ExtResource("1_driver")
+id = &"cinder_rook"
+display_name = "Cinder Rook"
+driver_color = Color(1, 0.28, 0.12, 1)
+stat_mods = {&"acceleration": 0.05, &"drift_factor": -0.03}
+voice_set = &"cinder"

@@ -68,6 +68,24 @@ func record_race_result(track_id: StringName, best_lap_ms: int, position: int) -
 	return save_data(data)
 
 
+## Returns the saved best lap in milliseconds, or -1 when no record exists.
+func get_best_lap_ms(track_id: StringName) -> int:
+	var data: Dictionary = load_data()
+	var best_laps: Dictionary = data.get("best_laps", {}) as Dictionary
+	return int(best_laps.get(String(track_id), -1))
+
+
+## Persists the three content identifiers used to start the latest race.
+func save_last_selection(driver_id: StringName, kart_id: StringName, track_id: StringName) -> Error:
+	var data: Dictionary = load_data()
+	data["last_selection"] = {
+		"driver": String(driver_id),
+		"kart": String(kart_id),
+		"track": String(track_id),
+	}
+	return save_data(data)
+
+
 func _read_valid_data(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
 		return {}

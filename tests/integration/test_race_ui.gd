@@ -75,30 +75,22 @@ func test_results_screen_builds_rows_and_focuses_restart() -> void:
 	assert_eq(get_viewport().gui_get_focus_owner(), restart_button)
 
 
-func test_main_scene_builds_default_config_and_offers_start_button() -> void:
+func test_main_scene_boots_the_phase_nine_menu_with_disabled_time_trial() -> void:
 	var main: Node = (load(MAIN_PATH) as PackedScene).instantiate()
 	autofree(main)
-	assert_not_null(main.get_node_or_null("Center/VBox/StartButton"))
-	assert_true(main.has_method("build_default_config"))
-	if not main.has_method("build_default_config"):
-		return
-	var config: RaceConfig = main.call("build_default_config") as RaceConfig
-	assert_eq(config.track.id, &"track_01_ridgeline_circuit")
-	assert_eq(config.laps, 3)
-	assert_eq(config.kart_count, 8)
-	assert_eq(config.player_kart.id, &"medium")
+	var play: Button = main.get_node("MainMenu/Panel/VBox/PlayButton") as Button
+	var time_trial: Button = main.get_node("MainMenu/Panel/VBox/TimeTrialButton") as Button
+	assert_not_null(play)
+	assert_true(time_trial.disabled)
+	assert_not_null(main.get_node_or_null("MainMenu/Panel/VBox/SettingsButton"))
 
 
-func test_main_scene_accepts_the_gamepad_start_action() -> void:
+func test_main_scene_gives_initial_gamepad_focus_to_play() -> void:
 	var main: Node = (load(MAIN_PATH) as PackedScene).instantiate()
-	autofree(main)
-	assert_true(main.has_method("is_start_event"))
-	if not main.has_method("is_start_event"):
-		return
-	var start_event: InputEventAction = InputEventAction.new()
-	start_event.action = &"pause"
-	start_event.pressed = true
-	assert_true(bool(main.call("is_start_event", start_event)))
+	add_child_autofree(main)
+	await wait_process_frames(1)
+	var play: Button = main.get_node("MainMenu/Panel/VBox/PlayButton") as Button
+	assert_eq(get_viewport().gui_get_focus_owner(), play)
 
 
 func _instantiate_required(path: String) -> Node:
