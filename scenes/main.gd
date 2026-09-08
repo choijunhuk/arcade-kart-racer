@@ -20,9 +20,14 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed(&"ui_accept"):
+	if is_start_event(event):
 		start_race()
 		get_viewport().set_input_as_handled()
+
+
+## Accepts keyboard/gamepad confirm and the gamepad Start (`pause`) action.
+func is_start_event(event: InputEvent) -> bool:
+	return event.is_action_pressed(&"ui_accept") or event.is_action_pressed(&"pause")
 
 
 ## Builds the default Track 01, 3-lap, 8-kart medium configuration.

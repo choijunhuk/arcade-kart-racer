@@ -89,6 +89,18 @@ func test_main_scene_builds_default_config_and_offers_start_button() -> void:
 	assert_eq(config.player_kart.id, &"medium")
 
 
+func test_main_scene_accepts_the_gamepad_start_action() -> void:
+	var main: Node = (load(MAIN_PATH) as PackedScene).instantiate()
+	autofree(main)
+	assert_true(main.has_method("is_start_event"))
+	if not main.has_method("is_start_event"):
+		return
+	var start_event: InputEventAction = InputEventAction.new()
+	start_event.action = &"pause"
+	start_event.pressed = true
+	assert_true(bool(main.call("is_start_event", start_event)))
+
+
 func _instantiate_required(path: String) -> Node:
 	var exists: bool = ResourceLoader.exists(path)
 	assert_true(exists, "%s must exist" % path)
