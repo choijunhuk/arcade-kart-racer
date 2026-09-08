@@ -1,15 +1,16 @@
 class_name RaceHud
 extends CanvasLayer
 
-## Plain Phase 5 HUD. It observes EventBus and read-only kart/race APIs only.
-## TODO(phase-9): Replace the placeholder typography/layout with final HUD art.
+## Final race HUD. It observes EventBus and read-only kart/race APIs only.
 
 const GO_DISPLAY_SECONDS: float = 1.0
 const SHIELD_FULL_SECONDS: float = 8.0
+const METRES_PER_SECOND_TO_KPH: float = 3.6
 
 @export var tuning: FeelTuning = preload("res://data/tuning/feel_default.tres")
 
 @onready var _position_label: Label = $PositionLabel
+@onready var _position_count_label: Label = $PositionCountLabel
 @onready var _lap_label: Label = $LapLabel
 @onready var _countdown_label: Label = $CountdownLabel
 @onready var _wrong_way_label: Label = $WrongWayLabel
@@ -20,6 +21,10 @@ const SHIELD_FULL_SECONDS: float = 8.0
 @onready var _roulette_label: Label = $ItemPanel/RouletteLabel
 @onready var _threat_warning: Label = $ThreatWarning
 @onready var _shield_timer: TextureProgressBar = $ShieldTimer
+@onready var _cooldown_bar: ProgressBar = $ItemPanel/CooldownBar
+@onready var _minimap: RaceMinimap = $Minimap
+@onready var _speedometer: PanelContainer = $Speedometer
+@onready var _speed_label: Label = $Speedometer/SpeedLabel
 
 var _player_kart: KartController
 var _lap_tracker: LapTracker
@@ -33,6 +38,7 @@ var _lap_tween: Tween
 var _roulette_tween: Tween
 var _roulette_was_active: bool = false
 var _lap_base_position: Vector2 = Vector2.ZERO
+var _threat_remaining: float = 0.0
 
 
 func _ready() -> void:
@@ -55,12 +61,19 @@ func _process(delta: float) -> void:
 	if _player_kart != null and _lap_tracker != null and _position_tracker != null:
 		var race_position: int = maxi(1, _position_tracker.get_position(_player_kart))
 		var lap: int = mini(_lap_tracker.get_lap(_player_kart) + 1, _total_laps)
-		_position_label.text = "%d/%d" % [race_position, _kart_count]
-		_lap_label.text = "%d/%d" % [lap, _total_laps]
+		_position_label.text = str(race_position)
+		_position_count_label.text = "/%d" % _kart_count
+		_lap_label.text = "LAP %d/%d" % [lap, _total_laps]
+		_speed_label.text = "%03d km/h" % roundi(absf(_player_kart.get_speed()) * METRES_PER_SECOND_TO_KPH)
+	_speedometer.visible = bool(SettingsManager.get_setting(&"gameplay", &"speedometer", true))
 	if _go_display_remaining > 0.0:
 		_go_display_remaining = maxf(0.0, _go_display_remaining - delta)
 		if _go_display_remaining <= 0.0:
 			_countdown_label.visible = false
+	if _threat_remaining > 0.0:
+		_threat_remaining = maxf(0.0, _threat_remaining - delta)
+		if _threat_remaining <= 0.0:
+			_threat_warning.visible = false
 	_update_item_hud(delta)
 
 
@@ -71,6 +84,8 @@ func bind(
 	player_kart: KartController, lap_tracker: LapTracker,
 	position_tracker: PositionTracker, kart_count: int, total_laps: int,
 	item_manager: ItemManager = null,
+	racing_line: RacingLine = null,
+	karts: Array[KartController] = [],
 ) -> void:
 	_player_kart = player_kart
 	_lap_tracker = lap_tracker
@@ -80,6 +95,7 @@ func bind(
 	_item_manager = item_manager
 	if player_kart != null:
 		_drift_meter.set_controller(player_kart.drift_controller)
+	_minimap.bind(racing_line, karts, player_kart)
 
 
 func _exit_tree() -> void:
@@ -130,13 +146,14 @@ func _on_kart_finished(kart: Node, _finish_time_seconds: float) -> void:
 		_message_label.text = "FINISH"
 
 
-func _on_threat_warning(target_kart: Node, item_id: StringName, _seconds: float) -> void:
+func _on_threat_warning(target_kart: Node, item_id: StringName, seconds: float) -> void:
 	if target_kart != _player_kart:
 		return
 	var item: ItemData = _item_manager.get_item_data(item_id) if _item_manager != null else null
 	var display_name: String = item.display_name if item != null else String(item_id).replace("_", " ")
 	_threat_warning.text = "%s INCOMING" % display_name.to_upper()
 	_threat_warning.visible = true
+	_threat_remaining = maxf(seconds, 0.0)
 
 
 func _on_position_changed(kart: Node, _old_position: int, _new_position: int) -> void:
@@ -180,6 +197,7 @@ func _update_item_hud(_delta: float) -> void:
 	var shield_remaining: float = _player_kart.get_shield_remaining()
 	_shield_timer.visible = shield_remaining > 0.0
 	_shield_timer.value = clampf(shield_remaining / SHIELD_FULL_SECONDS, 0.0, 1.0) * 100.0
+	_cooldown_bar.value = _item_manager.get_cooldown_ratio(_player_kart) * 100.0 if _item_manager != null else 0.0
 	_roulette_was_active = slot.roulette_active
 
 

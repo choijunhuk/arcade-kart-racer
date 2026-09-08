@@ -53,7 +53,7 @@ func test_results_rows_begin_staggered_from_transparent_offset() -> void:
 	entry.total_time_seconds = 30.0
 	entry.best_lap_seconds = 30.0
 	screen.show_results([entry], manager)
-	var row: Label = screen.get_node("Panel/VBox/Rows").get_child(0) as Label
+	var row: Control = screen.get_node("Panel/VBox/Rows").get_child(0) as Control
 	assert_almost_eq(row.modulate.a, 0.0, EPSILON)
 	assert_gt(row.position.x, 0.0)
 

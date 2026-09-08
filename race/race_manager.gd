@@ -115,6 +115,11 @@ func back_to_menu() -> void:
 	get_tree().paused = false
 	GameState.change_scene("res://scenes/main.tscn")
 
+## Leaves results for the data-driven track selection screen.
+func back_to_track_select() -> void:
+	get_tree().paused = false
+	GameState.change_scene("res://ui/menus/track_select.tscn")
+
 ## Returns whether a requested state edge belongs to the Phase 5 table.
 static func can_transition(from_state: int, to_state: int) -> bool:
 	var allowed: Array = LEGAL_TRANSITIONS.get(from_state, []) as Array
@@ -142,7 +147,10 @@ func _begin_loading(is_restart: bool) -> void:
 	_camera.set_target(observed_kart)
 	_particle_budget.configure(_karts, _camera)
 	_speed_lines.set_target(observed_kart)
-	_hud.bind(_player_kart, _lap_tracker, _position_tracker, _karts.size(), _config.laps, _item_manager)
+	_hud.bind(
+		_player_kart, _lap_tracker, _position_tracker, _karts.size(), _config.laps,
+		_item_manager, _track.get_racing_line(), _karts,
+	)
 	_pause_menu.bind(self)
 	_pause_menu.hide_menu()
 	_results_screen.hide_results()

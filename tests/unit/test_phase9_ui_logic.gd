@@ -153,6 +153,23 @@ func test_minimap_projection_centers_a_degenerate_line() -> void:
 	assert_eq(projected, PackedVector2Array([Vector2(0.5, 0.5)]))
 
 
+func test_minimap_projects_a_kart_against_the_same_track_bounds() -> void:
+	var script: GDScript = _load_required_script(MINIMAP_PROJECTION_PATH)
+	if script == null:
+		return
+	assert_true(script.has_method("project_point"))
+	if not script.has_method("project_point"):
+		return
+	var track_points: PackedVector3Array = PackedVector3Array([
+		Vector3(0.0, 0.0, 0.0),
+		Vector3(20.0, 0.0, 10.0),
+	])
+
+	var projected: Vector2 = script.call("project_point", Vector3(10.0, 5.0, 5.0), track_points) as Vector2
+
+	assert_eq(projected, Vector2(0.5, 0.5))
+
+
 func test_results_ordering_sorts_entries_by_rank_without_mutating_input() -> void:
 	var script: GDScript = _load_required_script(RESULTS_ORDERING_PATH)
 	if script == null:

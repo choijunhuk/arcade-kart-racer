@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://ui/results/results_screen.gd" id="1_results"]
+[ext_resource type="Theme" path="res://ui/theme/default_theme.tres" id="2_theme"]
 
 [node name="ResultsScreen" type="CanvasLayer"]
 layer = 20
@@ -12,12 +13,13 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -420.0
-offset_top = -300.0
-offset_right = 420.0
-offset_bottom = 300.0
+offset_left = -530.0
+offset_top = -360.0
+offset_right = 530.0
+offset_bottom = 360.0
 grow_horizontal = 2
 grow_vertical = 2
+theme = ExtResource("2_theme")
 
 [node name="VBox" type="VBoxContainer" parent="Panel"]
 layout_mode = 2
@@ -29,9 +31,58 @@ theme_override_font_sizes/font_size = 40
 text = "RACE RESULTS"
 horizontal_alignment = 1
 
-[node name="Rows" type="VBoxContainer" parent="Panel/VBox"]
+[node name="NewRecordBadge" type="Label" parent="Panel/VBox"]
+visible = false
 layout_mode = 2
-theme_override_constants/separation = 6
+theme_override_colors/font_color = Color(1, 0.82, 0.14, 1)
+theme_override_font_sizes/font_size = 28
+text = "★ NEW RECORD ★"
+horizontal_alignment = 1
+
+[node name="Header" type="HBoxContainer" parent="Panel/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Position" type="Label" parent="Panel/VBox/Header"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "POS"
+horizontal_alignment = 1
+
+[node name="Driver" type="Label" parent="Panel/VBox/Header"]
+custom_minimum_size = Vector2(175, 0)
+layout_mode = 2
+text = "DRIVER"
+horizontal_alignment = 1
+
+[node name="Kart" type="Label" parent="Panel/VBox/Header"]
+custom_minimum_size = Vector2(175, 0)
+layout_mode = 2
+text = "KART"
+horizontal_alignment = 1
+
+[node name="Total" type="Label" parent="Panel/VBox/Header"]
+custom_minimum_size = Vector2(145, 0)
+layout_mode = 2
+text = "TOTAL"
+horizontal_alignment = 1
+
+[node name="BestLap" type="Label" parent="Panel/VBox/Header"]
+custom_minimum_size = Vector2(145, 0)
+layout_mode = 2
+text = "BEST LAP"
+horizontal_alignment = 1
+
+[node name="Record" type="Label" parent="Panel/VBox/Header"]
+custom_minimum_size = Vector2(125, 0)
+layout_mode = 2
+text = "RECORD"
+horizontal_alignment = 1
+
+[node name="Rows" type="VBoxContainer" parent="Panel/VBox"]
+custom_minimum_size = Vector2(0, 420)
+layout_mode = 2
+theme_override_constants/separation = 7
 
 [node name="Actions" type="HBoxContainer" parent="Panel/VBox"]
 layout_mode = 2
@@ -40,9 +91,12 @@ theme_override_constants/separation = 16
 
 [node name="RestartButton" type="Button" parent="Panel/VBox/Actions"]
 layout_mode = 2
-text = "Restart"
+text = "RESTART"
+
+[node name="TrackSelectButton" type="Button" parent="Panel/VBox/Actions"]
+layout_mode = 2
+text = "TRACK SELECT"
 
 [node name="MenuButton" type="Button" parent="Panel/VBox/Actions"]
 layout_mode = 2
-text = "Menu"
-
+text = "MAIN MENU"
