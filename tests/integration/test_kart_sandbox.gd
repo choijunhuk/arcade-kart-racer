@@ -106,6 +106,24 @@ func test_b_key_spawns_three_registered_dummy_karts() -> void:
 	assert_not_null(sandbox.get_node_or_null("DummyKart3"))
 
 
+func test_key_5_switches_to_track01_and_wires_progress_systems() -> void:
+	var sandbox: Node = (load(SANDBOX_PATH) as PackedScene).instantiate()
+	add_child_autofree(sandbox)
+	await wait_physics_frames(1)
+
+	sandbox._unhandled_input(_key_event(KEY_5))
+	await wait_physics_frames(1)
+
+	var track: Node = sandbox.get_node_or_null("Track01")
+	assert_not_null(track)
+	var kart: KartController = sandbox.get_node("Kart") as KartController
+	var lap_tracker: LapTracker = sandbox.get_node("LapTracker") as LapTracker
+	var position_tracker: PositionTracker = sandbox.get_node("PositionTracker") as PositionTracker
+	assert_eq(lap_tracker.get_lap(kart), 0)
+	assert_eq((track as TrackRoot).get_checkpoints().size(), 8)
+	assert_not_null(position_tracker)
+
+
 func _key_event(keycode: Key) -> InputEventKey:
 	var event: InputEventKey = InputEventKey.new()
 	event.physical_keycode = keycode

@@ -15,8 +15,9 @@ const TRACK_SCENES: Array[PackedScene] = [
 	preload("res://track/tracks/test_loop/test_loop.tscn"),
 	preload("res://track/tracks/test_loop_hills/test_loop_hills.tscn"),
 	preload("res://track/tracks/test_hairpin/test_hairpin.tscn"),
+	preload("res://track/tracks/track_01_ridgeline_circuit/track_01_ridgeline_circuit.tscn"),
 ]
-const TRACK_NODE_NAMES: Array[StringName] = [&"TestLoop", &"TestLoopHills", &"TestHairpin"]
+const TRACK_NODE_NAMES: Array[StringName] = [&"TestLoop", &"TestLoopHills", &"TestHairpin", &"Track01"]
 const KART_SCENE: PackedScene = preload("res://kart/kart.tscn")
 const KART_DATA: Array[KartData] = [
 	preload("res://data/karts/light.tres"),
@@ -28,11 +29,15 @@ const KART_DATA: Array[KartData] = [
 @onready var _camera: RaceCamera = $RaceCamera
 @onready var _collision_resolver: KartCollisionResolver = $KartCollisionResolver
 @onready var _respawn_system: RespawnSystem = $RespawnSystem
+@onready var _lap_tracker: LapTracker = $LapTracker
+@onready var _position_tracker: PositionTracker = $PositionTracker
+@onready var _lap_label: Label = $HUD/LapLabel
 
 const WATCH_NAMES: Array[StringName] = [
 	&"speed", &"speed_ratio", &"state", &"grounded", &"lateral", &"terrain",
 	&"slipstream", &"hit", &"invulnerable", &"air_time",
 	&"drift_state", &"drift_charge", &"drift_tier", &"boost", &"trick_armed",
+	&"lap", &"next_checkpoint", &"progress", &"wrong_way",
 ]
 const SLIDER_NAMES: Array[StringName] = [
 	&"max_speed", &"acceleration", &"base_turn_rate", &"grip", &"drag", &"brake_force", &"gravity", &"hover_height",
@@ -51,9 +56,16 @@ func _ready() -> void:
 	_collision_resolver.register_kart(_kart)
 	_configure_respawn_for_kart(_kart)
 	_register_track_kill_zones()
+	_setup_progress_for_track()
+	_register_kart_progress(_kart)
+	_register_track_item_boxes()
 	_reset_to_grid()
 	_register_debug_overlay()
 	($HUD/DriftMeter as DriftMeter).set_controller(_kart.drift_controller)
+
+
+func _process(_delta: float) -> void:
+	_lap_label.text = "LAP %d/%d" % [mini(_lap_tracker.get_lap(_kart) + 1, _lap_tracker.total_laps), _lap_tracker.total_laps]
 
 
 ## Prevents DebugOverlay from calling stale watch/slider callables that
@@ -85,6 +97,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				_swap_kart_data(2)
 			KEY_4:
 				_select_track(2)
+			KEY_5:
+				_select_track(3)
 			_:
 				return
 		get_viewport().set_input_as_handled()
@@ -110,6 +124,11 @@ func _select_track(index: int) -> void:
 	add_child(_track)
 	move_child(_track, 0)
 	_register_track_kill_zones()
+	_setup_progress_for_track()
+	_register_kart_progress(_kart)
+	for dummy: KartController in _dummy_karts:
+		_register_kart_progress(dummy)
+	_register_track_item_boxes()
 	_configure_respawn_for_kart(_kart)
 	for dummy: KartController in _dummy_karts:
 		_configure_respawn_for_kart(dummy)
@@ -136,6 +155,7 @@ func _spawn_dummy_karts() -> void:
 			dummy.global_position += right * DUMMY_LATERAL_OFFSET
 		_dummy_karts.append(dummy)
 		_collision_resolver.register_kart(dummy)
+		_register_kart_progress(dummy)
 		_configure_respawn_for_kart(dummy)
 
 
@@ -159,28 +179,42 @@ func _register_track_kill_zones() -> void:
 			_respawn_system.register_kill_zone(child as KillZone)
 
 
+## Racing-line-oriented respawn (spec §14.5): the last checkpoint's
+## RespawnPoint, stepping back along the line if another kart occupies it.
 func _get_respawn_transform(kart: KartController) -> Transform3D:
-	var racing_line: Path3D = _track.get_node("RacingLine") as Path3D
-	var grid: Node = _track.get_node("StartGrid")
-	var kart_local: Vector3 = racing_line.to_local(kart.global_position)
-	var kart_offset: float = racing_line.curve.get_closest_offset(kart_local)
-	var best: Marker3D = null
-	var best_offset: float = -1.0
-	var wrap_best: Marker3D = null
-	var wrap_offset: float = -1.0
-	for child: Node in grid.get_children():
-		if not child is Marker3D:
-			continue
-		var marker: Marker3D = child as Marker3D
-		var marker_local: Vector3 = racing_line.to_local(marker.global_position)
-		var marker_offset: float = racing_line.curve.get_closest_offset(marker_local)
-		if marker_offset > wrap_offset:
-			wrap_best = marker
-			wrap_offset = marker_offset
-		if marker_offset <= kart_offset and marker_offset > best_offset:
-			best = marker
-			best_offset = marker_offset
-	return best.global_transform if best != null else wrap_best.global_transform
+	return RespawnSystem.resolve_respawn_transform(kart, _lap_tracker, _track.get_racing_line(), _all_karts())
+
+
+func _all_karts() -> Array[KartController]:
+	var karts: Array[KartController] = [_kart]
+	karts.append_array(_dummy_karts)
+	return karts
+
+
+## (Re)binds LapTracker/PositionTracker to the current track. Call before
+## registering any kart and again whenever `_track` changes.
+func _setup_progress_for_track() -> void:
+	_lap_tracker.setup(_track)
+	_position_tracker.setup(_track, _lap_tracker)
+
+
+func _register_kart_progress(kart: KartController) -> void:
+	_lap_tracker.register_kart(kart)
+	_position_tracker.register_kart(kart)
+
+
+## Item effects are Phase 7 scope; this phase only relays the pickup signal.
+func _register_track_item_boxes() -> void:
+	var container: Node = _track.get_node_or_null("ItemBoxes")
+	if container == null:
+		return
+	for child: Node in container.get_children():
+		if child is ItemBox and not (child as ItemBox).collected.is_connected(_on_item_box_collected):
+			(child as ItemBox).collected.connect(_on_item_box_collected)
+
+
+func _on_item_box_collected(_body: Node3D) -> void:
+	print("item box collected")
 
 
 func _register_debug_overlay() -> void:
@@ -199,6 +233,10 @@ func _register_debug_overlay() -> void:
 	DebugOverlay.watch(&"drift_tier", func() -> int: return _kart.get_drift_tier())
 	DebugOverlay.watch(&"boost", func() -> String: return "%s %.2f" % [_kart.get_boost_source(), _kart.get_boost_remaining()])
 	DebugOverlay.watch(&"trick_armed", func() -> bool: return _kart.is_trick_armed())
+	DebugOverlay.watch(&"lap", func() -> int: return _lap_tracker.get_lap(_kart))
+	DebugOverlay.watch(&"next_checkpoint", func() -> int: return _lap_tracker.get_next_checkpoint_index(_kart))
+	DebugOverlay.watch(&"progress", func() -> String: return "%.1f" % _position_tracker.get_progress(_kart))
+	DebugOverlay.watch(&"wrong_way", func() -> bool: return _lap_tracker.is_wrong_way(_kart))
 
 	DebugOverlay.add_slider(&"max_speed", 5.0, 60.0,
 		func() -> float: return _kart.kart_data.max_speed,

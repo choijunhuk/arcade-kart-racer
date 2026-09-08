@@ -4,6 +4,11 @@ extends Node
 ## Runs fade, teleport/protection, and frozen phases from physics ticks. The
 ## caller supplies track-specific respawn lookup so Race never leaks into Kart.
 
+## Metres stepped back along the racing line per occupied-spot retry (§14.5).
+const RESPAWN_STEP_BACK: float = 3.0
+const RESPAWN_OCCUPANCY_RADIUS: float = 2.0
+const RESPAWN_MAX_ATTEMPTS: int = 6
+
 enum RespawnPhase {
 	IDLE,
 	FADE,
@@ -112,3 +117,37 @@ func _teleport(registration: Registration) -> void:
 	registration.phase = RespawnPhase.FROZEN
 	registration.timer = tuning.respawn_frozen_duration
 	EventBus.kart_respawned.emit(registration.kart)
+
+
+## Resolves a racing-line-oriented respawn transform from `kart`'s last
+## passed checkpoint (via `lap_tracker`), stepping back `RESPAWN_STEP_BACK`
+## along the line each time the candidate spot is occupied by another kart
+## (spec §14.5). Static/pure aside from the read-only lookups it is handed.
+static func resolve_respawn_transform(
+	kart: KartController, lap_tracker: LapTracker, racing_line: RacingLine, other_karts: Array[KartController],
+) -> Transform3D:
+	var respawn_point: Marker3D = lap_tracker.get_respawn_point(kart) if lap_tracker != null else null
+	if respawn_point == null or racing_line == null:
+		return kart.global_transform
+	var offset: float = racing_line.offset_at(respawn_point.global_position)
+	for attempt: int in range(RESPAWN_MAX_ATTEMPTS):
+		var candidate_offset: float = offset - RESPAWN_STEP_BACK * float(attempt)
+		var position: Vector3 = racing_line.sample(candidate_offset)
+		if not _is_position_occupied(position, kart, other_karts):
+			return _oriented_transform(position, racing_line.tangent_at(candidate_offset))
+	var fallback_offset: float = offset - RESPAWN_STEP_BACK * float(RESPAWN_MAX_ATTEMPTS)
+	return _oriented_transform(racing_line.sample(fallback_offset), racing_line.tangent_at(fallback_offset))
+
+
+static func _is_position_occupied(position: Vector3, self_kart: KartController, other_karts: Array[KartController]) -> bool:
+	for other: KartController in other_karts:
+		if other == self_kart or not is_instance_valid(other):
+			continue
+		if other.global_position.distance_to(position) < RESPAWN_OCCUPANCY_RADIUS:
+			return true
+	return false
+
+
+static func _oriented_transform(position: Vector3, forward: Vector3) -> Transform3D:
+	var facing: Vector3 = forward if forward.length() > 0.001 else Vector3.FORWARD
+	return Transform3D(Basis.looking_at(facing, Vector3.UP), position + Vector3.UP * 0.05)

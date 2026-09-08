@@ -1,6 +1,6 @@
 # Arcade Kart Racer Architecture
 
-This document is the repository-specific architecture contract through Phase 2. It
+This document is the repository-specific architecture contract through Phase 4. It
 translates sections 6–8 of `KART_RACING_DEV_PROMPT.md` into the concrete paths
 used by this project. Later phases must update this document before changing a
 major boundary or dependency direction.
@@ -224,10 +224,36 @@ spring-damped FOV kick while `is_boosting()`. Shake and look-back are Phase 8.
 ### Race
 
 Future race orchestration lives in `race/`. `RaceManager` will own only the
-race state machine and composition. Phase 2 adds `KartCollisionResolver` and
-`RespawnSystem` as separate nodes. The resolver handles BumpArea pairs without
-HIT; respawn runs FADE -> teleport/protect -> FROZEN from physics ticks. A
-caller-supplied transform callable keeps track lookup out of the kart domain.
+race state machine and composition (Phase 5). Phase 2 adds
+`KartCollisionResolver` and `RespawnSystem` as separate nodes. The resolver
+handles BumpArea pairs without HIT; respawn runs FADE -> teleport/protect ->
+FROZEN from physics ticks. A caller-supplied transform callable keeps track
+lookup out of the kart domain.
+
+Phase 4 adds `LapTracker` and `PositionTracker`, both bound to a track via a
+`setup(track)`/`setup(track, lap_tracker)` call and then per-kart
+`register_kart(kart)`. `LapTracker` owns `next_checkpoint_index`/`lap`/
+`checkpoints_hit`/wrong-way state per kart and exposes the pure static
+`evaluate_checkpoint_transition(index, next_checkpoint_index, checkpoint_count)`
+so the sequential-pass/re-entry-ignored/lap-on-checkpoint-zero rule (spec
+§14.3) is unit-testable without a scene tree. It emits `EventBus.lap_completed`
+and `EventBus.wrong_way`, but its own `kart_finished(kart, time)` signal is
+local (not on `EventBus`) since only `RaceManager` (Phase 5) needs it.
+`PositionTracker` runs at 5Hz off a tick counter and exposes the pure static
+`rank_karts(previous_order, ids, progress_by_id, finished_by_id,
+finish_time_by_id, hysteresis)` (finished-by-time, then unfinished by
+progress with a hysteresis reorder pass) so ranking is testable with plain
+int ids and dictionaries standing in for karts. `RespawnSystem` gained a
+static `resolve_respawn_transform(kart, lap_tracker, racing_line,
+other_karts)` that orients the spawn along the line and steps back 3 m at a
+time if another kart occupies the spot (spec §14.5); the existing per-kart
+`register_kart(kart, get_respawn_transform: Callable)` API is unchanged, so a
+caller (the sandbox, later `RaceManager`) just binds a callable to the new
+resolver instead of writing its own lookup. `HazardRelay` mirrors
+`RespawnSystem`'s bridge role for `Hazard` -> `KartController.apply_hit()`.
+`RaceConfig` (schema only, no manager yet) and `StartGrid.generate()` (a pure
+staggered-grid layout function used to pad tracks with fewer than 8 markers)
+round out the phase.
 
 ### Track
 
@@ -244,6 +270,51 @@ jump pad and a landing zone, and `track/tracks/test_hairpin/` is a third
 greybox track (a paperclip oval with two ~18 m radius hairpins built from
 evenly spaced arc points plus S-curve chicanes) sized so a drifted lap clears
 mini-turbo tier 2 and beats a non-drifted lap.
+
+Phase 4 replaces the placeholder racing line with a real offset API and adds
+the checkpoint/element contract from spec §15:
+
+- `RacingLine` (`track/racing_line.gd`) bakes `curve` into a local point
+  array + cumulative-distance table once (`bake()`, lazily invoked by every
+  query) and exposes `length()`, `offset_at(global_pos, hint_offset := -1.0)`
+  (full scan when no hint, otherwise a `hint_window`-sized local search
+  around the hint's baked index, per spec §26), `sample(offset)`,
+  `tangent_at(offset)`, `right_at(offset)`, `curvature_at(offset)` (a 3-point
+  circle fit over `curvature_window`), and `max_curvature_in(offset,
+  distance)`. Subclasses that fully replace `_ready()` to author their own
+  curve (`hairpin_racing_line.gd`, `track_01_line.gd`) still work: baking
+  never depends on `RacingLine._ready()` running, only on `curve` being set
+  by the time a query first runs.
+- `Checkpoint` (`track/elements/checkpoint.gd`) is an `Area3D` (layer 5, mask
+  2) with a `RespawnPoint` `Marker3D` child. It never looks upward for its
+  own order/offset; `Track._configure_checkpoints()` calls
+  `checkpoint.configure(index, racing_line)` once per child in `_ready()`
+  (guaranteed to run after `RacingLine`'s own `_ready()`, since children
+  ready before parents). It emits a generic `body_passed(body, index)` so
+  `Track` never references `Kart`; `LapTracker` (race/) does the cast.
+- `Track` (`track/track.gd`) now also exposes `get_checkpoints()`,
+  `get_racing_line()`, `get_start_grid()` (padded to 8 slots via
+  `StartGrid.generate()` if the scene has fewer), `get_item_box_anchors()`,
+  and `get_lap_length()`.
+- New elements: `ItemBox` (hide/respawn-on-tick + generic `collected(body)`
+  signal only; item effects are Phase 7), `Hazard` + `HazardRelay` (mirrors
+  `KillZone`/`RespawnSystem`'s bridge pattern for `KartController.apply_hit()`),
+  `MovingObstacle` (an `AnimatableBody3D` that samples a `Path3D`'s baked
+  curve directly each tick rather than parenting under a `PathFollow3D`,
+  which would force it under the path node instead of carrying its own
+  mesh/collision), and `TrackShortcut` (`track/elements/shortcut.gd` — named
+  `TrackShortcut`, not `Shortcut`, because that collides with Godot's
+  built-in `Resource`-based `Shortcut` class used by `InputMap`/`BaseButton`;
+  GDScript's static analyzer resolves the built-in one and rejects a `Node`
+  being cast to it). `TrackShortcut.progress_at(global_pos)` interpolates
+  `entry_offset..exit_offset` from the kart's position on `alt_curve`;
+  `PositionTracker` substitutes this for the normal checkpoint-window
+  progress while a kart is inside the shortcut's `TriggerArea`.
+- `track_validator.gd` now runs every §15.5 check for real (item-box count
+  and 8 m proximity, kill-zone AABB coverage of the track's own geometry)
+  instead of skipping two of them with a warning.
+- `track/tracks/track_01_ridgeline_circuit/` is the Vertical Slice track
+  (spec §15.7): see the dedicated section below.
 
 ### Items and AI
 
@@ -381,11 +452,57 @@ A track root uses `track/track.gd` and requires these direct children:
   `OffroadZones`, `Hazards`, `KillZones`, `MovingObstacles`, `Shortcuts`)
 
 Runtime `_ready()` validation reports missing required nodes with `push_error`.
-The headless validator additionally checks the Phase 0 facts it can prove:
-checkpoint count, grid count and proximity to the racing line, respawn marker
-presence and ground contact, increasing checkpoint offsets, and racing-line
-closure. Checks requiring item boxes or kill-zone coverage are reported as
-Phase-later warnings rather than false failures.
+The headless validator (`track/track_validator.gd`, `tools/validate_tracks.sh`)
+runs the full spec §15.5 checklist: checkpoint count and monotonically
+increasing offsets, grid count and proximity to the racing line, respawn
+marker presence and ground contact, racing-line closure, item-box count and
+proximity, and kill-zone coverage of the track's own geometry footprint (an
+axis-aligned-rectangle union/containment check against every `CollisionShape3D`
+under `Geometry` and `KillZones`, not exact polygon coverage).
+
+## Track 01 — "Ridgeline Circuit" (`track/tracks/track_01_ridgeline_circuit/`)
+
+The Vertical Slice greybox (spec §15.7): a ~1,499 m closed loop (two 680 m
+straights joined by two 20 m-radius 180-degree end turns) built the same way
+as `test_hairpin` — a `RacingLine` subclass (`track_01_line.gd`) constructs
+its `Curve3D` from arc points at `_ready()` — but everything else about it
+(road, walls, checkpoints, and every other element) is authored to spec
+§15.7's feature list:
+
+- `Track01` (`track_01_track.gd`, `extends TrackRoot`) overrides `_ready()`
+  to call `super._ready()` (validates the contract, configures checkpoints)
+  and then builds `Geometry`'s road and wall meshes/collision procedurally
+  from the now-baked `RacingLine` via `tools/track_builder.gd`'s
+  `build_road_segments()`/`add_box_segment()`. This has to happen in the
+  *track root's* `_ready()`, not `Geometry`'s own script: `Geometry` and
+  `RacingLine` are sibling children, and Godot readies children in scene
+  order, not by whichever one a script "needs" — only the parent is
+  guaranteed to run after every child.
+- The outer wall ribbon skips the last ~9% of the lap (the closing east
+  arc), producing the mandatory guardrail-less cliff corner over the shared
+  kill-zone plane below.
+- A single S-curve chicane sits on the outbound straight; the west end-turn
+  is the mandatory drift-Tier-3 hairpin.
+- `TrackShortcut` cuts directly across the hairpin (a 40 m chord vs. the
+  arc's ~63 m sweep) over a `dirt.tres` `OffroadZone`; its trigger box is
+  sized so a kart actually driving the paved hairpin (which bulges 20 m
+  further out) never enters it, keeping the deterministic auto-drive lap
+  test unaffected by a feature it never intentionally uses.
+- Two `MovingObstacle`s sweep across the return straight but are centered
+  off the exact racing line (biased toward one edge of the 14 m road) so a
+  scripted/line-following driver mostly clears them; a human or future AI
+  drifting wide still has to react to them.
+- 3 boost pads, 1 jump pad (landing on continuous flat road, not a gap — a
+  greybox simplification so the mandatory jump/trick feature doesn't add
+  auto-drive-test flakiness), 3 item-box rows of 5/5/4, 8 checkpoints, and 8
+  start-grid slots round out the §15.7 checklist.
+- Checkpoint gate `CollisionShape3D` orientation matters and is *not* the
+  scene default: `checkpoint.tscn`'s own shape (14 m wide on X, 2 m thick on
+  Z) is correct only where travel runs along Z (the two arc apexes); every
+  checkpoint on the two X-direction straights overrides it with the
+  transposed box (2 m thick on X, 14 m wide on Z) so the gate is thin across
+  the direction of travel and wide across the road, matching `test_loop`'s
+  established convention.
 
 ## Testing and verification
 
@@ -393,11 +510,18 @@ Phase-later warnings rather than false failures.
 - Simulation: `tools/run_sim.sh` is a successful Phase 0 placeholder and states
   that simulation begins in Phase 6.
 - Track contract: `tools/validate_tracks.sh` runs `track/track_validator.gd`
-  headlessly against both `test_loop.tscn` and `test_loop_hills.tscn`.
+  headlessly against `test_loop.tscn`, `test_loop_hills.tscn`,
+  `test_hairpin.tscn`, and `track_01_ridgeline_circuit.tscn`.
 - Parse/import: `/opt/homebrew/bin/godot --headless --path . --import` runs
   before the final parse check; generated `*.uid` files are committed.
 - Phase 2 integration tests exercise mass contact, terrain cap/recovery, wall
   BUMP/recovery, ledge airborne/landing, and kill-zone respawn using real scenes.
+- Phase 4 integration tests drive the real Track 01 scene end to end: a
+  3-lap `ScriptedInputProvider` (drift mode) run against `LapTracker` proves
+  the jump pad/shortcut/moving-obstacles/S-curve/hairpin combination doesn't
+  break lap completion, plus dedicated checks for wrong-way set/clear,
+  skipped-checkpoint lap withholding, and cliff-fall respawn resolving to the
+  last passed checkpoint's `RespawnPoint`.
 
 ## Decision log
 
@@ -562,3 +686,60 @@ Phase-later warnings rather than false failures.
   that ambiguity entirely.
 - HOP→NONE also on button release during hop: a tap is a hop, not a drift;
   avoids zero-charge releases.
+
+### Phase 4
+
+- `LapTracker.evaluate_checkpoint_transition()` and `PositionTracker.rank_karts()`
+  (plus its private `_reorder_with_hysteresis()` step) are `static` and take
+  only plain ids/dictionaries/enums — no `KartController` — so the sequential
+  checkpoint rule and the ranking/hysteresis behavior are unit-tested without
+  a scene tree at all, the same "pure core, thin instance wrapper" split
+  Phase 3 used for `DriftController`/`BoostController`.
+- `LapTracker.register_kart()` seeds `next_checkpoint_index = 1`, not `0`.
+  Checkpoint 0 is both the first gate a kart can physically overlap at the
+  starting grid *and* the lap-completing gate; seeding at 0 would let the
+  opening-grid overlap itself complete "lap 1" with zero checkpoints
+  actually driven. Seeding at 1 makes that overlap match the
+  re-entering-the-previous-checkpoint rule (ignored) instead.
+- `RacingLine` cannot bake in its own `_ready()`, because `test_hairpin` and
+  `track_01` both fully override `_ready()` on subclasses (to author their
+  own `Curve3D`) without calling `super._ready()`. Baking is instead lazy —
+  every public query calls `_ensure_baked()` — so it works regardless of
+  which `_ready()` set `curve`, or whether one ran at all.
+- `Track._configure_checkpoints()` (assigning `index`/`offset` per child)
+  lives in `Track._ready()`, not `Checkpoint._ready()`, for the same
+  ordering reason: `Track` is guaranteed to ready *after* `RacingLine` (its
+  own child), so `racing_line.offset_at()` is always safe to call there;
+  `Checkpoint` has no such guarantee relative to its `RacingLine` sibling,
+  and looking upward for it would also violate spec §29 rule 5.
+- `ItemBox` toggles its `CollisionShape3D.disabled` via `set_deferred()`
+  instead of a direct assignment inside its own `body_entered` handler.
+  Godot's physics server asserts (`flushing_queries`) if an `Area3D`'s
+  collision state changes synchronously while it is still the one flushing
+  that very query's callbacks; deferring one frame is the same fix
+  `CharacterBody3D`-adjacent code already uses elsewhere for this class of
+  reentrancy.
+- `MovingObstacle` samples its `Path3D`'s baked curve directly every physics
+  tick instead of using an actual child `PathFollow3D` node. `PathFollow3D`
+  must be parented under the `Path3D` it follows, which would put the
+  obstacle's own mesh/collision under a node it does not otherwise own;
+  reading `curve.sample_baked()` gets the identical position with a plain
+  sibling-node scene layout.
+- The new `Shortcut` track element is named `TrackShortcut` in code (files
+  stay `shortcut.gd`/`shortcut.tscn`): Godot ships a built-in `Shortcut`
+  `Resource` (used by `InputMap`/`BaseButton`, and by GUT's own editor
+  panels), and GDScript's static type resolver bound the name to that
+  built-in instead of the new `Node3D`-based class, hard-failing every
+  `instantiate() as Shortcut` cast with "Cannot convert from Node to
+  Shortcut". Renaming the `class_name` was the only fix; a global class name
+  collision like this produces no warning at define time.
+- Track 01's road/wall geometry is generated by the *track script*
+  (`Track01._build_geometry()`), not authored as static mesh/collision nodes
+  in the `.tscn`, and not a per-child-node script on `Geometry` either (see
+  the Track 01 section above for why the latter can't rely on `RacingLine`
+  being baked yet). Every other curve in this project (including this one)
+  is also built from GDScript rather than a hand-serialized `Curve3D`
+  resource in a `.tscn` — the text-scene format for `Curve3D`'s internal
+  `_data` layout is undocumented, and an early draft of Track 01's moving
+  obstacle paths and shortcut alt-curve, written by hand, produced scenes
+  that failed to parse.
