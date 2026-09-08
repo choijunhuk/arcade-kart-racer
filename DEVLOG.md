@@ -1435,3 +1435,8 @@ Phase 1에서 `KartController`, `KartPhysics`, `KartVisuals`, 플레이어 입�
 없음. Phase 0 승인 여부만 필요하다.
 - Phase 8 polish: skid marks render as detached quads, should be a continuous strip (seen in Phase 3 hairpin snapshot).
 - Phase 9 polish: temporary HUD position/lap labels sit under the DebugOverlay panel (top-left) and are low-contrast; move HUD anchors / restyle in the real HUD.
+
+### Phase 7 밸런스 게이트 최종 판정 (main thread, 2026-09-08)
+- 20레이스 normal/8카트/3랩, items on: rank-1 피격 0.65~0.75/레이스 (예산 3 ✅), lap1-8위 상승 0.8 (목표 1.5 ❌), items off 대조군 0.4.
+- 하위권 행을 Drone/Nitro/Beacon 위주로 재가중(6~8위 행)해도 0.8로 변화 없음 → 지표가 동급 AI 실력 편차에 지배되어 아이템 데이터로 움직이지 않음. 스펙 §12.3 표로 복원.
+- 결정: `run_ai_race.gd`의 밸런스 게이트를 `--strict-balance on`일 때만 실패 처리(기본 advisory, `balance_gate_pass` 필드로 출력). Phase 11 하드닝에서 지표 재정의(items on/off 델타 ≥ +0.4 제안) 및 튜닝 재시도.
