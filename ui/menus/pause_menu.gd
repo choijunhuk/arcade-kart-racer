@@ -18,6 +18,24 @@ func _ready() -> void:
 	visible = false
 
 
+## Owns the pause toggle so it keeps working while the SceneTree is paused;
+## RaceManager and its gameplay children stay PAUSABLE (spec §6.1 rule 2).
+func _unhandled_input(event: InputEvent) -> void:
+	if _manager == null or not event.is_action_pressed(&"pause"):
+		return
+	if _manager.get_state() == RaceState.PAUSED:
+		_manager.resume_race()
+	else:
+		_manager.pause_race()
+	get_viewport().set_input_as_handled()
+
+
+## Attaches the owning race manager so pause can be toggled before the
+## overlay is first shown.
+func bind(manager: RaceManager) -> void:
+	_manager = manager
+
+
 ## Displays the overlay and enters keyboard/gamepad focus at Continue.
 func show_menu(manager: RaceManager) -> void:
 	_manager = manager

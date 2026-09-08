@@ -13,6 +13,8 @@ func test_transition_table_accepts_only_the_race_flow_edges() -> void:
 	assert_true(bool(script.call("can_transition", RaceState.FINISHING, RaceState.RESULTS)))
 	assert_false(bool(script.call("can_transition", RaceState.LOADING, RaceState.RESULTS)))
 	assert_false(bool(script.call("can_transition", RaceState.RESULTS, RaceState.RACING)))
+	assert_false(bool(script.call("can_transition", RaceState.RACING, RaceState.COUNTDOWN)))
+	assert_false(bool(script.call("can_transition", RaceState.RESULTS, RaceState.PAUSED)))
 
 
 func test_pause_edges_exist_only_for_countdown_and_racing() -> void:

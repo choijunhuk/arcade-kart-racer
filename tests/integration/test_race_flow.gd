@@ -7,6 +7,7 @@ const COUNTDOWN_TIMEOUT_TICKS: int = 240
 const RACE_TIMEOUT_TICKS: int = 7200
 const PAUSE_OBSERVATION_TICKS: int = 30
 const POSITION_EPSILON: float = 0.001
+const MOVEMENT_WARMUP_TICKS: int = 90
 
 var _state_history: Array[int] = []
 var _race_started_count: int = 0
@@ -83,6 +84,40 @@ func test_four_scripted_karts_complete_pause_results_and_restart_cycle() -> void
 	var tracker: LapTracker = manager.get_node("LapTracker") as LapTracker
 	for kart: KartController in restarted_karts:
 		assert_eq(tracker.get_lap(kart), 0)
+
+
+func test_pause_freezes_the_player_kart_and_resume_restores_its_motion() -> void:
+	var manager: Node = _make_race_manager()
+	if manager == null:
+		return
+	var config: RaceConfig = _make_test_config()
+	manager.call("configure", config, _make_scripted_provider)
+	add_child_autofree(manager)
+	await wait_physics_frames(1)
+
+	await _wait_for_state(manager, RaceState.RACING, COUNTDOWN_TIMEOUT_TICKS)
+	# Let any start-line wheelspin penalty clear so the kart is genuinely
+	# moving before we sample its pre-pause state (spec §6.1 rule 2).
+	await wait_physics_frames(MOVEMENT_WARMUP_TICKS)
+
+	var karts: Array[KartController] = manager.call("get_karts") as Array[KartController]
+	var player_kart: KartController = karts[0]
+	var pre_pause_position: Vector3 = player_kart.global_position
+	var pre_pause_state: int = player_kart.get_state()
+
+	manager.call("pause_race")
+	assert_eq(int(manager.call("get_state")), RaceState.PAUSED)
+	await wait_physics_frames(PAUSE_OBSERVATION_TICKS)
+	assert_almost_eq(player_kart.global_position.distance_to(pre_pause_position), 0.0, POSITION_EPSILON,
+		"kart must not move while the race is paused")
+	assert_eq(player_kart.get_state(), pre_pause_state, "kart state must not change while paused")
+
+	manager.call("resume_race")
+	assert_eq(int(manager.call("get_state")), RaceState.RACING)
+	var resumed_position: Vector3 = player_kart.global_position
+	await wait_physics_frames(PAUSE_OBSERVATION_TICKS)
+	assert_gt(player_kart.global_position.distance_to(resumed_position), POSITION_EPSILON,
+		"kart must resume moving once the race unpauses")
 
 
 func _make_race_manager() -> Node:

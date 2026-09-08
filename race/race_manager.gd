@@ -49,7 +49,6 @@ var _final_entries: Array[RaceResults.Entry] = []
 
 
 func _ready() -> void:
-	process_mode = Node.PROCESS_MODE_ALWAYS
 	if _config == null:
 		_config = GameState.pending_race_config
 	if _config == null:
@@ -60,19 +59,12 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	match _state:
 		RaceState.COUNTDOWN:
-			if _countdown.advance(delta):
-				_transition_to(RaceState.RACING)
+			# Deferred so every kart's own _physics_process (which refreshes its
+			# input snapshot) has already run this tick before Countdown samples
+			# start input; RaceManager runs before its Karts children (spec §6.1).
+			_advance_countdown.call_deferred(delta)
 		RaceState.FINISHING:
 			_advance_finishing(delta)
-
-
-func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed(&"pause"):
-		if _state == RaceState.PAUSED:
-			resume_race()
-		else:
-			pause_race()
-		get_viewport().set_input_as_handled()
 
 
 ## Supplies a race config before entering the tree and an optional player
@@ -153,6 +145,7 @@ func _begin_loading(is_restart: bool) -> void:
 	_countdown.setup(tuning, _karts)
 	_camera.set_target(_player_kart)
 	_hud.bind(_player_kart, _lap_tracker, _position_tracker, _karts.size(), _config.laps)
+	_pause_menu.bind(self)
 	_pause_menu.hide_menu()
 	_results_screen.hide_results()
 	_transition_to(RaceState.COUNTDOWN)
@@ -236,6 +229,13 @@ func _on_kart_finished(kart: KartController, finish_time_seconds: float) -> void
 	kart.set_finished(_make_scripted_provider(kart, FINISHED_SPEED_RATIO))
 	if kart == _player_kart and _state == RaceState.RACING:
 		_transition_to(RaceState.FINISHING)
+
+
+func _advance_countdown(delta: float) -> void:
+	if _state != RaceState.COUNTDOWN:
+		return
+	if _countdown.advance(delta):
+		_transition_to(RaceState.RACING)
 
 
 func _advance_finishing(delta: float) -> void:
