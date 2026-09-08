@@ -4,6 +4,8 @@ extends CharacterBody3D
 ## camera/HUD/AI. Never reads the `Input` singleton directly (spec §23);
 ## drives from whatever `InputProvider` is installed. Spec: §8, §9.3.
 signal state_changed(old_state: int, new_state: int)
+signal launched()
+signal kart_contacted()
 const ENGINE_BOOST_PITCH_ADD: float = 0.3
 @export var kart_data: KartData = preload("res://data/karts/medium.tres")
 @export var driver_data: DriverData
@@ -191,6 +193,7 @@ func launch(local_velocity: Vector3) -> void:
 	_physics.launch(local_velocity)
 	_ungrounded_ticks = tuning.airborne_grace_ticks + 1
 	_set_state(KartState.AIRBORNE)
+	launched.emit()
 ## Requests a boost from a track or future item source.
 func request_boost(spec: BoostSpecData, source: StringName) -> void:
 	boost_controller.request(spec, source)

@@ -13,6 +13,9 @@ func _ready() -> void:
 	super._ready()
 	GameState.reset_session()
 	GameState.current_mode = GameState.Mode.MENU
+	AudioManager.set_music_ducked(false)
+	AudioManager.set_final_lap(false)
+	AudioManager.play_bgm(&"menu")
 	_play_button.pressed.connect(go_to.bind(MODE_SELECT_PATH))
 	_settings_button.pressed.connect(go_to.bind(SETTINGS_PATH))
 	_quit_button.pressed.connect(_quit_game)

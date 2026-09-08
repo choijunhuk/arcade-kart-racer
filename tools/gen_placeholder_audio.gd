@@ -42,11 +42,39 @@ const BGM_TRANSPOSE: Dictionary[StringName, int] = {&"menu": 0, &"race": 7, &"re
 const ITEM_BASE_HZ: float = 240.0
 const ITEM_STEP_HZ: float = 95.0
 const HIT_PITCH_RATIO: float = 0.65
+const ENGINE_NOISE_LOW_HZ: float = 40.0
+const ENGINE_NOISE_HIGH_HZ: float = 700.0
+const ENGINE_NOISE_GAIN: float = 0.008
+const SQUEAL_NOISE_GAIN: float = 0.04
+const ENGINE_SAW_GAIN: float = 0.18
+const STINGER_SECONDS: float = 0.7
+const BOOST_SECONDS: float = 0.45
+const CLICK_SECONDS: float = 0.06
+const LOW_SWEEP_THRESHOLD_HZ: float = 400.0
+const NOISY_TONE_THRESHOLD_HZ: float = 180.0
+const FALLING_SWEEP_START: float = 1.2
+const FALLING_SWEEP_END: float = 0.5
+const RISING_SWEEP_START: float = 0.8
+const RISING_SWEEP_END: float = 1.3
+const ALARM_PERIOD_SECONDS: float = 0.2
+const ALARM_HALF_SECONDS: float = 0.1
+const ALARM_HIGH_RATIO: float = 1.5
+const NOISE_SMOOTHING: float = 0.3
+const WHOOSH_NOISE_GAIN: float = 0.8
+const THUD_NOISE_GAIN: float = 0.4
+const TONE_GAIN: float = 0.4
+const ENVELOPE_POWER: float = 2.0
+const ARPEGGIO_GAIN: float = 0.22
+const BASS_GAIN: float = 0.14
+const ENGINE_VOLUME_DB: float = -12.0
+const DEFAULT_VOLUME_DB: float = -6.0
+const IMPACT_PITCH_VARIANCE: float = 0.025
+const IMPORT_LOOP_FORWARD: int = 2
+const IMPORT_LOOP_DISABLED: int = 1
 
 var _failed: bool = false
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _sfx_ids: Array[StringName] = []
-var _loop_ids: Array[StringName] = [&"engine", &"drift_squeal"]
 
 
 func _initialize() -> void:
@@ -84,16 +112,16 @@ func _write_loop(id: StringName, squeal: bool) -> void:
 	for partial: int in range(PARTIALS):
 		var frequency: float = roundf(_rng.randf_range(SQUEAL_LOW_HZ, SQUEAL_LOW_HZ + SQUEAL_BAND_HZ))
 		if not squeal:
-			frequency = roundf(_rng.randf_range(40.0, 700.0))
+			frequency = roundf(_rng.randf_range(ENGINE_NOISE_LOW_HZ, ENGINE_NOISE_HIGH_HZ))
 		var phase: float = _rng.randf_range(0.0, TAU)
 		for index: int in range(count):
 			var time: float = float(index) / SAMPLE_RATE
-			samples[index] += sin(TAU * frequency * time + phase) * (0.04 if squeal else 0.008)
+			samples[index] += sin(TAU * frequency * time + phase) * (SQUEAL_NOISE_GAIN if squeal else ENGINE_NOISE_GAIN)
 	if not squeal:
 		for harmonic: int in range(1, SAW_PARTIALS + 1):
 			for index: int in range(count):
 				var time: float = float(index) / SAMPLE_RATE
-				samples[index] += sin(TAU * ENGINE_HZ * harmonic * time) * 0.18 / harmonic
+				samples[index] += sin(TAU * ENGINE_HZ * harmonic * time) * ENGINE_SAW_GAIN / harmonic
 	_save_wav(id, samples, true)
 	_sfx_ids.append(id)
 
@@ -101,11 +129,11 @@ func _write_loop(id: StringName, squeal: bool) -> void:
 func _write_tone(id: StringName, frequency: float) -> void:
 	var duration: float = SHORT_SECONDS
 	if id in [&"finish", &"final_lap", &"lap", &"threat_warning"]:
-		duration = 0.7
+		duration = STINGER_SECONDS
 	elif id == &"boost":
-		duration = 0.45
+		duration = BOOST_SECONDS
 	elif id in [&"menu_move", &"roulette_tick"]:
-		duration = 0.06
+		duration = CLICK_SECONDS
 	var samples: PackedFloat32Array = PackedFloat32Array()
 	samples.resize(int(duration * SAMPLE_RATE))
 	var phase: float = 0.0
@@ -113,14 +141,14 @@ func _write_tone(id: StringName, frequency: float) -> void:
 	for index: int in range(samples.size()):
 		var time: float = float(index) / SAMPLE_RATE
 		var progress: float = time / duration
-		var sweep: float = lerpf(1.2, 0.5, progress) if frequency < 400.0 else lerpf(0.8, 1.3, progress)
+		var sweep: float = lerpf(FALLING_SWEEP_START, FALLING_SWEEP_END, progress) if frequency < LOW_SWEEP_THRESHOLD_HZ else lerpf(RISING_SWEEP_START, RISING_SWEEP_END, progress)
 		if id == &"threat_warning":
-			sweep = 1.0 if fmod(time, 0.2) < 0.1 else 1.5
+			sweep = 1.0 if fmod(time, ALARM_PERIOD_SECONDS) < ALARM_HALF_SECONDS else ALARM_HIGH_RATIO
 		phase += TAU * frequency * sweep / SAMPLE_RATE
-		filtered_noise = lerpf(filtered_noise, _rng.randf_range(-1.0, 1.0), 0.3)
-		var noise_gain: float = 0.8 if id == &"boost" else (0.4 if frequency < 180.0 else 0.0)
-		var envelope: float = minf(1.0, time / EDGE_SECONDS) * pow(1.0 - progress, 2.0)
-		samples[index] = (sin(phase) * 0.4 + filtered_noise * noise_gain) * envelope
+		filtered_noise = lerpf(filtered_noise, _rng.randf_range(-1.0, 1.0), NOISE_SMOOTHING)
+		var noise_gain: float = WHOOSH_NOISE_GAIN if id == &"boost" else (THUD_NOISE_GAIN if frequency < NOISY_TONE_THRESHOLD_HZ else 0.0)
+		var envelope: float = minf(1.0, time / EDGE_SECONDS) * pow(1.0 - progress, ENVELOPE_POWER)
+		samples[index] = (sin(phase) * TONE_GAIN + filtered_noise * noise_gain) * envelope
 	_save_wav(id, samples, false)
 	_sfx_ids.append(id)
 
@@ -138,14 +166,13 @@ func _write_bgm(id: StringName, tempo: float) -> void:
 		var root_note: int = ROOTS[bar % ROOTS.size()] + BGM_TRANSPOSE[id]
 		var note_time: float = fmod(time, note_seconds)
 		var frequency: float = A4_HZ * pow(2.0, (root_note + ARPEGGIO[note % ARPEGGIO.size()] - A4_MIDI) / SEMITONES)
-		var envelope: float = minf(1.0, note_time / EDGE_SECONDS) * pow(1.0 - note_time / note_seconds, 2.0)
+		var envelope: float = minf(1.0, note_time / EDGE_SECONDS) * pow(1.0 - note_time / note_seconds, ENVELOPE_POWER)
 		var bass_hz: float = A4_HZ * pow(2.0, (root_note - SEMITONES - A4_MIDI) / SEMITONES)
 		var beat_time: float = fmod(time, beat_seconds)
 		var bass_envelope: float = sin(PI * beat_time / beat_seconds)
 		var edge: float = minf(1.0, minf(time, float(count - 1 - index) / SAMPLE_RATE) / EDGE_SECONDS)
-		samples[index] = (sin(TAU * frequency * note_time) * envelope * 0.22 + sin(TAU * bass_hz * beat_time) * bass_envelope * 0.14) * edge
+		samples[index] = (sin(TAU * frequency * note_time) * envelope * ARPEGGIO_GAIN + sin(TAU * bass_hz * beat_time) * bass_envelope * BASS_GAIN) * edge
 	_save_wav(id, samples, true)
-	_loop_ids.append(id)
 
 
 func _save_wav(id: StringName, samples: PackedFloat32Array, looped: bool) -> void:
@@ -170,7 +197,7 @@ func _save_wav(id: StringName, samples: PackedFloat32Array, looped: bool) -> voi
 		config.load(path + ".import")
 	config.set_value("remap", "importer", "wav")
 	config.set_value("remap", "type", "AudioStreamWAV")
-	config.set_value("params", "edit/loop_mode", 2 if looped else 1)
+	config.set_value("params", "edit/loop_mode", IMPORT_LOOP_FORWARD if looped else IMPORT_LOOP_DISABLED)
 	config.set_value("params", "edit/loop_begin", 0)
 	config.set_value("params", "edit/loop_end", samples.size())
 	config.set_value("params", "compress/mode", 0)
@@ -189,11 +216,11 @@ func _write_library(file_name: String, ids: Array[StringName]) -> void:
 		text += '&"%s": ExtResource("%d")%s\n' % [ids[index], index + 2, ',' if index < ids.size() - 1 else '']
 	text += '})\nvolume_db = Dictionary[StringName, float]({\n'
 	for index: int in range(ids.size()):
-		var gain: float = -12.0 if ids[index] == &"engine" else -6.0
+		var gain: float = ENGINE_VOLUME_DB if ids[index] == &"engine" else DEFAULT_VOLUME_DB
 		text += '&"%s": %s%s\n' % [ids[index], gain, ',' if index < ids.size() - 1 else '']
 	text += '})\npitch_variance = Dictionary[StringName, float]({\n'
 	for index: int in range(ids.size()):
-		var variance: float = 0.025 if String(ids[index]).begins_with("impact_") else 0.0
+		var variance: float = IMPACT_PITCH_VARIANCE if String(ids[index]).begins_with("impact_") else 0.0
 		text += '&"%s": %s%s\n' % [ids[index], variance, ',' if index < ids.size() - 1 else '']
 	text += '})\n'
 	var file: FileAccess = FileAccess.open("res://data/audio/" + file_name + ".tres", FileAccess.WRITE)

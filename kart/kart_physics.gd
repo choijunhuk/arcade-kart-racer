@@ -76,6 +76,7 @@ var _wall_contact_active: bool = false
 var _ground_ignore_ticks: int = 0
 
 signal wall_head_on()
+signal wall_impacted()
 signal landed(vertical_speed: float)
 
 
@@ -303,6 +304,7 @@ func _resolve_wall_collisions(dt: float, incoming_velocity: Vector3) -> void:
 		var travel_dir: Vector3 = incoming_velocity.normalized() if incoming_velocity.length() > 0.01 else -_body.global_transform.basis.z
 		var incidence_degrees: float = rad_to_deg(asin(clampf(absf(travel_dir.dot(normal)), 0.0, 1.0)))
 		var response: WallResponse = compute_wall_response(incidence_degrees, _tuning)
+		wall_impacted.emit()
 		speed *= response.speed_mult
 		lateral *= response.speed_mult
 		if response.bounce_mult > 0.0:
@@ -387,7 +389,6 @@ func hop(vertical_impulse: float) -> void:
 	_vertical_speed = maxf(_vertical_speed, vertical_impulse)
 	_ground_ignore_ticks = maxi(_ground_ignore_ticks, _tuning.airborne_grace_ticks + 1)
 	grounded = false
-
 
 ## Replaces local motion with a launch vector where -Z is forward and +Y is up.
 func launch(local_velocity: Vector3) -> void:

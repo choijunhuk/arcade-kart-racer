@@ -15,6 +15,7 @@ var _manager: RaceManager
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	UiAudio.attach(_panel)
 	_continue_button.pressed.connect(_on_continue_pressed)
 	_restart_button.pressed.connect(_on_restart_pressed)
 	_settings_button.pressed.connect(_on_settings_pressed)

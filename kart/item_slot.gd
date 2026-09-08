@@ -3,12 +3,19 @@ extends Node
 
 ## Holds one item, a tick-driven roulette, and one pending input-edge request.
 
+signal roulette_started()
+signal roulette_ticked()
+signal roulette_stopped()
+
+const AUDIO_TICK_SECONDS: float = 0.1
+
 var roulette_active: bool = false
 
 var _item: ItemData
 var _roulette: ItemRoulette = ItemRoulette.new()
 var _use_requested: bool = false
 var _last_input_tick: int = -1
+var _audio_tick_elapsed: float = 0.0
 
 
 ## Replaces the held item immediately and ends any active roulette.
@@ -31,14 +38,25 @@ func begin_roulette(result: ItemData) -> void:
 	_use_requested = false
 	_roulette.start(result)
 	roulette_active = _roulette.is_active()
+	_audio_tick_elapsed = 0.0
+	if roulette_active:
+		roulette_started.emit()
 
 
 ## Advances roulette state and returns true on the reveal tick.
 func tick_roulette(dt: float) -> bool:
-	if not roulette_active or not _roulette.tick(dt):
+	if not roulette_active:
+		return false
+	var stopped: bool = _roulette.tick(dt)
+	_audio_tick_elapsed += maxf(dt, 0.0)
+	if _audio_tick_elapsed >= AUDIO_TICK_SECONDS and not stopped:
+		_audio_tick_elapsed = fmod(_audio_tick_elapsed, AUDIO_TICK_SECONDS)
+		roulette_ticked.emit()
+	if not stopped:
 		return false
 	roulette_active = false
 	_item = _roulette.get_result()
+	roulette_stopped.emit()
 	return true
 
 

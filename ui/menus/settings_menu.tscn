@@ -107,6 +107,10 @@ max_value = 1.0
 step = 0.05
 value = 1.0
 
+[node name="FinalLapPitchToggle" type="CheckButton" parent="Panel/VBox/Tabs/Audio"]
+layout_mode = 2
+text = "Final lap music speed-up"
+
 [node name="Video" type="VBoxContainer" parent="Panel/VBox/Tabs"]
 layout_mode = 2
 theme_override_constants/separation = 6

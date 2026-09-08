@@ -66,6 +66,7 @@ var _ai_controllers: Array[AIController] = []
 var _ai_context: AIRaceContext
 var _sandbox_item_index: int = 0
 func _ready() -> void:
+	(_kart.get_node("KartAudio") as KartAudio).set_player_audio(true)
 	_track = $TestLoop as TrackRoot
 	_kart.set_input_provider(_input_provider)
 	_camera.set_target(_kart)

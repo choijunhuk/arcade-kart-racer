@@ -5,12 +5,15 @@ extends Control
 
 
 func _ready() -> void:
+	UiAudio.attach(self)
+	_start_menu_music.call_deferred()
 	if get_parent() == get_tree().root:
 		GameState.current_mode = GameState.Mode.MENU
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not back_scene_path.is_empty() and event.is_action_pressed(&"ui_cancel"):
+		UiAudio.play_back()
 		go_back()
 		get_viewport().set_input_as_handled()
 
@@ -70,3 +73,10 @@ func wire_grid_focus(controls: Array[Control], columns: int) -> void:
 		controls[index].focus_neighbor_right = controls[index].get_path_to(controls[right_index])
 		controls[index].focus_neighbor_top = controls[index].get_path_to(controls[up_index])
 		controls[index].focus_neighbor_bottom = controls[index].get_path_to(controls[down_index])
+
+
+func _start_menu_music() -> void:
+	if get_parent() == get_tree().root:
+		AudioManager.set_music_ducked(false)
+		AudioManager.set_final_lap(false)
+		AudioManager.play_bgm(&"menu")
