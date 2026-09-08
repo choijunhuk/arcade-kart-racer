@@ -48,6 +48,14 @@ func test_network_mode_skips_time_scale_change() -> void:
 	assert_almost_eq(Engine.time_scale, 1.0, EPSILON)
 
 
+func test_headless_item_event_does_not_change_simulation_time_scale() -> void:
+	var hit_stop: Node = _make_hit_stop(true)
+	if hit_stop == null:
+		return
+	EventBus.item_hit.emit(null, null, &"test_item")
+	assert_almost_eq(Engine.time_scale, 1.0, EPSILON)
+
+
 func _make_hit_stop(enabled: bool) -> Node:
 	var script: GDScript = _require_script()
 	if script == null:

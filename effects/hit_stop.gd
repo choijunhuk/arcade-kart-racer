@@ -69,4 +69,6 @@ func _restore() -> void:
 
 
 func _on_item_hit(_source_kart: Node, _target_kart: Node, _item_id: StringName) -> void:
+	if DisplayServer.get_name() == "headless":
+		return
 	request(GameState.is_networked)
