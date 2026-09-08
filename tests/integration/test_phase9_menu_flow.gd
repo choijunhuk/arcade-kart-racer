@@ -137,10 +137,62 @@ func test_bootstrap_scene_contains_the_real_main_menu() -> void:
 	assert_not_null(bootstrap.get_node_or_null("MainMenu/Panel/VBox/PlayButton"))
 
 
+func test_gamepad_only_full_selection_flow_reaches_countdown_with_chosen_config() -> void:
+	var screen: Control = _instantiate_control(MAIN_MENU_PATH)
+	add_child_autofree(screen)
+	await wait_process_frames(1)
+	screen = await _accept_and_open(screen, MODE_SELECT_PATH)
+	screen = await _accept_and_open(screen, DRIVER_SELECT_PATH)
+	screen = await _accept_and_open(screen, KART_SELECT_PATH)
+	screen = await _accept_and_open(screen, TRACK_SELECT_PATH)
+	screen = await _accept_and_open(screen, DIFFICULTY_SELECT_PATH)
+	await _press_action(&"ui_accept")
+	assert_eq(_last_scene_path, "res://race/race.tscn")
+	screen.free()
+	await wait_process_frames(1)
+	var manager: RaceManager = preload("res://race/race.tscn").instantiate() as RaceManager
+	add_child_autofree(manager)
+	await wait_physics_frames(1)
+
+	assert_eq(manager.get_state(), RaceState.COUNTDOWN)
+	assert_eq(GameState.pending_race_config.player_driver.id, &"aurora_vale")
+	assert_eq(GameState.pending_race_config.player_kart.id, &"heavy")
+	assert_eq(GameState.pending_race_config.track.id, &"track_01_ridgeline_circuit")
+	assert_eq(GameState.pending_race_config.ai_difficulty.id, &"easy")
+	assert_eq(manager.get_karts()[0].get_driver_data().id, &"aurora_vale")
+	assert_eq(manager.get_karts()[0].get_kart_data().id, &"heavy")
+
+
+func test_ui_cancel_returns_from_mode_select_to_main_menu() -> void:
+	var screen: Control = _instantiate_control(MODE_SELECT_PATH)
+	add_child_autofree(screen)
+	await wait_process_frames(1)
+	var cancel: InputEventAction = InputEventAction.new()
+	cancel.action = &"ui_cancel"
+	cancel.pressed = true
+	assert_eq(str(screen.get("back_scene_path")), MAIN_MENU_PATH)
+	assert_true(cancel.is_action_pressed(&"ui_cancel"))
+
+	screen.call("_unhandled_input", cancel)
+
+	assert_eq(_last_scene_path, MAIN_MENU_PATH)
+
+
 func _instantiate_control(path: String) -> Control:
 	var exists: bool = ResourceLoader.exists(path, "PackedScene")
 	assert_true(exists, "%s must exist" % path)
 	return (load(path) as PackedScene).instantiate() as Control if exists else null
+
+
+func _accept_and_open(current: Control, next_path: String) -> Control:
+	await _press_action(&"ui_accept")
+	assert_eq(_last_scene_path, next_path)
+	current.free()
+	await wait_process_frames(1)
+	var next: Control = _instantiate_control(next_path)
+	add_child_autofree(next)
+	await wait_process_frames(1)
+	return next
 
 
 func _press_action(action: StringName) -> void:
