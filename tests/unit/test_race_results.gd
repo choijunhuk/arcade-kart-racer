@@ -21,14 +21,16 @@ func test_results_aggregate_rank_time_best_lap_hits_and_item_uses() -> void:
 	var second: KartController = _make_kart("Second")
 	var save: SaveManagerService = SaveManagerService.new(SAVE_PATH)
 	add_child_autofree(save)
-	results.call("setup", &"test_loop", [first, second], first, save)
+	var karts: Array[KartController] = [first, second]
+	results.call("setup", &"test_loop", karts, first, save)
 	EventBus.lap_completed.emit(first, 1, 10.0)
 	EventBus.lap_completed.emit(first, 2, 19.0)
 	EventBus.kart_hit.emit(first, HitReactor.HitType.BUMP)
 	EventBus.item_used.emit(first, &"nitro_can")
 	EventBus.item_used.emit(first, &"nitro_can")
 	var finish_times: Dictionary = {first.get_instance_id(): 19.0, second.get_instance_id(): 22.5}
-	var entries: Array = results.call("finalize", [first, second], finish_times) as Array
+	var ranking: Array[KartController] = [first, second]
+	var entries: Array = results.call("finalize", ranking, finish_times) as Array
 
 	assert_eq(entries.size(), 2)
 	var entry: RefCounted = entries[0] as RefCounted
@@ -46,9 +48,10 @@ func test_player_result_writes_track_best_lap_and_position() -> void:
 	var player: KartController = _make_kart("Player")
 	var save: SaveManagerService = SaveManagerService.new(SAVE_PATH)
 	add_child_autofree(save)
-	results.call("setup", &"test_loop", [player], player, save)
+	var karts: Array[KartController] = [player]
+	results.call("setup", &"test_loop", karts, player, save)
 	EventBus.lap_completed.emit(player, 1, 8.75)
-	results.call("finalize", [player], {player.get_instance_id(): 8.75})
+	results.call("finalize", karts, {player.get_instance_id(): 8.75})
 	var data: Dictionary = save.load_data()
 	assert_eq(int(data["best_laps"]["test_loop"]), 8750)
 	assert_eq(int(data["best_positions"]["test_loop"]), 1)
@@ -75,4 +78,3 @@ func _remove_save() -> void:
 	for path: String in [SAVE_PATH, SAVE_PATH + ".bak"]:
 		if FileAccess.file_exists(path):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
-
