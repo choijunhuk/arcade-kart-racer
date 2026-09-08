@@ -13,3 +13,6 @@ extends Resource
 @export var player_driver: DriverData
 @export var items_enabled: bool = true
 @export var seed: int = 0
+
+## Optional per-grid-slot roster for mixed-class simulations; empty uses player_kart.
+@export var kart_roster: Array[KartData] = []

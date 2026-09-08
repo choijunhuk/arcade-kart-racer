@@ -103,7 +103,7 @@ func load_settings() -> Dictionary:
 			var section_defaults: Dictionary = defaults[section]
 			for setting_key: Variant in section_defaults:
 				var key: String = str(setting_key)
-				_settings[section][key] = config.get_value(section, key, section_defaults[key])
+				_settings[section][key] = _validated_value(config.get_value(section, key, section_defaults[key]), section_defaults[key])
 	elif load_error != ERR_FILE_NOT_FOUND:
 		push_warning("Settings file could not be loaded; defaults will be used.")
 	if apply_on_load:
@@ -252,6 +252,14 @@ func _merge_with_defaults(values: Dictionary) -> Dictionary:
 	return merged
 
 
+func _validated_value(value: Variant, fallback: Variant) -> Variant:
+	if fallback is float:
+		if (value is float or value is int) and is_finite(float(value)):
+			return float(value)
+		return fallback
+	return value if typeof(value) == typeof(fallback) else fallback
+
+
 func _persist_current_settings() -> Error:
 	var config: ConfigFile = ConfigFile.new()
 	for section_key: Variant in _settings:
@@ -323,8 +331,26 @@ func _apply_controls() -> void:
 		var action: StringName = StringName(str(action_key))
 		if not InputMap.has_action(action):
 			continue
-		InputMap.action_erase_events(action)
+		if not remaps[action_key] is Array:
+			continue
 		var encoded_events: Array = remaps[action_key]
+		var decoded_events: Array[InputEvent] = []
 		for encoded: Variant in encoded_events:
 			if encoded is Dictionary:
-				InputMap.action_add_event(action, deserialize_input_event(encoded as Dictionary))
+				var data: Dictionary = encoded as Dictionary
+				if _valid_remap(data):
+					decoded_events.append(deserialize_input_event(data))
+		# A corrupt/empty binding must not erase the keyboard fallback.
+		if not decoded_events.is_empty():
+			InputMap.action_erase_events(action)
+			for event: InputEvent in decoded_events:
+				InputMap.action_add_event(action, event)
+
+
+func _valid_remap(data: Dictionary) -> bool:
+	if not ["key", "joy_button", "joy_motion"].has(data.get("type")):
+		return false
+	for key: String in ["device", "keycode", "physical_keycode", "button_index", "axis", "axis_value"]:
+		if data.has(key) and not (data[key] is int or data[key] is float):
+			return false
+	return true

@@ -153,7 +153,7 @@ func _begin_loading(is_restart: bool) -> void:
 		_player_kart, _lap_tracker, _position_tracker, _karts.size(), _config.laps,
 		_item_manager, _track.get_racing_line(), _karts,
 	)
-	_pause_menu.bind(self)
+	_pause_menu.bind(self, _player_kart != null)
 	_pause_menu.hide_menu()
 	_results_screen.hide_results()
 	_transition_to(RaceState.COUNTDOWN)
@@ -206,7 +206,8 @@ func _spawn_karts() -> void:
 		var is_player: bool = slot == _config.player_slot
 		kart.name = "PlayerKart" if is_player else "AiKart%d" % (slot + 1)
 		var driver: DriverData = _driver_for_slot(slot, is_player)
-		kart.kart_data = RaceConfigBuilder.apply_driver_mods(_config.player_kart, driver)
+		var base_kart: KartData = _config.kart_roster[slot % _config.kart_roster.size()] if not _config.kart_roster.is_empty() else _config.player_kart
+		kart.kart_data = RaceConfigBuilder.apply_driver_mods(base_kart, driver)
 		kart.set_driver_data(driver)
 		(kart.get_node("KartAudio") as KartAudio).set_player_audio(is_player)
 		_karts_root.add_child(kart)
