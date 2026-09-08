@@ -4,6 +4,10 @@ extends MenuScreen
 const TRACK_DIRECTORY: String = "res://data/tracks"
 const DIFFICULTY_SELECT_PATH: String = "res://ui/menus/difficulty_select.tscn"
 const NO_RECORD_TEXT: String = "--:--.---"
+const TRACK_BUTTON_SIZE: Vector2 = Vector2(720.0, 150.0)
+const MILLISECONDS_PER_MINUTE: int = 60_000
+const MILLISECONDS_PER_SECOND: int = 1_000
+const SECONDS_PER_MINUTE: int = 60
 
 @onready var _track_list: VBoxContainer = $Panel/VBox/TrackList
 @onready var _back_button: Button = $Panel/VBox/BackButton
@@ -28,7 +32,7 @@ func _build_track_list() -> void:
 			continue
 		var track: TrackData = resource as TrackData
 		var button: Button = Button.new()
-		button.custom_minimum_size = Vector2(720.0, 150.0)
+		button.custom_minimum_size = TRACK_BUTTON_SIZE
 		var best_lap_ms: int = SaveManager.get_best_lap_ms(track.id)
 		button.text = "%s\n%d LAPS  •  BEST %s" % [
 			track.display_name,
@@ -48,7 +52,7 @@ func _select_track(track: TrackData) -> void:
 func _format_milliseconds(milliseconds: int) -> String:
 	if milliseconds < 0:
 		return NO_RECORD_TEXT
-	var minutes: int = milliseconds / 60_000
-	var seconds: int = (milliseconds / 1_000) % 60
-	var remainder: int = milliseconds % 1_000
+	var minutes: int = milliseconds / MILLISECONDS_PER_MINUTE
+	var seconds: int = (milliseconds / MILLISECONDS_PER_SECOND) % SECONDS_PER_MINUTE
+	var remainder: int = milliseconds % MILLISECONDS_PER_SECOND
 	return "%02d:%02d.%03d" % [minutes, seconds, remainder]

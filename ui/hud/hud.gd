@@ -6,6 +6,7 @@ extends CanvasLayer
 const GO_DISPLAY_SECONDS: float = 1.0
 const SHIELD_FULL_SECONDS: float = 8.0
 const METRES_PER_SECOND_TO_KPH: float = 3.6
+const PERCENT_MAX: float = 100.0
 
 @export var tuning: FeelTuning = preload("res://data/tuning/feel_default.tres")
 
@@ -196,8 +197,8 @@ func _update_item_hud(_delta: float) -> void:
 		_item_name.text = held.display_name if held != null else "EMPTY"
 	var shield_remaining: float = _player_kart.get_shield_remaining()
 	_shield_timer.visible = shield_remaining > 0.0
-	_shield_timer.value = clampf(shield_remaining / SHIELD_FULL_SECONDS, 0.0, 1.0) * 100.0
-	_cooldown_bar.value = _item_manager.get_cooldown_ratio(_player_kart) * 100.0 if _item_manager != null else 0.0
+	_shield_timer.value = clampf(shield_remaining / SHIELD_FULL_SECONDS, 0.0, 1.0) * PERCENT_MAX
+	_cooldown_bar.value = _item_manager.get_cooldown_ratio(_player_kart) * PERCENT_MAX if _item_manager != null else 0.0
 	_roulette_was_active = slot.roulette_active
 
 

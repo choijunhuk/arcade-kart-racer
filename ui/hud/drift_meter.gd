@@ -1,6 +1,8 @@
 class_name DriftMeter
 extends Control
 
+const PERCENT_MAX: float = 100.0
+
 @export var tuning: FeelTuning = preload("res://data/tuning/feel_default.tres")
 
 @onready var _bar: ProgressBar = $Panel/ChargeBar
@@ -16,7 +18,7 @@ func set_controller(controller: DriftController) -> void:
 func _process(_delta: float) -> void:
 	if _controller == null:
 		return
-	_bar.value = _controller.get_charge_ratio() * 100.0
+	_bar.value = _controller.get_charge_ratio() * PERCENT_MAX
 	var tier: int = _controller.get_tier()
 	_tier_label.text = "DRIFT T%d" % tier if tier > 0 else "DRIFT"
 	_tier_label.modulate = _tier_color(tier)

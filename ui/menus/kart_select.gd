@@ -5,6 +5,8 @@ const KART_DIRECTORY: String = "res://data/karts"
 const TRACK_SELECT_PATH: String = "res://ui/menus/track_select.tscn"
 const GRID_COLUMNS: int = 3
 const CARD_SIZE: Vector2 = Vector2(285.0, 330.0)
+const CARD_CONTENT_MARGIN: int = 12
+const PREVIEW_HEIGHT: float = 82.0
 const STAT_BAR_SCENE: PackedScene = preload("res://ui/components/stat_bar.tscn")
 const STAT_RANGES: Dictionary = {
 	"max_speed": Vector2(24.0, 32.0),
@@ -46,11 +48,11 @@ func _create_kart_card(kart: KartData) -> Button:
 	button.text = ""
 	var content: VBoxContainer = VBoxContainer.new()
 	content.name = "Content"
-	content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 12)
+	content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, CARD_CONTENT_MARGIN)
 	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(content)
 	var preview: ColorRect = ColorRect.new()
-	preview.custom_minimum_size.y = 82.0
+	preview.custom_minimum_size.y = PREVIEW_HEIGHT
 	preview.color = kart.body_color
 	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	content.add_child(preview)

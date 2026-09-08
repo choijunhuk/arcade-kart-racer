@@ -5,6 +5,10 @@ const POSITION_WIDTH: float = 70.0
 const NAME_WIDTH: float = 175.0
 const TIME_WIDTH: float = 145.0
 const RECORD_WIDTH: float = 125.0
+const ROW_SEPARATION: int = 8
+const MILLISECONDS_PER_MINUTE: int = 60_000
+const MILLISECONDS_PER_SECOND: int = 1_000
+const SECONDS_PER_MINUTE: int = 60
 
 @export var tuning: FeelTuning = preload("res://data/tuning/feel_default.tres")
 
@@ -50,7 +54,7 @@ func hide_results() -> void:
 func _create_row(entry: RaceResults.Entry) -> HBoxContainer:
 	var row: HBoxContainer = HBoxContainer.new()
 	row.name = "Row%d" % entry.rank
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override("separation", ROW_SEPARATION)
 	_add_cell(row, &"Position", str(entry.rank), POSITION_WIDTH)
 	_add_cell(row, &"Driver", entry.driver_name, NAME_WIDTH)
 	var kart_name: String = entry.kart_display_name if not entry.kart_display_name.is_empty() else entry.kart_name
@@ -73,10 +77,10 @@ func _add_cell(row: HBoxContainer, cell_name: StringName, text: String, width: f
 func _format_time(seconds: float) -> String:
 	if seconds < 0.0:
 		return "DNF"
-	var milliseconds: int = roundi(seconds * 1000.0)
-	var minutes: int = milliseconds / 60_000
-	var whole_seconds: int = (milliseconds / 1_000) % 60
-	var remainder: int = milliseconds % 1_000
+	var milliseconds: int = roundi(seconds * float(MILLISECONDS_PER_SECOND))
+	var minutes: int = milliseconds / MILLISECONDS_PER_MINUTE
+	var whole_seconds: int = (milliseconds / MILLISECONDS_PER_SECOND) % SECONDS_PER_MINUTE
+	var remainder: int = milliseconds % MILLISECONDS_PER_SECOND
 	return "%02d:%02d.%03d" % [minutes, whole_seconds, remainder]
 
 

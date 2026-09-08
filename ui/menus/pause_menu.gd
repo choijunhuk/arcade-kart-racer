@@ -1,7 +1,7 @@
 class_name PauseMenu
 extends CanvasLayer
 
-## Temporary focus-first pause overlay; final presentation is Phase 9.
+## Final focus-first pause overlay with embedded persistent settings.
 
 @onready var _continue_button: Button = $Panel/VBox/ContinueButton
 @onready var _restart_button: Button = $Panel/VBox/RestartButton

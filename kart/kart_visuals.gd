@@ -6,6 +6,7 @@ extends Node3D
 const WHEEL_RADIUS: float = 0.28
 const MIN_BOB_SPEED_RATIO: float = 0.25
 const BOB_NOISE_SEED: int = 3_141
+const DRIVER_MATERIAL_ROUGHNESS: float = 0.75
 
 @export var feel_tuning: FeelTuning = preload("res://data/tuning/feel_default.tres")
 
@@ -68,7 +69,7 @@ func apply_driver_data(driver: DriverData) -> void:
 		return
 	var material: StandardMaterial3D = StandardMaterial3D.new()
 	material.albedo_color = driver.driver_color
-	material.roughness = 0.75
+	material.roughness = DRIVER_MATERIAL_ROUGHNESS
 	_driver_mesh.material_override = material
 
 

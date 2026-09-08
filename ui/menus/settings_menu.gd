@@ -101,6 +101,7 @@ func _connect_controls() -> void:
 	_connect_toggle($Panel/VBox/Tabs/Video/FullscreenToggle, &"video", &"fullscreen")
 	_connect_toggle($Panel/VBox/Tabs/Video/VsyncToggle, &"video", &"vsync")
 	_connect_toggle($Panel/VBox/Tabs/Controls/Scroll/Rows/VibrationToggle, &"controls", &"vibration")
+	# TODO(phase-13): Route enabled vibration to event-owned controller haptics.
 	_connect_toggle($Panel/VBox/Tabs/Accessibility/SpeedLinesToggle, &"accessibility", &"speed_lines")
 	_connect_toggle($Panel/VBox/Tabs/Accessibility/TierIconsToggle, &"accessibility", &"drift_tier_icons")
 	_connect_toggle($Panel/VBox/Tabs/Gameplay/SpeedometerToggle, &"gameplay", &"speedometer")

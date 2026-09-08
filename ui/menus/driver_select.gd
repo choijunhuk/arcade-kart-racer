@@ -5,6 +5,11 @@ const DRIVER_DIRECTORY: String = "res://data/drivers"
 const KART_SELECT_PATH: String = "res://ui/menus/kart_select.tscn"
 const GRID_COLUMNS: int = 4
 const CARD_SIZE: Vector2 = Vector2(230.0, 210.0)
+const CARD_CONTENT_MARGIN: int = 10
+const PORTRAIT_HEIGHT: float = 64.0
+const MIN_DRIVER_MODIFIER: float = -0.05
+const DRIVER_MODIFIER_SPAN: float = 0.1
+const PERCENT_SCALE: float = 100.0
 const STAT_BAR_SCENE: PackedScene = preload("res://ui/components/stat_bar.tscn")
 
 @onready var _grid: GridContainer = $Panel/VBox/Scroll/Grid
@@ -39,12 +44,12 @@ func _create_driver_card(driver: DriverData) -> Button:
 	button.text = ""
 	var content: VBoxContainer = VBoxContainer.new()
 	content.name = "Content"
-	content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 10)
+	content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, CARD_CONTENT_MARGIN)
 	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(content)
 	var portrait: ColorRect = ColorRect.new()
 	portrait.name = "Portrait"
-	portrait.custom_minimum_size.y = 64.0
+	portrait.custom_minimum_size.y = PORTRAIT_HEIGHT
 	portrait.color = driver.driver_color
 	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	content.add_child(portrait)
@@ -61,7 +66,11 @@ func _create_driver_card(driver: DriverData) -> Button:
 		var bar: StatBar = STAT_BAR_SCENE.instantiate() as StatBar
 		var modifier: float = driver.stat_mods[stat_name]
 		stats.add_child(bar)
-		bar.configure(String(stat_name).replace("_", " ").to_upper(), (modifier + 0.05) / 0.1, "%+.0f%%" % (modifier * 100.0))
+		bar.configure(
+			String(stat_name).replace("_", " ").to_upper(),
+			(modifier - MIN_DRIVER_MODIFIER) / DRIVER_MODIFIER_SPAN,
+			"%+.0f%%" % (modifier * PERCENT_SCALE),
+		)
 	return button
 
 
