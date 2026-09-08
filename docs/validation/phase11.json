@@ -1,0 +1,1678 @@
+{
+  "date": "2026-09-09",
+  "engine": "Godot 4.7.stable.official.5b4e0cb0f",
+  "baseline": {
+    "tests": 386,
+    "assertions": 3492,
+    "items_on": {
+      "balance_gate_evaluated": true,
+      "balance_gate_pass": false,
+      "difficulty": "normal",
+      "items": true,
+      "karts": 8,
+      "laps": 3,
+      "success": false,
+      "summary": {
+        "average_rank_one_hits_per_race": 0.6,
+        "finisher_samples": 158,
+        "hit_rate_by_item": {
+          "aegis_bubble": 0.0,
+          "hunter_drone": 0.714285714285714,
+          "nitro_can": 0.0,
+          "pulse_blast": 1.73684210526316,
+          "rocket_dart": 0.294117647058824,
+          "spike_mine": 0.916666666666667,
+          "storm_beacon": 0.857142857142857
+        },
+        "item_hits": {
+          "aegis_bubble": 0,
+          "hunter_drone": 10,
+          "nitro_can": 0,
+          "pulse_blast": 33,
+          "rocket_dart": 10,
+          "spike_mine": 33,
+          "storm_beacon": 6
+        },
+        "items_used": {
+          "aegis_bubble": 40,
+          "hunter_drone": 14,
+          "nitro_can": 37,
+          "pulse_blast": 19,
+          "rocket_dart": 34,
+          "spike_mine": 36,
+          "storm_beacon": 7
+        },
+        "mean_lap1_rank8_gain": 0.5,
+        "mean_lap_time_seconds": 65.1800281293949,
+        "mean_rank_eight_gain": 5.25
+      },
+      "track": "track_01",
+      "races": [
+        {
+          "seed": 1,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 4.533333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 3,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 2,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 8.533333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 1,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 3,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 10.133333,
+          "lap1_rank8_gain": 2.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 3,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 4,
+          "finishers": 7,
+          "field_size": 8,
+          "finish_spread_seconds": null,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 3,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 5,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 4.533333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 2,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 6,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 12.666667,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 1,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 7,
+          "finishers": 7,
+          "field_size": 8,
+          "finish_spread_seconds": null,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 4,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 8,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 11.866667,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 3,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 9,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 7.6,
+          "lap1_rank8_gain": 3.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 10,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 7.466667,
+          "lap1_rank8_gain": 1.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 11,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 7.333333,
+          "lap1_rank8_gain": 1.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 2,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 12,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 15.066667,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 5,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 13,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 4.4,
+          "lap1_rank8_gain": 1.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 1,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 14,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 5.733333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 2,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 2,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 15,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 10.933333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 2,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 16,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 10.266667,
+          "lap1_rank8_gain": 2.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 17,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 11.066667,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 3,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 2,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 18,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 15.466667,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 2,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 19,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 4.8,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 4,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 20,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 8.8,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 3,
+          "winning_class": "unmeasured"
+        }
+      ]
+    },
+    "items_off": {
+      "balance_gate_evaluated": false,
+      "balance_gate_pass": true,
+      "difficulty": "normal",
+      "items": false,
+      "karts": 8,
+      "laps": 3,
+      "success": true,
+      "summary": {
+        "average_rank_one_hits_per_race": 0.0,
+        "finisher_samples": 160,
+        "hit_rate_by_item": {
+          "aegis_bubble": 0.0,
+          "hunter_drone": 0.0,
+          "nitro_can": 0.0,
+          "pulse_blast": 0.0,
+          "rocket_dart": 0.0,
+          "spike_mine": 0.0,
+          "storm_beacon": 0.0
+        },
+        "item_hits": {
+          "aegis_bubble": 0,
+          "hunter_drone": 0,
+          "nitro_can": 0,
+          "pulse_blast": 0,
+          "rocket_dart": 0,
+          "spike_mine": 0,
+          "storm_beacon": 0
+        },
+        "items_used": {
+          "aegis_bubble": 0,
+          "hunter_drone": 0,
+          "nitro_can": 0,
+          "pulse_blast": 0,
+          "rocket_dart": 0,
+          "spike_mine": 0,
+          "storm_beacon": 0
+        },
+        "mean_lap1_rank8_gain": 0.75,
+        "mean_lap_time_seconds": 64.9819444444442,
+        "mean_rank_eight_gain": 5.15
+      },
+      "track": "track_01",
+      "races": [
+        {
+          "seed": 1,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 4.0,
+          "lap1_rank8_gain": 1.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 2,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 2,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 6.933333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 3,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 9.333333,
+          "lap1_rank8_gain": 2.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 2,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 4,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 9.466667,
+          "lap1_rank8_gain": 1.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 1,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 5,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 8.4,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 2,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 6,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 13.733333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 2,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 7,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 14.4,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 5,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 8,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 11.866667,
+          "lap1_rank8_gain": 3.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 1,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 9,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 8.133333,
+          "lap1_rank8_gain": 1.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 10,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 8.8,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 11,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 10.666667,
+          "lap1_rank8_gain": 2.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 3,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 12,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 6.133333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 1,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 13,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 9.733333,
+          "lap1_rank8_gain": 1.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 3,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 14,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 4.933333,
+          "lap1_rank8_gain": 1.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 2,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 15,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 9.066667,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 16,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 10.133333,
+          "lap1_rank8_gain": 1.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 17,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 12.266667,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 1,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 18,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 14.0,
+          "lap1_rank8_gain": 1.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 5,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 19,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 7.866667,
+          "lap1_rank8_gain": 1.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "unmeasured"
+        },
+        {
+          "seed": 20,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 10.4,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 2,
+          "winning_class": "unmeasured"
+        }
+      ]
+    },
+    "mixed": {
+      "balance_gate_evaluated": false,
+      "balance_gate_pass": true,
+      "classes_gate_evaluated": true,
+      "classes_gate_pass": false,
+      "difficulty": "normal",
+      "items": true,
+      "karts": 8,
+      "laps": 3,
+      "mixed_karts": true,
+      "strict_balance": false,
+      "success": false,
+      "summary": {
+        "average_rank_one_hits_per_race": 0.666666666666667,
+        "class_wins": {
+          "heavy": 8,
+          "light": 0,
+          "medium": 4
+        },
+        "finish_spread_seconds": [
+          15.7333333333324
+        ],
+        "finisher_samples": 68,
+        "hit_rate_by_item": {
+          "aegis_bubble": 0.0,
+          "hunter_drone": 0.666666666666667,
+          "nitro_can": 0.0,
+          "pulse_blast": 2.28571428571429,
+          "rocket_dart": 0.1875,
+          "spike_mine": 1.0,
+          "storm_beacon": 0.75
+        },
+        "item_hits": {
+          "aegis_bubble": 0,
+          "hunter_drone": 4,
+          "nitro_can": 0,
+          "pulse_blast": 16,
+          "rocket_dart": 3,
+          "spike_mine": 19,
+          "storm_beacon": 6
+        },
+        "items_used": {
+          "aegis_bubble": 22,
+          "hunter_drone": 6,
+          "nitro_can": 17,
+          "pulse_blast": 7,
+          "rocket_dart": 16,
+          "spike_mine": 19,
+          "storm_beacon": 8
+        },
+        "mean_finish_spread_seconds": 15.7333333333324,
+        "mean_lap1_rank8_gain": 0.5,
+        "mean_lap_time_seconds": 64.541176470588,
+        "mean_rank_eight_gain": 3.66666666666667
+      },
+      "track": "track_01",
+      "races": [
+        {
+          "seed": 1,
+          "finishers": 6,
+          "field_size": 8,
+          "finish_spread_seconds": null,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 3,
+          "winning_class": "heavy"
+        },
+        {
+          "seed": 2,
+          "finishers": 6,
+          "field_size": 8,
+          "finish_spread_seconds": null,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 14,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 3,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 15.733333,
+          "lap1_rank8_gain": 2.0,
+          "leader_hits": 2,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 2,
+          "winning_class": "heavy"
+        },
+        {
+          "seed": 4,
+          "finishers": 5,
+          "field_size": 8,
+          "finish_spread_seconds": null,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 7,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 5,
+          "finishers": 5,
+          "field_size": 8,
+          "finish_spread_seconds": null,
+          "lap1_rank8_gain": 1.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 6,
+          "winning_class": "heavy"
+        },
+        {
+          "seed": 6,
+          "finishers": 5,
+          "field_size": 8,
+          "finish_spread_seconds": null,
+          "lap1_rank8_gain": 2.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 6,
+          "winning_class": "heavy"
+        },
+        {
+          "seed": 7,
+          "finishers": 5,
+          "field_size": 8,
+          "finish_spread_seconds": null,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 6,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 8,
+          "finishers": 5,
+          "field_size": 8,
+          "finish_spread_seconds": null,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 9,
+          "winning_class": "heavy"
+        },
+        {
+          "seed": 9,
+          "finishers": 6,
+          "field_size": 8,
+          "finish_spread_seconds": null,
+          "lap1_rank8_gain": 1.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 9,
+          "winning_class": "heavy"
+        },
+        {
+          "seed": 10,
+          "finishers": 6,
+          "field_size": 8,
+          "finish_spread_seconds": null,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 5,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 11,
+          "finishers": 6,
+          "field_size": 8,
+          "finish_spread_seconds": null,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 11,
+          "winning_class": "heavy"
+        },
+        {
+          "seed": 12,
+          "finishers": 5,
+          "field_size": 8,
+          "finish_spread_seconds": null,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 6,
+          "winning_class": "heavy"
+        }
+      ],
+      "control_races": []
+    }
+  },
+  "final": {
+    "tests": 419,
+    "assertions": 3730,
+    "balance": {
+      "balance_gate_evaluated": true,
+      "balance_gate_pass": true,
+      "classes_gate_evaluated": false,
+      "classes_gate_pass": true,
+      "difficulty": "normal",
+      "items": true,
+      "karts": 8,
+      "laps": 3,
+      "mixed_karts": false,
+      "strict_balance": true,
+      "success": true,
+      "summary": {
+        "average_rank_one_hits_per_race": 1.05,
+        "class_wins": {
+          "heavy": 0,
+          "light": 0,
+          "medium": 20
+        },
+        "control_mean_lap1_rank8_gain": 0.45,
+        "finish_spread_seconds": [
+          3.21666666666923,
+          6.18333333333825,
+          2.13333333333503,
+          6.50000000000517,
+          5.2333333333375,
+          4.58333333333698,
+          7.53333333333933,
+          9.65000000000768,
+          3.05000000000243,
+          5.96666666667141,
+          5.13333333333742,
+          5.88333333333802,
+          3.86666666666974,
+          2.76666666666887,
+          6.78333333333873,
+          4.86666666667054,
+          12.0500000000096,
+          5.1500000000041,
+          3.06666666666911,
+          7.03333333333893
+        ],
+        "finisher_samples": 160,
+        "hit_rate_by_item": {
+          "aegis_bubble": 0.0,
+          "hunter_drone": 0.763157894736842,
+          "nitro_can": 0.0,
+          "pulse_blast": 2.1,
+          "rocket_dart": 0.0769230769230769,
+          "spike_mine": 0.878787878787879,
+          "storm_beacon": 0.863636363636364
+        },
+        "item_hits": {
+          "aegis_bubble": 0,
+          "hunter_drone": 29,
+          "nitro_can": 0,
+          "pulse_blast": 84,
+          "rocket_dart": 4,
+          "spike_mine": 58,
+          "storm_beacon": 19
+        },
+        "items_used": {
+          "aegis_bubble": 56,
+          "hunter_drone": 38,
+          "nitro_can": 93,
+          "pulse_blast": 40,
+          "rocket_dart": 52,
+          "spike_mine": 66,
+          "storm_beacon": 22
+        },
+        "lap1_rank8_gain_delta": 0.4,
+        "mean_finish_spread_seconds": 5.5325000000044,
+        "mean_lap1_rank8_gain": 0.85,
+        "mean_lap_time_seconds": 63.1350000000143,
+        "mean_rank_eight_gain": 4.7
+      },
+      "track": "track_01",
+      "races": [
+        {
+          "seed": 1,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 3.216667,
+          "lap1_rank8_gain": 1.0,
+          "leader_hits": 2,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 2,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 6.183333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 3,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 2.133333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 4,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 6.5,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 2,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 2,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 5,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 5.233333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 6,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 4.583333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 7,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 7.533333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 8,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 9.65,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 9,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 3.05,
+          "lap1_rank8_gain": 2.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 10,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 5.966667,
+          "lap1_rank8_gain": 2.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 11,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 5.133333,
+          "lap1_rank8_gain": 2.0,
+          "leader_hits": 2,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 12,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 5.883333,
+          "lap1_rank8_gain": 3.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 13,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 3.866667,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 14,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 2.766667,
+          "lap1_rank8_gain": 1.0,
+          "leader_hits": 2,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 15,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 6.783333,
+          "lap1_rank8_gain": 2.0,
+          "leader_hits": 2,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 16,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 4.866667,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 17,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 12.05,
+          "lap1_rank8_gain": 1.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 1,
+          "max_head_on_per_kart": 1,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 18,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 5.15,
+          "lap1_rank8_gain": 1.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 19,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 3.066667,
+          "lap1_rank8_gain": 2.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 20,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 7.033333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 2,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        }
+      ],
+      "control_races": [
+        {
+          "seed": 1,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 3.7,
+          "lap1_rank8_gain": 3.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 2,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 6.766667,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 3,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 4.9,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 4,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 7.15,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 5,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 4.983333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 6,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 5.216667,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 7,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 6.683333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 8,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 7.716667,
+          "lap1_rank8_gain": 1.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 9,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 6.333333,
+          "lap1_rank8_gain": 3.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 10,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 4.933333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 11,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 4.316667,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 12,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 6.916667,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 13,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 5.5,
+          "lap1_rank8_gain": 1.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 14,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 4.7,
+          "lap1_rank8_gain": 1.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 15,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 5.883333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 16,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 6.633333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 17,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 9.1,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 18,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 5.5,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 19,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 4.683333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 20,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 6.25,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        }
+      ]
+    },
+    "mixed": {
+      "balance_gate_evaluated": false,
+      "balance_gate_pass": true,
+      "classes_gate_evaluated": true,
+      "classes_gate_pass": true,
+      "difficulty": "normal",
+      "items": true,
+      "karts": 8,
+      "laps": 3,
+      "mixed_karts": true,
+      "strict_balance": false,
+      "success": true,
+      "summary": {
+        "average_rank_one_hits_per_race": 0.833333333333333,
+        "class_wins": {
+          "heavy": 3,
+          "light": 6,
+          "medium": 3
+        },
+        "finish_spread_seconds": [
+          4.78333333333714,
+          6.23333333333829,
+          7.05000000000561,
+          7.55000000000601,
+          6.11666666667153,
+          5.70000000000454,
+          8.95000000000712,
+          6.60000000000525,
+          3.13333333333583,
+          6.85000000000545,
+          5.33333333333758,
+          8.76666666667364
+        ],
+        "finisher_samples": 96,
+        "hit_rate_by_item": {
+          "aegis_bubble": 0.0,
+          "hunter_drone": 0.655172413793103,
+          "nitro_can": 0.0,
+          "pulse_blast": 2.36363636363636,
+          "rocket_dart": 0.0416666666666667,
+          "spike_mine": 0.842105263157895,
+          "storm_beacon": 0.7
+        },
+        "item_hits": {
+          "aegis_bubble": 0,
+          "hunter_drone": 19,
+          "nitro_can": 0,
+          "pulse_blast": 52,
+          "rocket_dart": 1,
+          "spike_mine": 32,
+          "storm_beacon": 7
+        },
+        "items_used": {
+          "aegis_bubble": 26,
+          "hunter_drone": 29,
+          "nitro_can": 54,
+          "pulse_blast": 22,
+          "rocket_dart": 24,
+          "spike_mine": 38,
+          "storm_beacon": 10
+        },
+        "mean_finish_spread_seconds": 6.42222222222733,
+        "mean_lap1_rank8_gain": 0.666666666666667,
+        "mean_lap_time_seconds": 63.1214120370513,
+        "mean_rank_eight_gain": 4.08333333333333
+      },
+      "track": "track_01",
+      "races": [
+        {
+          "seed": 1,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 4.783333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 2,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "heavy"
+        },
+        {
+          "seed": 2,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 6.233333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 3,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 7.05,
+          "lap1_rank8_gain": 1.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "light"
+        },
+        {
+          "seed": 4,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 7.55,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 2,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "light"
+        },
+        {
+          "seed": 5,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 6.116667,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 6,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 5.7,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "light"
+        },
+        {
+          "seed": 7,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 8.95,
+          "lap1_rank8_gain": 2.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "light"
+        },
+        {
+          "seed": 8,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 6.6,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 9,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 3.133333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "heavy"
+        },
+        {
+          "seed": 10,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 6.85,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 2,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "light"
+        },
+        {
+          "seed": 11,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 5.333333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "heavy"
+        },
+        {
+          "seed": 12,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 8.766667,
+          "lap1_rank8_gain": 5.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "light"
+        }
+      ],
+      "control_races": []
+    },
+    "soak_simulation": {
+      "balance_gate_evaluated": false,
+      "balance_gate_pass": true,
+      "classes_gate_evaluated": false,
+      "classes_gate_pass": true,
+      "difficulty": "normal",
+      "items": true,
+      "karts": 8,
+      "laps": 3,
+      "mixed_karts": false,
+      "strict_balance": false,
+      "success": true,
+      "summary": {
+        "average_rank_one_hits_per_race": 0.8,
+        "class_wins": {
+          "heavy": 0,
+          "light": 0,
+          "medium": 10
+        },
+        "finish_spread_seconds": [
+          3.21666666666923,
+          6.18333333333825,
+          2.13333333333503,
+          6.48333333333849,
+          5.2333333333375,
+          4.58333333333698,
+          7.53333333333933,
+          9.65000000000768,
+          3.05000000000243,
+          5.96666666667141
+        ],
+        "finisher_samples": 80,
+        "hit_rate_by_item": {
+          "aegis_bubble": 0.0,
+          "hunter_drone": 0.6875,
+          "nitro_can": 0.0,
+          "pulse_blast": 2.30434782608696,
+          "rocket_dart": 0.0454545454545455,
+          "spike_mine": 0.793103448275862,
+          "storm_beacon": 0.875
+        },
+        "item_hits": {
+          "aegis_bubble": 0,
+          "hunter_drone": 11,
+          "nitro_can": 0,
+          "pulse_blast": 53,
+          "rocket_dart": 1,
+          "spike_mine": 23,
+          "storm_beacon": 7
+        },
+        "items_used": {
+          "aegis_bubble": 27,
+          "hunter_drone": 16,
+          "nitro_can": 43,
+          "pulse_blast": 23,
+          "rocket_dart": 22,
+          "spike_mine": 29,
+          "storm_beacon": 8
+        },
+        "mean_finish_spread_seconds": 5.40333333333763,
+        "mean_lap1_rank8_gain": 0.5,
+        "mean_lap_time_seconds": 63.0417361111253,
+        "mean_rank_eight_gain": 4.4
+      },
+      "track": "track_01",
+      "races": [
+        {
+          "seed": 1,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 3.216667,
+          "lap1_rank8_gain": 1.0,
+          "leader_hits": 2,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 2,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 6.183333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 3,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 2.133333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 4,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 6.483333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 2,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 5,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 5.233333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 6,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 4.583333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 7,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 7.533333,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 8,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 9.65,
+          "lap1_rank8_gain": 0.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 9,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 3.05,
+          "lap1_rank8_gain": 2.0,
+          "leader_hits": 0,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        },
+        {
+          "seed": 10,
+          "finishers": 8,
+          "field_size": 8,
+          "finish_spread_seconds": 5.966667,
+          "lap1_rank8_gain": 2.0,
+          "leader_hits": 1,
+          "max_respawns_per_kart": 0,
+          "max_head_on_per_kart": 0,
+          "winning_class": "medium"
+        }
+      ],
+      "control_races": []
+    },
+    "soak_command_exit": 1,
+    "track_validators_passed": 4,
+    "script_parse_errors": 0,
+    "windowed_qa": "blocked by macOS XPC before PNG; remaining snapshots and 8/12 kart GPU profiles skipped",
+    "flow_runs": [
+      {
+        "run": 1,
+        "races": 2,
+        "nodes": 132,
+        "orphans": 0,
+        "memory_bytes": 146286952
+      },
+      {
+        "run": 2,
+        "races": 2,
+        "nodes": 132,
+        "orphans": 0,
+        "memory_bytes": 146360380
+      },
+      {
+        "run": 3,
+        "races": 2,
+        "nodes": 132,
+        "orphans": 0,
+        "memory_bytes": 146678236
+      }
+    ],
+    "simulation_physics": {
+      "time_scale": 8,
+      "physics_ticks_per_second": 480,
+      "gameplay_step_seconds": 0.016666666666666666,
+      "fixed_fps": 60
+    },
+    "ai_spread_note": "Mean whole-race first-to-last gap is evaluated against 5-25 seconds. Individual seeds can be tighter; complete ranges are retained."
+  },
+  "known_environment_errors": [
+    "get_system_ca_certificates: ret != noErr",
+    "RendererDummy DummyShader: 4 RID allocations leaked at exit"
+  ]
+}

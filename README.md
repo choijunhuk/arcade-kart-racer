@@ -5,7 +5,8 @@ Mario Kart에서 *시스템과 플레이 감각*만 영감을 받은 **완전 �
 
 ## 이 레포의 현재 상태
 
-**Phase 10 — 오디오 구현 완료 (headless 자동 검증, 실제 청음은 수동 확인).**
+**Phase 11 — Vertical Slice 하드닝.** 실제 자동 게이트 결과와 native 창 검증 제한은
+[DEVLOG의 Phase 11 보고](DEVLOG.md)에 기록한다.
 
 현재 메인 씬은 Play / Time Trial(Phase 12) / Settings / Quit 메뉴로 시작한다.
 Play는 Single Race → 드라이버 8종 → 카트 3종 → Ridgeline Circuit → AI
@@ -137,54 +138,31 @@ HOME=$PWD/.tmp-home tools/validate_tracks.sh
 # Track01, normal 난이도, 3랩, 8카트, 1회 (기본값) — 실제 AI 레이스
 HOME=$PWD/.tmp-home tools/run_sim.sh
 
-# §13.8 DoD: 난이도별 3회씩 실행해 평균 랩타임 순서(easy > normal > hard)를 비교
-HOME=$PWD/.tmp-home tools/run_sim.sh --races 3 --difficulty easy
-HOME=$PWD/.tmp-home tools/run_sim.sh --races 3 --difficulty normal
-HOME=$PWD/.tmp-home tools/run_sim.sh --races 3 --difficulty hard
+# 같은 seed의 items on/off 20쌍, 기본 strict gate
+HOME="$PWD/.tmp-home" tools/run_sim.sh --races 20 --difficulty normal
 
-# 다른 트랙/랩수/카트수 조합, 빠른 반복용
-HOME=$PWD/.tmp-home tools/run_sim.sh --laps 1 --karts 4 --races 1 --track test_hairpin
+# 12회 혼합 클래스: light/medium/heavy가 각각 최소 1승
+HOME="$PWD/.tmp-home" tools/run_sim.sh --races 12 --mixed-karts on
 
-# §12.4 아이템 밸런스 게이트: 20레이스, normal, 8카트, 3랩
-HOME=$PWD/.tmp-home tools/run_sim.sh --races 20 --difficulty normal --karts 8 --laps 3
+# 10회 크래시/오류 로그 gate (stderr의 오류 한 줄도 실패 처리)
+HOME="$PWD/.tmp-home" tools/run_soak.sh
 
-# 아이템 없이 비교(레이스 흐름/AI 판단만 검증)
-HOME=$PWD/.tmp-home tools/run_sim.sh --races 3 --items off
-
-# Phase 8 실제 렌더 성능: 12-kart, 2초 warm-up 뒤 30초 측정
-# (headless는 렌더러 FPS 근거로 사용할 수 없음)
-tools/perf_check.sh 12 30
+# 특정 실패 seed 재현
+HOME="$PWD/.tmp-home" tools/run_sim.sh --races 1 --seed 13
 ```
 
-Phase 9 headless 기준선은 **349/349 tests, 1,825 assertions**, track validator
-**4/4**, script parse error 0이다. 실제 화면 대비/레이아웃과 물리 gamepad
-감각은 `DEVLOG.md`의 Phase 9 플레이 지시로 별도 확인한다.
+현재 테스트 총수, 파싱·트랙·soak·balance 판정은 `DEVLOG.md`의 Phase 11
+검증표를 기준으로 한다. 실제 화면과 조작감은 같은 보고서의 플레이 지시로 확인한다.
 
-인자: `--races N`(기본 1), `--difficulty easy|normal|hard`(기본 normal,
-모든 카트에 동일 적용), `--laps N`(기본 3), `--karts N`(기본 8, 최대 8),
-`--track track_01|test_hairpin|test_loop|test_loop_hills`(기본 track_01,
-모르는 이름은 track_01로 대체), `--items on|off`(기본 on). 카트 전원이
-AI이며(`RaceConfig.player_slot = -1`) 사람 플레이어는 없다. 한 카트라도
-미완주, 리스폰 2회 초과, 또는 전체 벽 정면충돌이 `3 * laps`를 넘으면
-exit 1; `--races 20 --difficulty normal`(기본 카트/랩 수) 조합은 추가로
-아이템 밸런스 게이트(레이스당 평균 랭크1위 피격 ≤3, 랭크8위 카트의 평균
-랭크 상승 ≥1.5)도 통과해야 한다. 매 레이스마다 `--races`
-반복 시 `RaceConfig.seed`를 레이스 번호로 바꿔 동일 레이스를 반복하지
-않는다. 출력 JSON의 `races[].{drifts_started,tier3_releases,
-shortcut_takes,wall_head_on_count,respawns,times,items_used,item_hits,
-rank_one_hits,rank_eight_gain}`와 `summary.mean_lap_time_seconds`(완주자
-전원의 `총시간/laps` 평균)를 확인한다;
-`run_sim.sh`는 마지막 줄에 `summary: ...`로도 따로 찍는다.
-
-`HOME=$PWD/.tmp-home`은 제한된 샌드박스에서만 필요하다. 일반 로컬
-환경에서는 접두어 없이 같은 명령을 실행할 수 있다.
-
-`perf_check.sh`는 마지막에 `PERF_PROBE` JSON으로 `mean_fps`,
-`worst_frame_ms`, `gpu_particles`, `renderer`를 출력한다. Phase 8 구현은
-12대에서 GPU particle node 60/60(카트당 5/6)을 정적으로 검증했지만,
-현재 자동화 샌드박스는 macOS 렌더 창을 열지 못해 실제 FPS 숫자는 아직
-기록하지 못했다. unrestricted 로그인 세션에서 위 명령을 실행해 8-kart
-F3 FPS ≥60 게이트와 함께 확정한다.
+인자: `--races N`, `--difficulty easy|normal|hard`, `--karts 1..8`, `--laps N`,
+`--track track_01|test_loop|test_loop_hills|test_hairpin`, `--items on|off`,
+`--mixed-karts on|off`, `--seed N`, `--strict-balance on|off`.
+8배속에서도 실제 게임과 같은 1/60초 물리 step을 유지한다. 전원 완주,
+카트당 리스폰 ≤2, 카트당 정면 충돌 ≤랩당 3을 넘으면 exit 1이다.
+20회 이상은 strict가 기본이고 같은 seed의 items-off 대조군도 검증한다.
+JSON은 각 레이스의 결과·DNF 진단·사용/피격·클래스 승수와 summary를 담으며,
+`SIM_SUMMARY` 줄에 전체 요약을 별도로 출력한다. `.tmp-home`과 임시 로그는
+Git에서 제외하며 게임 프로젝트의 network/TLS 설정은 변경하지 않는다.
 
 ## 트랙 제작 흐름 (§15.6)
 
@@ -237,3 +215,37 @@ godot --path . -s tools/snapshot.gd -- res://scenes/test/kart_sandbox.tscn /tmp/
 ```
 
 > 새로 클론한 뒤에는 먼저 `godot --headless --path . --import`를 한 번 실행해 class_name 캐시를 만들어야 한다.
+
+
+## Vertical Slice — v0.1
+
+1. 실행 후 **Play → Single Race → Driver → Kart → Ridgeline Circuit → Normal**을 선택한다.
+2. W/RT로 가속하고 A/D 또는 좌스틱으로 조향한다. 코너에서 Space/RB를 유지한 뒤
+   놓아 미니 터보를 사용하고, 공중에서는 같은 버튼으로 트릭을 시도한다.
+3. 아이템 박스를 지나 룰렛이 끝나면 E/LB로 사용한다. 3랩을 완주하면 결과에서
+   Restart, Track Select, Main Menu 중 선택할 수 있다.
+4. Esc/Start로 일시정지한다. 다른 창으로 전환해도 로컬 레이스가 일시정지되며,
+   돌아온 뒤 Continue를 눌러 재개한다. 설정에서 셰이크/FOV/스피드라인을 조절한다.
+
+자동 full-flow 테스트는 실제 메뉴 전환부터 3랩, 결과, 재시작, 다시 결과와 메뉴
+복귀까지 세 번 반복한다. 상세 결과/밸런스 표/검증 로그는 DEVLOG를 확인한다.
+`--races 20` 이상은 strict balance가 기본이며, 8카트·3랩·items on일 때 같은 seed의
+items-off 레이스도 실행한다. catch-up 조건은 **lap1 최하위의 순위 상승 on−off ≥0.4**,
+선두 피격은 **레이스당 ≤3**이다. `--strict-balance off`는 명시적인 진단용 advisory다.
+
+알려진 제한: 최종 모델/폰트/오디오/트랙 아트, haptics는 Phase 13 대상이다.
+아이템 on/off 메뉴 토글과 Time Trial/Grand Prix는 Phase 12 대상이다. 로컬 분할
+화면과 네트워크 플레이는 구현하지 않았다. Headless 결과는 실제 화면/청음/조작감,
+GPU FPS 또는 native 전체화면 전환 검증을 대신하지 않는다. 제한된 macOS 환경에서
+출력되는 certificate/Dummy shader 오류는 `run_soak.sh`를 실패시키며 숨기지 않는다.
+
+창 실행이 가능한 환경의 시각/성능 검증 명령:
+
+```sh
+# 각 명령은 백그라운드 실행 후 로그/PNG를 확인한다.
+godot --path . res://scenes/test/drive_snapshot.tscn -- /tmp/drive-track0 20 5 drift 0 > /tmp/drive-track0.log 2>&1 &
+# 마지막 인자를 1, 2, 3으로 바꿔 나머지 트랙도 확인한다.
+godot --path . res://scenes/test/scene_snapshot.tscn -- res://race/race.tscn /tmp/race 20 5 > /tmp/race.log 2>&1 &
+tools/perf_check.sh 8 30 > /tmp/perf8.log 2>&1 &
+tools/perf_check.sh 12 30 > /tmp/perf12.log 2>&1 &
+```

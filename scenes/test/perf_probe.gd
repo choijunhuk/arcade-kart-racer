@@ -13,6 +13,8 @@ const WARMUP_SECONDS: float = 2.0
 const MICROSECONDS_PER_SECOND: float = 1_000_000.0
 const PROBE_LAPS: int = 3
 const PROBE_SEED: int = 8_008
+const FRAME_BUDGET_SECONDS: float = 0.033
+const MILLISECONDS_PER_SECOND: float = 1000.0
 
 var _race: RaceManager
 var _kart_count: int = DEFAULT_KART_COUNT
@@ -22,6 +24,8 @@ var _measured_real: float = 0.0
 var _measured_frames: int = 0
 var _worst_frame_seconds: float = 0.0
 var _last_frame_usec: int = 0
+var _over_budget_frames: int = 0
+var _worst_frame_monitors: Dictionary = {}
 
 
 func _ready() -> void:
@@ -37,11 +41,22 @@ func _process(_delta: float) -> void:
 	var now_usec: int = Time.get_ticks_usec()
 	var frame_seconds: float = float(now_usec - _last_frame_usec) / MICROSECONDS_PER_SECOND
 	_last_frame_usec = now_usec
+	var after_warmup: bool = _elapsed_real >= WARMUP_SECONDS
 	_elapsed_real += frame_seconds
-	if _elapsed_real > WARMUP_SECONDS:
+	if after_warmup:
 		_measured_real += frame_seconds
 		_measured_frames += 1
-		_worst_frame_seconds = maxf(_worst_frame_seconds, frame_seconds)
+		if frame_seconds > FRAME_BUDGET_SECONDS:
+			_over_budget_frames += 1
+		if frame_seconds > _worst_frame_seconds:
+			_worst_frame_seconds = frame_seconds
+			_worst_frame_monitors = {
+				"at_seconds": _elapsed_real,
+				"process_ms": Performance.get_monitor(Performance.TIME_PROCESS) * MILLISECONDS_PER_SECOND,
+				"physics_ms": Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * MILLISECONDS_PER_SECOND,
+				"nodes": Performance.get_monitor(Performance.OBJECT_NODE_COUNT),
+				"draw_calls": Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
+			}
 	if _measured_real >= _duration_seconds:
 		_finish()
 
@@ -71,9 +86,12 @@ func _finish() -> void:
 	var mean_fps: float = float(_measured_frames) / maxf(_measured_real, 0.001)
 	var result: Dictionary = {
 		"karts": _kart_count,
+		"warmup_seconds": WARMUP_SECONDS,
+		"frames_over_33ms": _over_budget_frames,
+		"worst_frame_monitors": _worst_frame_monitors,
 		"duration_seconds": snappedf(_measured_real, 0.001),
 		"mean_fps": snappedf(mean_fps, 0.01),
-		"worst_frame_ms": snappedf(_worst_frame_seconds * 1000.0, 0.01),
+		"worst_frame_ms": snappedf(_worst_frame_seconds * MILLISECONDS_PER_SECOND, 0.01),
 		"gpu_particles": ParticleBudget.count_gpu_particles(_race),
 		"renderer": RenderingServer.get_video_adapter_name(),
 	}

@@ -314,7 +314,7 @@ func _apply_video() -> void:
 
 func _apply_controls() -> void:
 	var controls: Dictionary = _settings.get("controls", {})
-	var deadzone: float = float(controls.get("deadzone", 0.2))
+	var deadzone: float = clampf(float(controls.get("deadzone", 0.2)), 0.0, 1.0)
 	for action: StringName in [
 		InputActions.ACCELERATE,
 		InputActions.BRAKE,
@@ -353,4 +353,14 @@ func _valid_remap(data: Dictionary) -> bool:
 	for key: String in ["device", "keycode", "physical_keycode", "button_index", "axis", "axis_value"]:
 		if data.has(key) and not (data[key] is int or data[key] is float):
 			return false
-	return true
+		if data.has(key) and not is_finite(float(data[key])):
+			return false
+	match data["type"]:
+		"key":
+			return int(data.get("keycode", 0)) > 0 or int(data.get("physical_keycode", 0)) > 0
+		"joy_button":
+			return int(data.get("button_index", -1)) >= 0
+		"joy_motion":
+			var axis_value: float = float(data.get("axis_value", 0.0))
+			return int(data.get("axis", -1)) >= 0 and absf(axis_value) > 0.0 and absf(axis_value) <= 1.0
+	return false

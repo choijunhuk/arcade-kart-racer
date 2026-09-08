@@ -1,5 +1,215 @@
 # Development Log
 
+## Phase 11 보고 — Vertical Slice 하드닝
+
+**구현/자동 기능 검증 통과, 출시 판정 보류.** `phase/11-hardening`을 유지했고
+서브에이전트, push, tag, 다음 Phase 구현은 수행하지 않았다. 판정일: 2026-09-09.
+권위 문서는 `.omc/phase11_brief.md`이며, 이 절의 최신 판정이 아래 과거 Phase의
+`SUPERSEDED` 항목과 오래된 수치를 대체한다.
+
+### 구현된 기능 / 수정한 결함
+
+- 실제 SceneTree 전환을 사용하는 `test_vertical_slice_flow.gd`: 메뉴→모드→
+  드라이버→카트→트랙→난이도→카운트다운→플레이어+AI 7대/아이템/3랩→결과→
+  Restart→다시 3랩/결과→Main Menu를 **3회 연속** 검증한다. 메뉴/결과는
+  `ui_*` 이벤트, 플레이어는 실제 물리/드리프트/아이템 슬롯을 쓰는 입력 하네스로
+  주행한다. 랩/순위/완주는 강제로 설정하지 않는다.
+- 올바른 JSON/ConfigFile 문법이어도 잘못된 필드 타입·불완전 remap으로 부팅/
+  설정 적용이 깨지던 문제를 수정했다. 유효한 백업→기본값 복구와 기존 키보드
+  바인딩 보존을 검증한다. 문법이 깨진 ConfigFile의 engine diagnostic은 테스트가
+  예상 오류로 포착하며, 실제 앱은 기본값으로 계속 부팅한다.
+- 창 focus loss는 로컬 플레이어 레이스만 Pause하고, focus return은 자동 재개하지
+  않는다. all-AI 관전/성능 probe는 계속 실행한다.
+- ItemBox의 재생성 및 PositionTracker의 5 Hz 갱신이 콜백 횟수에 묶여 배속에서
+  각각 24초/1.6초로 늘어나던 문제를 delta 누적으로 수정했다.
+- AI가 자신의 Nitro/스타트/미니터보를 nominal speed 초과로 판단해 제동하던 문제:
+  같은 카트의 실제 boost cap을 읽되 코너 grip 제한은 유지한다.
+- 드리프트 중 반대 조향을 버려 안쪽 벽으로 몰던 AI clamp를 제거했다. 드리프트
+  방향 고정은 기존 KartPhysics가 담당하고, AI는 반경을 넓힐 수 있다.
+- `test_hairpin`의 checkpoint 장축이 주행 방향을 향해 횡폭이 2 m였던 결함을
+  14 m 횡폭으로 교정했다. 양쪽 ±3 m lane의 8개 검사가 수정 전 전부 실패,
+  수정 후 통과했다. AI 난이도 비교 테스트도 seed별 이전 레이스를 해제해
+  같은 물리 공간에 완주 카트/트랙 여섯 개가 누적되지 않게 했다.
+- 8배속 sim은 physics 480 Hz / game step 1/60초를 유지한다. 예전 8/60초
+  step에서는 boosted kart가 checkpoint 두께를 한 번에 건너뛸 수 있었다.
+  fixed-fps 60/480에서 seed 12의 레이스 출력이 동일함을 비교하고 presentation
+  overhead가 적은 60을 runner 기본으로 삼았다. flow/AI 비교 테스트도 같은 원칙이다.
+- `run_soak.sh`는 stderr 포함 원문 전체를 저장하고 어떤 error line도 실패 처리한다.
+  20회 이상 strict balance 기본값, 같은 seed의 items-off 대조군, 혼합 클래스
+  roster, 개별 DNF 진단, 완전한 JSON/SIM_SUMMARY를 추가했다.
+- perf probe는 warmup 경계에 걸친 frame을 제외하고 33 ms 초과 frame 수 및
+  최악 frame 시점의 process/physics/node/draw-call 모니터를 함께 기록한다.
+
+### 생성/수정된 파일과 단순화
+
+| 영역 | 파일 |
+|---|---|
+| Core | `core/autoload/{save_manager,settings_manager}.gd`, `ui/menus/pause_menu.gd` |
+| Race/AI | `race/{race_config,race_manager,position_tracker}.gd`, `ai/{ai_driver,ai_driver_drift}.gd` |
+| Track | `track/elements/item_box.gd`, `track/racing_line.gd`, `track/tracks/test_hairpin/test_hairpin.tscn`, `track/tracks/test_loop_hills/test_loop_hills.tscn` |
+| Data | `data/ai/{easy,normal,hard}.tres`, `data/karts/{light,heavy}.tres`, `data/items/nitro_can.tres`, `data/item_tables/default_8_karts.tres` |
+| Tests | 새 `tests/integration/{test_vertical_slice_flow,test_phase11_robustness}.gd`, `tests/support/flow_input_provider.gd`, `tests/unit/test_phase11_sim.gd`, `tests/sim/race_sim_metrics.gd`; 기존 AI/ranking/box/simulator 테스트 및 `tests/sim/run_ai_race.gd` |
+| Tools | `tools/{run_sim,run_soak}.sh`, `scenes/test/perf_probe.gd` |
+| Docs | `ARCHITECTURE.md`, `DEVLOG.md`, `README.md`, 새 `CHANGELOG.md`, `docs/validation/phase11.json` |
+
+새 스크립트의 `.uid`도 생성했다. `kart/kart_physics.gd`의 오래된 설명을 줄여
+동작 변경 없이 400줄 제한을 맞췄다. 시뮬레이터의 통계만 별도 작은 파일로
+분리하고 기존 static 테스트 API는 보존했다. nested JSON을 grep으로 잘라내던
+shell 로직을 제거했다. ARCHITECTURE는 중복된 과거 기록 대신 현재 경계/흐름/
+테스트 계약으로 갱신했다. 새 dependency는 없다.
+
+### 밸런스: 실제 before / after
+
+각 표본은 normal / 8카트 / 3랩이며 모든 seed와 개별 결과 요약은
+[`docs/validation/phase11.json`](docs/validation/phase11.json)에 저장했다.
+
+| Item gate (20 seeds) | 시작 기준 | 최종 |
+|---|---:|---:|
+| items-on 완주 | 158/160 | **160/160** |
+| items-off 완주 | 160/160 | **160/160** |
+| lap1 최하위 gain, on | 0.50 | **0.85** |
+| 같은 지표, off | 0.75 | **0.45** |
+| on−off delta, 목표 ≥0.40 | −0.25 | **+0.40** |
+| 선두 피격/레이스, 상한 3 | 0.60 | **1.05** |
+| strict process exit | 시작 기준 advisory/완주 실패 | **0, gate true** |
+
+최종 비교는 **20쌍/40개 실제 레이스**다. 대조군도 완주/리스폰/충돌 예산을
+만족해야 전체 success가 true가 된다. float subtraction의 경계 오차만 1e-6
+허용하며 0.399는 실패한다. 시작 수치는 과거 Phase 7의 0.8/0.4를 재사용하지
+않고 이 checkout에서 새로 측정했다.
+
+| 카트 클래스 / 12 혼합 레이스 | 시작 기준 승수 | 최종 승수 |
+|---|---:|---:|
+| Light | 0 | **6** |
+| Medium | 4 | **3** |
+| Heavy | 8 | **3** |
+
+혼합 최종 **96/96 완주**, 카트당 리스폰/정면충돌 모두 0, process exit 0.
+클래스와 driver/grid 순서가 고정 우위가 되지 않도록 클래스 배치를 seed마다 회전한다.
+
+AI 1위–8위 **전체 완주시간 차이** 평균은 items-on **5.5325초**, items-off
+**5.8933초**다. 평균은 5–25초 범위다. 단일 seed 범위는 on **2.1333–12.0500초**,
+off **3.7000–9.1000초**이며, 개별 레이스 모두 5초 이상이라는 보장은 하지 않는다
+(on 8/20, off 7/20이 5초 미만). 평균 per-lap은 on **63.1350초**다.
+
+최종 data 조정:
+
+- 모든 AI profile lane 범위 ±1.5→±3.0 m, Normal steer_noise 0.06→0.10.
+  speed_confidence와 실제 AI 물리 상한은 난이도별 기존 값을 유지했다.
+- Light max speed 26→27.9, handling 1.15→1.08, drift_factor 1.15→1.02.
+  높은 가속과 drift_charge_mult 1.15는 유지한다. Heavy max speed 30→28.2,
+  Medium은 28로 유지한다. 긴 직선의 속도 격차와 과도하게 좁은 Light 반경을 줄였다.
+- Nitro power 1.29→1.50, duration 1.6→3.0초. 6–8위 rows를 Nitro 중심으로
+  재가중(50/55/60%), 선두 억제/방어/다른 공격 아이템은 유지한다.
+- 중간 실험에서 AI assumed grip 14/brake lookahead 40은 오히려 안쪽 벽
+  충돌을 늘려 폐기했다. 최종 grip 20 / brake lookahead 25는 원래 값이다.
+  타이밍/AI clamp 결함을 데이터만으로 덮지 않았다.
+
+### 테스트 방법 및 결과
+
+| 검증 | 실제 결과 |
+|---|---|
+| `tools/run_tests.sh` | **419/419**, 72 scripts, **3,730 assertions**, 189.377초; 기존 386 대비 **33개 추가** |
+| §2.2 full-flow | **3/3 연속**, 각 2레이스, 총 6레이스; push_error/engine error 0 |
+| 안정성 | settled nodes **132→132→132**, orphan **0→0→0** |
+| 메모리 | 146,286,952→146,360,380→146,678,236 bytes; warm baseline 대비 **391,284 bytes 증가** (<8 MiB 제한) |
+| `validate_tracks.sh` | **4/4 PASS** |
+| import / headless boot | exit 0, **SCRIPT ERROR 0**; 아래 native 진단은 남음 |
+| typed/static/line 감사 | project GDScript 216개, **400줄 초과 0**, 변경 선언 타입 누락 0, code의 TODO(phase≤11) 0, `git diff --check` 통과 |
+| 독립 lint 도구 | gdlint/gdformat 미설치; 엔진 compile/type 검사와 targeted static audit 사용 |
+| 20-race strict balance | **PASS**, 위 20쌍 결과 |
+| 12-race mixed classes | **PASS**, 96 finishers |
+| ten-race sim body | **PASS**, 80/80 finishers, 리스폰 0, 카트당 정면충돌 최대 **2** (3랩 예산 9), 평균 spread 5.4033초 |
+| `tools/run_soak.sh` 원문 gate | **FAIL / exit 1**: 아래 두 baseline native error lines를 의도대로 검출 |
+| Windowed PNG / 8·12 kart GPU perf | **환경 차단으로 미검증/skip** |
+
+로그는 `.tmp-home/phase11/{final-tests,final-validate,final-parse,balance-lanes3,
+mixed-lanes3,soak,soak-command,window-drive-0}.log`에 유지했다. error wrapper 자체는
+clean fixture exit 0, stderr error fixture exit 1, process failure fixture exit 7을
+검증했다. 기능이 성공했다는 JSON만으로 raw error gate를 통과시키지 않는다.
+
+### 현재 문제점 / 검증 한계
+
+- 이 sandbox의 Godot startup은 `get_system_ca_certificates: ret != noErr`,
+  Dummy renderer 종료는 `4 RID ... DummyShader ... leaked at exit`를 출력한다.
+  두 진단 모두 작업 전 기준선에 존재했다. 원문 오류 0인 soak DoD는 **미충족**이며
+  이를 통과로 표시하지 않았다. `[network]`/TLS section, 오류 숨김/필터는 추가하지 않았다.
+- `drive_snapshot`을 background + redirected output으로 실행하고 polling했지만
+  macOS `com.apple.hiservices-xpcservice` 연결 오류로 PNG 생성 전에 막혔다.
+  사용자의 예외 지시에 따라 나머지 세 track snapshot, race scene snapshot,
+  perf_probe 8/12를 skip했다. PNG를 보지 못했으므로 시각 버그 0, z-fighting 없음,
+  실제 HUD 가독성, 최악 GPU frame ≤33 ms 또는 60 FPS를 주장하지 않는다.
+- 이전 main-thread Phase 8 기록은 12카트 119.9 FPS / worst 47.7 ms였으나
+  현재 Phase 11 프로필 수치로 재사용하지 않는다. 새 probe는 warmup 경계를 더
+  정확히 제외하고 최악 frame 모니터를 제공한다.
+- window focus signal과 fullscreen setting/viewport resize는 headless로 검증했다.
+  실제 OS alt-tab/fullscreen 및 물리 게임패드 조작·청음은 native 확인이 남는다.
+- 평균 AI spread 목표는 만족하지만 모든 개별 race가 5–25초에 들어가지는 않는다.
+  spec을 개별 seed 하한으로 적용하면 이 항목도 추가 튜닝이 필요하다.
+- 단독 구현 및 자체 diff 검토다. 요청대로 독립 서브역할 리뷰는 하지 않았다.
+
+### TODO / PLACEHOLDER의 Phase 11 disposition
+
+| 과거 미완료 표기 | 현재 판정 / 근거 또는 구체적 이관 |
+|---|---|
+| Phase 0–3 kart/terrain/hit/drift/boost/audio 스텁 | **해결**: 현재 각 컴포넌트, EventBus audio 및 기존+신규 GUT 회귀 통과 |
+| authored line/checkpoints/respawn/box·kill coverage | **해결**: RacingLine bounded lookup, LapTracker/RespawnSystem, validator 4/4; flat/hills oval은 의도된 test fixture로 재명명 |
+| 실제 AI/ItemSlotView/projectile sensing/아이템 사용 | **해결**: 현재 AI/ItemManager wiring, simulation 사용·피격 통계, 419 tests |
+| UI/HUD/결과/접근성·난이도 선택 | **해결**: 현재 메뉴/HUD 및 실제 3회 scene-flow; 최종 에셋과 하드웨어 판정은 아래 별도 항목 |
+| 실드 링·위협 배너·카메라·skid·SFX/BGM 연결 | **해결**: Phase 8–10 현재 구현과 회귀 테스트; 원본 tone의 최종 믹스는 Phase 13 |
+| Phase 7 아이템 지표/튜닝 | **해결**: 현재 paired delta +0.40, strict 기본 및 선두 hits 1.05 |
+| test hills fixed-roll bank / Track01 평지 jump landing | **TODO(phase-13)**: authored geometry/art pass에서 교체; 현 기능 트랙의 기하 재설계는 하드닝 범위 밖 |
+| 아이템/driver/track preview primitive art, 기본 font | **TODO(phase-13)**: 최종 CC0/OFL assets+license, UI art/localization과 함께 교체 |
+| 41 SFX+3 BGM 합성 PLACEHOLDER / 최종 mix | **TODO(phase-13)**: 실제 청음과 최종 에셋 교체가 필요 |
+| vibration stub | **TODO(phase-13)**: 실제 controller haptics 연결/하드웨어 검증 필요 |
+| items on/off 메뉴 toggle | **TODO(phase-12)**: Time Trial/Grand Prix 등 mode별 RaceConfig UX와 함께 추가; 현 slice는 items on 고정 |
+| 새 트랙의 kill-plane 최소 두께 validator | **TODO(phase-12)**: 새 수직 코스의 낙하 범위에 맞춰 일반화; 기존 네 plane은 200 m 두께/coverage 검증됨 |
+| 선택적 countdown/results CinematicCamera·관전 polish | **TODO(phase-13)**: 실제 camera는 완성, 추가 cinematic 연출은 선택적 polish |
+| 과거 Phase 8 window perf 의무 | 과거 측정 기록 존재; **현재 Phase 11 native release check는 환경 차단 상태**, 후속 Phase로 완료 처리하지 않음 |
+
+과거 보고의 unchecked 계획은 당시 기록으로 남긴다. 현재 code의 유일한
+명시 TODO는 Phase 13 vibration, 명시 PLACEHOLDER는 Phase 13 audio/banked art다.
+
+### 커밋 상태
+
+`4f6db95`, `429502f`, `535d9d6`의 세 논리적 repair commit을 `git commit -m`으로
+생성했다. 그 뒤 `git add`가 `.git/index.lock: Operation not permitted`로 거부됐다.
+사용자 지시에 따라 남은 변경/새 파일은 **미커밋으로 유지**한다. lock 제거, 우회
+checkout, branch switch, push 또는 tag는 하지 않았다.
+
+### 실행 방법 / 플레이 지시 — “이대로 친구에게 보여줄 수 있다”
+
+```sh
+godot --path .
+# 단일 gate 재현 (sandbox에서는 HOME="$PWD/.tmp-home" 접두어)
+tools/run_tests.sh
+tools/validate_tracks.sh
+tools/run_sim.sh --races 20 --difficulty normal
+tools/run_sim.sh --races 12 --mixed-karts on
+tools/run_soak.sh
+```
+
+- [x] 자동: 메뉴부터 3랩/결과/재시작/메뉴 복귀 3회 연속, 오류·node/orphan 증가 없음.
+- [x] 자동: 10 AI races 전원 완주, paired item delta/leader-hit 및 mixed-class gate 통과.
+- [ ] Native: README의 background snapshot 명령으로 네 트랙/race PNG를 보고
+  벽 누락·z-fighting·HUD overlap·파티클 잔존이 없는지 확인한다.
+- [ ] Native: `tools/perf_check.sh 8 30`, `12 30`의 warmup 이후 33 ms 초과 frame과
+  worst-frame 모니터를 확인한다. 현재 미측정이다.
+- [ ] 플레이: Play→Single Race→driver→kart→track→Normal, W/RT 가속,
+  A/D/좌스틱 조향, Space/RB 홀드→릴리즈 미니터보, 점프 중 트릭,
+  박스 룰렛 후 E/LB 사용. 3랩 경쟁에서 조향/드리프트/추월이 자연스러운지 확인한다.
+- [ ] Pause/설정, resize/fullscreen, alt-tab 후 Continue, 결과 Restart→Main Menu,
+  실제 엔진/아이템/음악 믹스와 게임패드 조작을 확인한다.
+- [ ] 원문 오류가 없는 `run_soak.sh` 재실행 및 사용자 최종 “친구에게 보여줄 수 있다” 판정.
+
+### 다음 Phase / 필요한 결정
+
+Phase 11에서 멈춘다. Phase 12, push와 `v0.1-vertical-slice` tag는 시작하지 않는다.
+필요한 후속은 native release 검증과 사용자 플레이 판정이며, 코드 실행 재허가를
+묻는 단계가 아니다.
+
+---
+
 ## Phase 10 보고 — 오디오
 
 ### 구현된 기능
@@ -263,7 +473,7 @@ Phase 11 Vertical Slice 하드닝. 이번 작업은 Phase 10에서 끝내며 다
 
 ### TODO / PLACEHOLDER 목록
 
-- TODO(phase-10): 메뉴/레이스/결과 BGM, engine/drift/item SFX와 volume bus를
+- SUPERSEDED(phase-10, Phase 11 disposition): 메뉴/레이스/결과 BGM, engine/drift/item SFX와 volume bus를
   실제 stream 재생에 연결한다.
 - TODO(phase-12): Time Trial과 Grand Prix 메뉴를 활성화하고 각 전용 flow를
   구현한다.
@@ -414,12 +624,12 @@ countdown/final-lap SFX와 AudioManager bus/pool을 실제 재생에 연결한�
 
 ### TODO / PLACEHOLDER 목록
 
-- TODO(phase-8): unrestricted macOS 로그인 세션에서
+- DEFERRED(phase-13): unrestricted macOS 로그인 세션에서
   `tools/perf_check.sh 12 30`을 실행해 mean FPS/worst frame을 이 보고서에 기록하고 8-kart
   ≥60 FPS 플레이 게이트를 확정한다.
-- TODO(phase-9): 임시 HUD/결과 화면의 최종 theme, 대비, typography,
+- SUPERSEDED(phase-9, Phase 11 disposition): 임시 HUD/결과 화면의 최종 theme, 대비, typography,
   패드 focus와 설정 화면(셰이크/FOV/speed-lines 포함)을 완성한다.
-- TODO(phase-10): 공개된 engine/drift ratio를 실제 AudioStreamPlayer pitch/
+- SUPERSEDED(phase-10, Phase 11 disposition): 공개된 engine/drift ratio를 실제 AudioStreamPlayer pitch/
   volume에 연결한다.
 - TODO(phase-13): 선택 범위인 countdown/results CinematicCamera를 추가한다.
 
@@ -617,17 +827,17 @@ godot --path .
   의 상위권 공격형 아이템 가중치를 올리는 튜닝 여지가 있다 — 이번
   세션에서는 게이트가 이미 통과해 데이터 튜닝은 하지 않았다.
 - 아이템/이펙트는 명시적으로 플레이스홀더(단색 프리미티브 메시, 기본
-  파티클)다 — 실제 비주얼 폴리시는 Phase 9 범위.
+  파티클)다 — Phase 11 disposition: 최종 에셋 교체는 Phase 13 범위.
 
 ### TODO / PLACEHOLDER 목록
 
-- TODO(phase-8): 이번에 고친 `FallPlane` 관통 버그는 "낙하 킬존은 항상
+- SUPERSEDED(phase-8, Phase 11 disposition): 이번에 고친 `FallPlane` 관통 버그는 "낙하 킬존은 항상
   충분히 두꺼워야 한다"는 일반 원칙을 드러냈다. 새 트랙을 추가할 때마다
   이 두께를 챙기거나, `track_validator.gd`에 최소 두께 체크를 추가하는
   걸 고려한다.
-- TODO(phase-9): 아이템/이펙트 비주얼 폴리시(플레이스홀더 메시 →
+- TODO(phase-13): 아이템/이펙트 비주얼 폴리시(플레이스홀더 메시 →
   실제 모델/파티클/사운드), 실드 링·위협 배너 등 HUD 요소의 최종 UI화.
-- TODO(phase-9): 난이도 선택 UI에 아이템 on/off 토글 노출(현재는
+- TODO(phase-12): 난이도 선택 UI에 아이템 on/off 토글 노출(현재는
   `RaceConfig.items_enabled`를 코드/시뮬레이션 인자로만 제어).
 
 ### 다음 Phase 계획
@@ -928,17 +1138,17 @@ AI 카트 7대를 추가해 관찰할 수 있다(F3으로 목표 속도/고무�
 
 ### TODO / PLACEHOLDER 목록
 
-- TODO(phase-7): `ai/item_slot_view.gd`의 null 구현을 실제 `ItemSlot`
+- SUPERSEDED(phase-7, Phase 11 disposition): `ai/item_slot_view.gd`의 null 구현을 실제 `ItemSlot`
   기반 뷰로 교체하고, `AIController._evaluate_item_use`가 만드는
   플레이스홀더 `AIItemUseProfile.new()`/`ItemSlotView.new()`를 진짜
   카트 슬롯/아이템 데이터로 연결한다.
-- TODO(phase-7): `ai/ai_sensors.gd`의 `_sense_projectile()`이
+- SUPERSEDED(phase-7, Phase 11 disposition): `ai/ai_sensors.gd`의 `_sense_projectile()`이
   `ItemManager.active_projectiles`를 읽도록 완성한다(현재는 autoload가
   없어 항상 위협 없음을 보고하는 구조적 스텁).
-- TODO(phase-8): 카메라 셰이크/드리프트 오프셋이 AI 카트에도 동일
+- SUPERSEDED(phase-8, Phase 11 disposition): 카메라 셰이크/드리프트 오프셋이 AI 카트에도 동일
   물리를 쓰므로 추가 작업은 없지만, 관전 카메라로 AI 추월/드리프트를
   보여주는 연출은 Phase 8/13 폴리시 범위다.
-- TODO(phase-9): 난이도 선택 UI(현재는 `RaceConfig.ai_difficulty`를
+- SUPERSEDED(phase-9, Phase 11 disposition): 난이도 선택 UI(현재는 `RaceConfig.ai_difficulty`를
   코드/기본값으로만 설정, 메뉴에 노출되지 않음).
 
 ### 다음 Phase 계획
@@ -1092,14 +1302,14 @@ AI 카트 7대를 추가해 관찰할 수 있다(F3으로 목표 속도/고무�
 
 ### TODO / PLACEHOLDER 목록
 
-- TODO(phase-6): `ScriptedRaceInputProvider`를
+- SUPERSEDED(phase-6, Phase 11 disposition): `ScriptedRaceInputProvider`를
   AIController/Navigator/Driver/Sensors 기반 입력으로 교체하고 추월·회피·
   지름길·난이도·제한적 고무줄 및 반복 통계를 구현한다.
-- TODO(phase-7): ItemBox 획득을 실제 ItemManager/ItemSlot/아이템 효과와
+- SUPERSEDED(phase-7, Phase 11 disposition): ItemBox 획득을 실제 ItemManager/ItemSlot/아이템 효과와
   연결한다. Phase 5 결과의 item use count 수집 경계만 준비돼 있다.
-- TODO(phase-8): 최종 카메라 shake/look-back 및 Track01 점프 착지 연출.
-- TODO(phase-9): main/pause/results/HUD의 최종 메뉴·스타일·접근성 폴리시.
-- TODO(phase-10): 실제 BGM/SFX/engine audio 라이브러리와 재생 정책.
+- SUPERSEDED(phase-8, Phase 11 disposition): 최종 카메라 shake/look-back 및 Track01 점프 착지 연출.
+- SUPERSEDED(phase-9, Phase 11 disposition): main/pause/results/HUD의 최종 메뉴·스타일·접근성 폴리시.
+- SUPERSEDED(phase-10, Phase 11 disposition): 실제 BGM/SFX/engine audio 라이브러리와 재생 정책.
 - PLACEHOLDER(phase-13): Track01 점프대 착지는 갭 없는 연속 그레이박스.
 
 ### 다음 Phase 계획
@@ -1287,9 +1497,9 @@ DebugOverlay에서 `lap`/`next_checkpoint`/`progress`/`wrong_way` 확인 가능.
 ### TODO / PLACEHOLDER 목록
 
 - RESOLVED(phase-5): `RaceConfig` 소비, `RaceManager`, 카운트다운, 결과 화면.
-- TODO(phase-7): `ItemBox.collected` → 실제 아이템 부여/효과. 지금은
+- SUPERSEDED(phase-7, Phase 11 disposition): `ItemBox.collected` → 실제 아이템 부여/효과. 지금은
   숨김/재생성 + 제네릭 시그널만 존재.
-- TODO(phase-6): AI가 `TrackShortcut.risk`를 이용해 지름길 진입 여부를
+- SUPERSEDED(phase-6, Phase 11 disposition): AI가 `TrackShortcut.risk`를 이용해 지름길 진입 여부를
   판단하는 로직. 지금은 지름길 진행도 계산만 존재.
 - PLACEHOLDER: Track01 점프대 착지 구간은 갭 없는 평지(비주얼 패스에서
   실제 착지 지형으로 교체 예정).
@@ -1433,12 +1643,12 @@ RESULTS→PAUSED), `RaceConfig` 소비, 카운트다운 + 스타트 부스트, �
 
 ### TODO / PLACEHOLDER 목록
 
-- TODO(phase-4): authored RacingLine/checkpoints/RespawnPoint 기반 리스폰,
+- SUPERSEDED(phase-4, Phase 11 disposition): authored RacingLine/checkpoints/RespawnPoint 기반 리스폰,
   banked geometry 정렬, item-box 및 kill-zone coverage validator 완성
   (Phase 2 보고에서 이월).
 - RESOLVED(phase-5): `BoostController.evaluate_start_input()`을 실제
   카운트다운 입력/GO 적용과 연결.
-- TODO(phase-9): `ui/hud/drift_meter`를 실제 레이스 HUD로 교체.
+- SUPERSEDED(phase-9, Phase 11 disposition): `ui/hud/drift_meter`를 실제 레이스 HUD로 교체.
 
 ### 다음 Phase 계획
 
@@ -1548,9 +1758,9 @@ Phase 4에서 체크포인트/랩 진행, 아이템, AI 드라이버를 구현�
 
 ### TODO / PLACEHOLDER 목록
 
-- TODO(phase-3): `DriftController`와 일반 `BoostController`; slipstream exit
+- SUPERSEDED(phase-3, Phase 11 disposition): `DriftController`와 일반 `BoostController`; slipstream exit
   보너스 이관 및 boost의 offroad 무시 훅 연결.
-- TODO(phase-4): authored RacingLine/checkpoints/RespawnPoint 기반 리스폰,
+- SUPERSEDED(phase-4, Phase 11 disposition): authored RacingLine/checkpoints/RespawnPoint 기반 리스폰,
   banked geometry 정렬, item-box 및 kill-zone coverage validator 완성.
 - PLACEHOLDER: `tools/run_sim.sh` AI 레이스는 Phase 6에서 구현.
 
@@ -1876,7 +2086,7 @@ Phase 1에서 `KartController`, `KartPhysics`, `KartVisuals`, 플레이어 입�
 
 없음. Phase 0 승인 여부만 필요하다.
 - ✅ Resolved in Phase 8: detached skid quads are now one continuous indexed strip.
-- ✅ Overlap resolved in Phase 8: DebugOverlay moved right; final HUD contrast/restyle remains TODO(phase-9).
+- ✅ Overlap resolved in Phase 8: DebugOverlay moved right; final HUD contrast/restyle remains SUPERSEDED(phase-9, Phase 11 disposition).
 
 ### Phase 7 밸런스 게이트 최종 판정 (main thread, 2026-09-08)
 - 20레이스 normal/8카트/3랩, items on: rank-1 피격 0.65~0.75/레이스 (예산 3 ✅), lap1-8위 상승 0.8 (목표 1.5 ❌), items off 대조군 0.4.

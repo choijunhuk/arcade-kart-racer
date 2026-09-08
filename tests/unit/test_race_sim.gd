@@ -155,15 +155,15 @@ func test_item_balance_gate_requires_both_thresholds() -> void:
 		return
 	assert_true(bool(script.call("items_balance_pass", {
 		"average_rank_one_hits_per_race": 3.0,
-		"mean_lap1_rank8_gain": 1.5,
+		"lap1_rank8_gain_delta": 0.4,
 	})))
 	assert_false(bool(script.call("items_balance_pass", {
 		"average_rank_one_hits_per_race": 3.01,
-		"mean_lap1_rank8_gain": 2.0,
+		"lap1_rank8_gain_delta": 0.5,
 	})))
 	assert_false(bool(script.call("items_balance_pass", {
 		"average_rank_one_hits_per_race": 2.0,
-		"mean_lap1_rank8_gain": 1.49,
+		"lap1_rank8_gain_delta": 0.39,
 	})))
 
 

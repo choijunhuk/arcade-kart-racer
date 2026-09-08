@@ -190,7 +190,7 @@ position = Vector3(39, 0.15, 22)
 mesh = SubResource("Mesh_ramp")
 
 [node name="BankedCornerOverlay" type="MeshInstance3D" parent="Geometry"]
-# PLACEHOLDER (Phase 4 replaces with curve-aligned banked geometry): a fixed
+# PLACEHOLDER(phase-13): final geometry pass replaces this fixed-roll bank; a fixed
 # world-space roll approximates banking on top of the existing flat curve
 # collision instead of true tangent-aligned banked geometry.
 position = Vector3(48.5, -0.2, -8)

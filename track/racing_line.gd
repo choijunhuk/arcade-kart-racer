@@ -5,7 +5,7 @@ extends Path3D
 ## offset-based queries used by LapTracker, PositionTracker, RespawnSystem,
 ## and (later) AI. Spec: §8, §14, §26 (hinted search, not a full scan per tick).
 
-const PLACEHOLDER_POINTS: Array[Vector3] = [
+const TEST_OVAL_POINTS: Array[Vector3] = [
 	Vector3(-30.0, 0.4, 22.0),
 	Vector3(30.0, 0.4, 22.0),
 	Vector3(45.0, 0.4, 16.0),
@@ -35,7 +35,7 @@ var _length: float = 0.0
 
 func _ready() -> void:
 	if curve == null or curve.point_count == 0:
-		_build_placeholder_curve()
+		_build_test_oval()
 
 
 ## Rebuilds the local point/offset cache from `curve`. Idempotent queries
@@ -246,9 +246,9 @@ static func _circle_curvature(p0: Vector3, p1: Vector3, p2: Vector3) -> float:
 	return signf(cross.y) * (1.0 / radius)
 
 
-func _build_placeholder_curve() -> void:
-	# PLACEHOLDER: test_loop/test_loop_hills use this default oval; authored
-	# tracks (test_hairpin, track_01) assign `curve` themselves before use.
+func _build_test_oval() -> void:
+	# The flat/hills test fixtures use this oval. Hairpin and Track01 scripts
+	# assign their own curve before use.
 	curve = Curve3D.new()
-	for point: Vector3 in PLACEHOLDER_POINTS:
+	for point: Vector3 in TEST_OVAL_POINTS:
 		curve.add_point(point)
