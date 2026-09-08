@@ -43,7 +43,9 @@ func _process(delta: float) -> void:
 			_countdown_label.visible = false
 
 
-## Binds the HUD to read-only race participants and tracker APIs.
+## Binds the HUD to read-only race participants and tracker APIs. `player_kart`
+## is null when `RaceConfig.player_slot == -1` (spec §14.2: an AI-only race,
+## e.g. the headless sim), in which case the HUD simply shows nothing player-specific.
 func bind(
 	player_kart: KartController, lap_tracker: LapTracker,
 	position_tracker: PositionTracker, kart_count: int, total_laps: int,
@@ -53,7 +55,8 @@ func bind(
 	_position_tracker = position_tracker
 	_kart_count = maxi(1, kart_count)
 	_total_laps = maxi(1, total_laps)
-	_drift_meter.set_controller(player_kart.drift_controller)
+	if player_kart != null:
+		_drift_meter.set_controller(player_kart.drift_controller)
 
 
 func _exit_tree() -> void:

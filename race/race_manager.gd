@@ -8,9 +8,9 @@ extends Node3D
 const KART_SCENE: PackedScene = preload("res://kart/kart.tscn")
 const DEFAULT_TRACK: TrackData = preload("res://data/tracks/track_01.tres")
 const DEFAULT_KART: KartData = preload("res://data/karts/medium.tres")
+const DEFAULT_AI_DIFFICULTY: AIDifficultyProfile = preload("res://data/ai/normal.tres")
 const DEFAULT_LAPS: int = 3
 const DEFAULT_KART_COUNT: int = 8
-const DUMMY_SPEED_RATIO: float = 0.78
 const FINISHED_SPEED_RATIO: float = 0.5
 
 const LEGAL_TRANSITIONS: Dictionary = {
@@ -43,6 +43,8 @@ var _player_provider_factory: Callable
 var _track: TrackRoot
 var _karts: Array[KartController] = []
 var _player_kart: KartController
+var _ai_controllers: Dictionary[int, AIController] = {}
+var _ai_context: AIRaceContext
 var _finishing_elapsed: float = 0.0
 var _results_delay_remaining: float = -1.0
 var _final_entries: Array[RaceResults.Entry] = []
@@ -158,9 +160,12 @@ func _validate_config() -> void:
 		_config.track = DEFAULT_TRACK
 	_config.laps = maxi(1, _config.laps)
 	_config.kart_count = clampi(_config.kart_count, 1, TrackRoot.MIN_GRID_SLOTS)
-	_config.player_slot = clampi(_config.player_slot, 0, _config.kart_count - 1)
+	if _config.player_slot >= 0:
+		_config.player_slot = clampi(_config.player_slot, 0, _config.kart_count - 1)
 	if _config.player_kart == null:
 		_config.player_kart = DEFAULT_KART
+	if _config.ai_difficulty == null:
+		_config.ai_difficulty = DEFAULT_AI_DIFFICULTY
 
 
 func _setup_systems() -> void:
@@ -182,23 +187,56 @@ func _setup_systems() -> void:
 
 func _spawn_karts() -> void:
 	var grid: Array[Transform3D] = _track.get_start_grid()
+	_ai_controllers.clear()
+	_ai_context = _make_ai_context()
+	var race_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	race_rng.seed = _config.seed
+	var ai_count: int = _config.kart_count - (1 if _config.player_slot >= 0 else 0)
+	var ai_index: int = 0
 	for slot: int in range(_config.kart_count):
 		var kart: KartController = KART_SCENE.instantiate() as KartController
 		var is_player: bool = slot == _config.player_slot
-		kart.name = "PlayerKart" if is_player else "DummyKart%d" % (slot + 1)
+		kart.name = "PlayerKart" if is_player else "AiKart%d" % (slot + 1)
 		kart.kart_data = _config.player_kart.duplicate(true) as KartData
 		_karts_root.add_child(kart)
 		kart.global_transform = grid[slot]
 		kart.reset_motion_arcade()
-		var provider: InputProvider = _make_player_provider(kart) if is_player else _make_scripted_provider(kart, DUMMY_SPEED_RATIO)
-		kart.set_input_provider(provider)
-		_karts.append(kart)
 		if is_player:
+			kart.set_input_provider(_make_player_provider(kart))
 			_player_kart = kart
+		else:
+			_spawn_ai_kart(kart, race_rng, ai_index, ai_count)
+			ai_index += 1
+		_karts.append(kart)
 		_lap_tracker.register_kart(kart)
 		_position_tracker.register_kart(kart)
 		_collision_resolver.register_kart(kart)
 		_respawn_system.register_kart(kart, _get_respawn_transform)
+	_ai_context.player_kart = _player_kart
+
+
+func _make_ai_context() -> AIRaceContext:
+	var context: AIRaceContext = AIRaceContext.new()
+	context.racing_line = _track.get_racing_line()
+	context.track = _track
+	context.position_tracker = _position_tracker
+	context.request_respawn = _respawn_system.request_respawn
+	context.get_countdown_phase_seconds = _countdown.get_phase_seconds
+	return context
+
+
+## Adds an `AIController` child driven by `RaceConfig.ai_difficulty`, staggering
+## each kart's AI tick by a fraction of the tick period (spec §26).
+func _spawn_ai_kart(kart: KartController, race_rng: RandomNumberGenerator, ai_index: int, ai_count: int) -> void:
+	var controller: AIController = AIController.new()
+	controller.name = "AIController"
+	kart.add_child(controller)
+	var kart_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	kart_rng.seed = race_rng.randi()
+	var tick_interval: float = AIDifficulty.tick_interval(_config.ai_difficulty)
+	var phase_offset: float = tick_interval * (float(ai_index) / maxf(float(ai_count), 1.0))
+	controller.setup(kart, _track, _ai_context, _config.ai_difficulty, kart_rng, phase_offset)
+	_ai_controllers[kart.get_instance_id()] = controller
 
 
 func _make_player_provider(kart: KartController) -> InputProvider:
@@ -226,7 +264,13 @@ func _register_track_elements() -> void:
 
 func _on_kart_finished(kart: KartController, finish_time_seconds: float) -> void:
 	EventBus.kart_finished.emit(kart, finish_time_seconds)
-	kart.set_finished(_make_scripted_provider(kart, FINISHED_SPEED_RATIO))
+	var ai_controller: AIController = _ai_controllers.get(kart.get_instance_id()) as AIController
+	if ai_controller != null:
+		# AIDriver itself drops to safe-cruise mode once state == FINISHED
+		# (spec §13.4), so keep feeding its own provider instead of swapping.
+		kart.set_finished(ai_controller.get_input_provider())
+	else:
+		kart.set_finished(_make_scripted_provider(kart, FINISHED_SPEED_RATIO))
 	if kart == _player_kart and _state == RaceState.RACING:
 		_transition_to(RaceState.FINISHING)
 
@@ -317,6 +361,7 @@ func _clear_runtime() -> void:
 		if is_instance_valid(kart):
 			kart.free()
 	_karts.clear()
+	_ai_controllers.clear()
 	_player_kart = null
 	if is_instance_valid(_track):
 		_track.free()
