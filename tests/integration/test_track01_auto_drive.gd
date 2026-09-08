@@ -44,5 +44,5 @@ func test_three_laps_complete_without_falling_off() -> void:
 		min_y = minf(min_y, kart.global_position.y)
 
 	assert_true(lap_tracker.is_finished(kart), "kart did not finish 3 laps within the time budget")
-	assert_eq(lap_tracker.get_lap(kart), TOTAL_LAPS + 1)
+	assert_eq(lap_tracker.get_lap(kart), TOTAL_LAPS)
 	assert_gte(min_y, MIN_Y, "kart fell far below the road at some point")

@@ -28,15 +28,23 @@ func _ready() -> void:
 
 
 ## Interpolates main-line-equivalent progress from `entry_offset` to
-## `exit_offset` using the kart's nearest position on `alt_curve`.
-func progress_at(global_pos: Vector3) -> float:
+## `exit_offset` using the kart's nearest position on `alt_curve`. When
+## `lap_length` is > 0 and `exit_offset` is numerically before `entry_offset`
+## (the shortcut spans the start/finish seam), the exit is unwrapped by one
+## lap length before lerping and the result is wrapped back into
+## `[0, lap_length)`.
+func progress_at(global_pos: Vector3, lap_length: float = 0.0) -> float:
 	if alt_curve == null or alt_curve.curve == null or alt_curve.curve.point_count < 2:
 		return entry_offset
 	var local_pos: Vector3 = alt_curve.to_local(global_pos)
 	var offset: float = alt_curve.curve.get_closest_offset(local_pos)
 	var length: float = alt_curve.curve.get_baked_length()
 	var t: float = clampf(offset / length, 0.0, 1.0) if length > 0.0 else 0.0
-	return lerpf(entry_offset, exit_offset, t)
+	var unwrapped_exit: float = exit_offset
+	if lap_length > 0.0 and exit_offset < entry_offset:
+		unwrapped_exit += lap_length
+	var result: float = lerpf(entry_offset, unwrapped_exit, t)
+	return fposmod(result, lap_length) if lap_length > 0.0 else result
 
 
 func _on_body_entered(body: Node3D) -> void:

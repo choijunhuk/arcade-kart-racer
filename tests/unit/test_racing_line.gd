@@ -22,10 +22,31 @@ func _build_circle_line() -> RacingLine:
 
 func test_curvature_matches_one_over_radius_at_multiple_offsets() -> void:
 	var line: RacingLine = _build_circle_line()
-	var expected: float = 1.0 / RADIUS
+	# `_build_circle_line`'s winding (angle increasing around +y) puts the
+	# circle's center to the right of travel (see RacingLine.right_at), i.e.
+	# a right turn, which is negative by the documented sign convention
+	# (positive = left turn, negative = right turn).
+	var expected: float = -1.0 / RADIUS
 	for offset: float in [0.0, line.length() * 0.25, line.length() * 0.5, line.length() * 0.75]:
 		var curvature: float = line.curvature_at(offset)
-		assert_almost_eq(curvature, expected, expected * CURVATURE_TOLERANCE)
+		assert_almost_eq(curvature, expected, absf(expected) * CURVATURE_TOLERANCE)
+
+
+func test_curvature_sign_flips_for_opposite_winding() -> void:
+	var ccw_line: RacingLine = _build_circle_line()
+	var cw_curve: Curve3D = Curve3D.new()
+	for index: int in range(SEGMENTS + 1):
+		var angle: float = -TAU * float(index) / float(SEGMENTS)
+		cw_curve.add_point(Vector3(RADIUS * cos(angle), 0.0, RADIUS * sin(angle)))
+	var cw_line: RacingLine = RacingLine.new()
+	cw_line.curve = cw_curve
+	cw_line.bake_interval = 1.0
+	add_child_autofree(cw_line)
+
+	var ccw_curvature: float = ccw_line.curvature_at(0.0)
+	var cw_curvature: float = cw_line.curvature_at(0.0)
+	assert_lt(ccw_curvature * cw_curvature, 0.0, "opposite winding must flip the curvature sign")
+	assert_almost_eq(absf(ccw_curvature), absf(cw_curvature), absf(ccw_curvature) * CURVATURE_TOLERANCE)
 
 
 func test_max_curvature_in_matches_curvature_at_on_a_uniform_circle() -> void:

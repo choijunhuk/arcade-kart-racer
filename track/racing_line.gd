@@ -103,7 +103,9 @@ func right_at(offset: float) -> Vector3:
 	return tangent_at(offset).cross(Vector3.UP).normalized()
 
 
-## Signed curvature (1/radius, from a 3-point circle fit) around `offset`.
+## Signed curvature (1/radius, from a 3-point circle fit) around `offset`:
+## positive for a left turn, negative for a right turn (relative to the
+## direction of travel, Y-up).
 func curvature_at(offset: float) -> float:
 	_ensure_baked()
 	if _length <= 0.0:
@@ -228,13 +230,14 @@ static func _circle_curvature(p0: Vector3, p1: Vector3, p2: Vector3) -> float:
 	var side_a: float = p1.distance_to(p2)
 	var side_b: float = p0.distance_to(p2)
 	var side_c: float = p0.distance_to(p1)
-	var doubled_area: float = (p1 - p0).cross(p2 - p0).length()
+	var cross: Vector3 = (p1 - p0).cross(p2 - p0)
+	var doubled_area: float = cross.length()
 	if doubled_area < 0.000001:
 		return 0.0
 	var radius: float = (side_a * side_b * side_c) / (2.0 * doubled_area)
 	if radius < 0.000001:
 		return 0.0
-	return 1.0 / radius
+	return signf(cross.y) * (1.0 / radius)
 
 
 func _build_placeholder_curve() -> void:

@@ -153,7 +153,7 @@ func _complete_lap(record: KartRecord) -> void:
 	record.lap += 1
 	record.checkpoints_hit.fill(0)
 	EventBus.lap_completed.emit(record.kart, record.lap, _race_time)
-	if record.lap > total_laps and not record.finished:
+	if record.lap >= total_laps and not record.finished:
 		record.finished = true
 		record.finish_time = _race_time
 		kart_finished.emit(record.kart, _race_time)

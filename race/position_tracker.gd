@@ -159,7 +159,7 @@ func _update_all() -> void:
 func _compute_progress(record: KartRecord) -> float:
 	var lap_index: int = _lap_tracker.get_lap(record.kart) if _lap_tracker != null else 0
 	if record.active_shortcut != null:
-		return float(lap_index) * _lap_length + record.active_shortcut.progress_at(record.kart.global_position)
+		return float(lap_index) * _lap_length + record.active_shortcut.progress_at(record.kart.global_position, _lap_length)
 	var next_index: int = _lap_tracker.get_next_checkpoint_index(record.kart) if _lap_tracker != null else 0
 	var window: Vector2 = _checkpoint_window(next_index)
 	var offset: float = _racing_line.offset_at(record.kart.global_position, record.cached_offset) if _racing_line != null else 0.0
@@ -204,3 +204,11 @@ func _on_shortcut_exited(body: Node3D, shortcut: TrackShortcut) -> void:
 	var record: KartRecord = _records.get(kart.get_instance_id())
 	if record != null and record.active_shortcut == shortcut:
 		record.active_shortcut = null
+		# `cached_offset` was never touched while riding the shortcut (the
+		# active-shortcut branch of `_compute_progress` bypasses the racing
+		# line entirely), so it is stale relative to where the kart rejoins
+		# the main line. Reseed it from the shortcut's known exit point so
+		# the next `offset_at` hinted search looks in the right place
+		# instead of anchoring on the pre-shortcut position and potentially
+		# resolving to a bogus, backward-jumping offset.
+		record.cached_offset = shortcut.exit_offset
