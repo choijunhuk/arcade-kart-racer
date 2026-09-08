@@ -21,4 +21,5 @@ enum ItemCategory {
 @export var cooldown: float = 0.3
 @export var lifetime: float = 6.0
 @export var max_bounces: int = 0
+@export_enum("Bump", "Spin Out", "Tumble", "Squash") var hit_type: int = 0
 @export var ai_use_profile: AIItemUseProfile
