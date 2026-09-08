@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://scene_snapshot_tool"]
+
+[ext_resource type="Script" path="res://scenes/test/scene_snapshot.gd" id="1_script"]
+
+[node name="SceneSnapshot" type="Node"]
+script = ExtResource("1_script")
