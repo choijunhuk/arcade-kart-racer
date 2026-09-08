@@ -6,8 +6,6 @@ extends Node
 const DEFAULT_TABLE: ItemTableData = preload("res://data/item_tables/default_8_karts.tres")
 const ITEM_DATA_DIRECTORY: String = "res://data/items"
 const DEFAULT_MAX_ACTIVE_PROJECTILES: int = 16
-const IMPACT_SCENE: PackedScene = preload("res://effects/impact_effect.tscn")
-const IMPACT_POOL_CAPACITY: int = 16
 
 @export var item_table: ItemTableData = DEFAULT_TABLE
 @export var max_active_projectiles: int = DEFAULT_MAX_ACTIVE_PROJECTILES
@@ -28,13 +26,10 @@ var _items_by_id: Dictionary[StringName, ItemData] = {}
 var _pools: Dictionary[String, ObjectPool] = {}
 var _live_items: Array[ItemBase] = []
 var _pending_finished: Array[ItemBase] = []
-var _impact_pool: ObjectPool = ObjectPool.new()
-var _impact_effects: Array[ImpactEffect] = []
 
 
 func _ready() -> void:
 	_load_item_catalog()
-	_impact_pool.configure(IMPACT_SCENE, self, IMPACT_POOL_CAPACITY)
 	if not EventBus.item_defense_triggered.is_connected(notify_leader_immunity):
 		EventBus.item_defense_triggered.connect(notify_leader_immunity)
 
@@ -47,8 +42,6 @@ func _exit_tree() -> void:
 			item.finished.disconnect(_on_item_finished)
 	for pool_value: ObjectPool in _pools.values():
 		pool_value.clear()
-	_impact_pool.clear()
-	_impact_effects.clear()
 	_live_items.clear()
 	active_projectiles.clear()
 	_pending_finished.clear()
@@ -73,7 +66,6 @@ func _physics_process(delta: float) -> void:
 	for item: ItemBase in _live_items.duplicate():
 		if is_instance_valid(item) and not item.is_expired():
 			item.tick(delta)
-	_tick_impacts(delta)
 	_flush_finished()
 
 
@@ -213,13 +205,9 @@ func get_item_data(item_id: StringName) -> ItemData:
 	return _items_by_id.get(item_id) as ItemData
 
 
-## Plays one pooled placeholder impact at an accepted item hit.
+## Announces an accepted item explosion for camera and pooled visual feedback.
 func spawn_impact(world_position: Vector3) -> void:
-	var effect: ImpactEffect = _impact_pool.acquire() as ImpactEffect
-	if effect == null:
-		return
-	effect.play(world_position)
-	_impact_effects.append(effect)
+	EventBus.item_exploded.emit(world_position)
 
 
 ## Clears live registries and participant state for in-place race restart.
@@ -256,13 +244,6 @@ func _rebuild_context() -> void:
 func _tick_cooldowns(delta: float) -> void:
 	for kart_id: int in _cooldowns.keys():
 		_cooldowns[kart_id] = maxf(0.0, float(_cooldowns[kart_id]) - delta)
-
-
-func _tick_impacts(delta: float) -> void:
-	for effect: ImpactEffect in _impact_effects.duplicate():
-		if effect.tick(delta):
-			_impact_effects.erase(effect)
-			_impact_pool.release(effect)
 
 
 func _on_item_finished(item: ItemBase) -> void:

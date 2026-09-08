@@ -1,4 +1,4 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://effects/impact_effect.gd" id="1_script"]
 
@@ -16,8 +16,32 @@ height = 1.1
 radial_segments = 8
 rings = 4
 
+[sub_resource type="StandardMaterial3D" id="ParticleMaterial"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(1, 0.82, 0.2, 0.8)
+
+[sub_resource type="QuadMesh" id="ParticleMesh"]
+material = SubResource("ParticleMaterial")
+size = Vector2(0.12, 0.12)
+
 [node name="ImpactEffect" type="Node3D"]
 script = ExtResource("1_script")
 
 [node name="Burst" type="MeshInstance3D" parent="."]
 mesh = SubResource("Mesh")
+
+[node name="Particles" type="CPUParticles3D" parent="."]
+emitting = false
+amount = 18
+lifetime = 0.25
+one_shot = true
+explosiveness = 0.9
+direction = Vector3(0, 1, 0)
+spread = 70.0
+gravity = Vector3(0, -5, 0)
+initial_velocity_min = 2.0
+initial_velocity_max = 6.0
+scale_amount_min = 0.5
+scale_amount_max = 1.4
+draw_pass_1 = SubResource("ParticleMesh")

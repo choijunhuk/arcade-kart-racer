@@ -60,7 +60,7 @@ func get_racing_line() -> RacingLine:
 
 ## Returns StartGrid transforms in child order, padded to `MIN_GRID_SLOTS`
 ## with `StartGrid.generate()` when the authored track has fewer markers.
-func get_start_grid() -> Array[Transform3D]:
+func get_start_grid(requested_count: int = MIN_GRID_SLOTS) -> Array[Transform3D]:
 	var result: Array[Transform3D] = []
 	var container: Node = get_node_or_null("StartGrid")
 	if container == null:
@@ -68,9 +68,11 @@ func get_start_grid() -> Array[Transform3D]:
 	for child: Node in container.get_children():
 		if child is Marker3D:
 			result.append((child as Marker3D).global_transform)
-	if not result.is_empty() and result.size() < MIN_GRID_SLOTS:
-		var missing: int = MIN_GRID_SLOTS - result.size()
-		result.append_array(StartGrid.generate(result[result.size() - 1], missing))
+	var target_count: int = maxi(MIN_GRID_SLOTS, requested_count)
+	if not result.is_empty() and result.size() < target_count:
+		var generated: Array[Transform3D] = StartGrid.generate(result[0], target_count)
+		for index: int in range(result.size(), target_count):
+			result.append(generated[index])
 	return result
 
 
