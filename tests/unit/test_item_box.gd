@@ -45,3 +45,16 @@ func test_reentry_while_hidden_does_not_re_trigger_collection() -> void:
 	box._on_body_entered(watcher)
 	box._on_body_entered(watcher)
 	assert_signal_emit_count(box, "collected", 1)
+
+
+func test_respawn_uses_elapsed_game_time_under_scaled_physics() -> void:
+	var box: ItemBox = _make_box()
+	box.respawn_time = 1.0
+	var body: Node3D = Node3D.new()
+	add_child_autofree(body)
+	box._on_body_entered(body)
+	box._physics_process(0.4)
+	box._physics_process(0.4)
+	assert_false(box.get_node("Mesh").visible)
+	box._physics_process(0.2)
+	assert_true(box.get_node("Mesh").visible, "one game second remains one second at any time scale")

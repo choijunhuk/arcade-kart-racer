@@ -134,3 +134,23 @@ func test_target_speed_never_exceeds_kart_max_speed_with_max_rubber_band_gap_on_
 	var driver: AIDriver = AIDriver.new(RandomNumberGenerator.new())
 	var target_speed: float = driver._compute_target_speed(kart, HARD_DIFFICULTY, nav, context)
 	assert_lte(target_speed, kart.get_kart_data().max_speed, "AI target speed must never exceed the kart's own max_speed")
+
+
+func test_active_boost_raises_straight_target_without_raising_corner_limit() -> void:
+	var kart: KartController = KART_SCENE.instantiate() as KartController
+	add_child_autofree(kart)
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	var driver: AIDriver = AIDriver.new(rng)
+	var nav: AINavigator.NavResult = AINavigator.NavResult.new()
+	var profile: AIDifficultyProfile = HARD_DIFFICULTY.duplicate(true) as AIDifficultyProfile
+	var context: AIRaceContext = AIRaceContext.new()
+	var base: float = driver._compute_target_speed(kart, profile, nav, context)
+	var boost: BoostSpecData = BoostSpecData.new()
+	boost.speed_mult = 1.4
+	boost.duration = 2.0
+	kart.request_boost(boost, &"item_boost")
+	var boosted: float = driver._compute_target_speed(kart, profile, nav, context)
+	assert_gt(boosted, base, "AI must not brake away its own Nitro on straights")
+	assert_lte(boosted, kart.get_kart_data().max_speed * kart.boost_controller.get_result().speed_mult)
+	nav.curvature_ahead = 0.1
+	assert_almost_eq(driver._compute_target_speed(kart, profile, nav, context), sqrt(profile.max_lateral_accel / nav.curvature_ahead), 0.001)

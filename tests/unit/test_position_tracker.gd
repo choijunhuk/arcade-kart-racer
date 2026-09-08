@@ -164,3 +164,16 @@ func test_progress_continues_monotonically_after_leaving_a_shortcut() -> void:
 	var progress_after_exit: float = tracker.get_progress(kart)
 
 	assert_gt(progress_after_exit, progress_mid_shortcut, "progress must not jump backwards once the kart rejoins the main line")
+
+
+func test_position_refresh_uses_game_seconds_under_scaled_physics() -> void:
+	var tracker: PositionTracker = PositionTracker.new()
+	add_child_autofree(tracker)
+	var kart: KartController = preload("res://kart/kart.tscn").instantiate() as KartController
+	add_child_autofree(kart)
+	tracker.register_kart(kart)
+	tracker.set_update_hz(5.0)
+	tracker._physics_process(0.1)
+	assert_eq(tracker.get_position(kart), 0)
+	tracker._physics_process(0.1)
+	assert_eq(tracker.get_position(kart), 1, "5 Hz is every 0.2 game seconds, regardless of callback count")

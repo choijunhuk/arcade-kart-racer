@@ -2,10 +2,10 @@ class_name PositionTracker
 extends Node
 
 ## Progress-scalar computation + ranking (spec §14.4). Updates at 5Hz via a
-## physics-tick counter (never a coroutine timer, spec §29 rule 7) and only
+## physics-delta accumulator (never a coroutine timer, spec §29 rule 7) and only
 ## re-sorts on that cadence.
 
-const UPDATE_INTERVAL_TICKS: int = 12 ## 60 Hz / 5 Hz
+const DEFAULT_UPDATE_HZ: float = 5.0
 const HYSTERESIS_METERS: float = 0.5
 const MIN_UPDATE_HZ: float = 0.1
 
@@ -24,17 +24,18 @@ var _lap_length: float = 0.0
 var _records: Dictionary[int, KartRecord] = {}
 var _order: Array[KartRecord] = []
 var _previous_ranking: Array[int] = []
-var _tick: int = 0
-var _update_interval_ticks: int = UPDATE_INTERVAL_TICKS
+var _elapsed: float = 0.0
+var _update_interval: float = 1.0 / DEFAULT_UPDATE_HZ
 var _race_active: bool = true
 
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	if not _race_active:
 		return
-	_tick += 1
-	if _tick % _update_interval_ticks != 0:
+	_elapsed += delta
+	if _elapsed < _update_interval and not is_equal_approx(_elapsed, _update_interval):
 		return
+	_elapsed = fmod(maxf(_elapsed, _update_interval), _update_interval)
 	_update_all()
 
 
@@ -78,13 +79,13 @@ func reset() -> void:
 	_records.clear()
 	_order.clear()
 	_previous_ranking.clear()
-	_tick = 0
+	_elapsed = 0.0
 
 
-## Applies the RaceTuning ranking cadence against the project physics rate.
+## Applies the RaceTuning cadence in game seconds, including accelerated simulations.
 func set_update_hz(update_hz: float) -> void:
-	var ticks_per_second: int = int(ProjectSettings.get_setting("physics/common/physics_ticks_per_second", 60))
-	_update_interval_ticks = maxi(1, roundi(float(ticks_per_second) / maxf(update_hz, MIN_UPDATE_HZ)))
+	_update_interval = 1.0 / maxf(update_hz, MIN_UPDATE_HZ)
+	_elapsed = 0.0
 
 
 ## Enables ranking updates only while racing/finishing.
