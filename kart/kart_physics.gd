@@ -76,6 +76,7 @@ var _wall_contact_active: bool = false
 var _ground_ignore_ticks: int = 0
 
 signal wall_head_on()
+signal landed(vertical_speed: float)
 
 
 ## Wires the physics component to its owning body, ground rays, and data.
@@ -147,7 +148,10 @@ func integrate(
 	_integrate_vertical(ground, dt)
 	_integrate_slope(ground, dt)
 	_integrate_up_alignment(ground, dt)
-	_apply_landing_loss(ground)
+	var landing_vertical_speed: float = absf(_vertical_speed) if not _was_grounded and ground.grounded else 0.0
+	_apply_landing_loss(ground, landing_vertical_speed)
+	if landing_vertical_speed > 0.0:
+		landed.emit(landing_vertical_speed)
 	_was_grounded = ground.grounded
 	var forward: Vector3 = -_body.global_transform.basis.z
 	var right: Vector3 = _body.global_transform.basis.x
@@ -274,10 +278,10 @@ static func _slerp_up_vector(from: Vector3, to: Vector3, weight: float) -> Vecto
 
 ## Reduces speed on the first tick a landing is detected, capped by
 ## `landing_speed_loss_cap` (spec §9.7).
-func _apply_landing_loss(ground: GroundProbe) -> void:
+func _apply_landing_loss(ground: GroundProbe, vertical_speed: float) -> void:
 	if _was_grounded or not ground.grounded:
 		return
-	var loss: float = clampf(absf(_vertical_speed) * _tuning.landing_speed_loss, 0.0, _tuning.landing_speed_loss_cap)
+	var loss: float = clampf(vertical_speed * _tuning.landing_speed_loss, 0.0, _tuning.landing_speed_loss_cap)
 	speed *= (1.0 - loss)
 	lateral = compute_landing_lateral(
 		lateral, speed, _tuning.landing_align_threshold_degrees,

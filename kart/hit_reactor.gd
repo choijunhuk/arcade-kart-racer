@@ -34,7 +34,10 @@ func setup(controller: KartController, physics: KartPhysics, tuning: PhysicsTuni
 ## BUMP like Pulse Blast, spec §12.2) from a kart-vs-kart BUMP, which still
 ## bypasses shields. `item_speed_factor` scales speed for an item BUMP only
 ## (Pulse Blast's `ItemData.power`); it is ignored for every other hit type.
-func apply(type: HitType, _source: Node, from_item: bool = false, item_speed_factor: float = 1.0) -> bool:
+func apply(
+	type: HitType, _source: Node, from_item: bool = false,
+	item_speed_factor: float = 1.0, emit_hit_event: bool = true,
+) -> bool:
 	if (from_item or type != HitType.BUMP) and _controller != null and _controller.consume_shield():
 		return false
 	if is_invulnerable():
@@ -46,7 +49,7 @@ func apply(type: HitType, _source: Node, from_item: bool = false, item_speed_fac
 	_bump_from_item = from_item
 	_bump_item_speed_factor = item_speed_factor
 	_apply_initial_physics(type, from_item, item_speed_factor)
-	if is_inside_tree() and _controller != null:
+	if emit_hit_event and is_inside_tree() and _controller != null:
 		EventBus.kart_hit.emit(_controller, type)
 	return true
 
