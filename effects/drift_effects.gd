@@ -71,8 +71,6 @@ func set_lod_enabled(enabled: bool) -> void:
 			particles.emitting = false
 		for particles: GPUParticles3D in _smoke:
 			particles.emitting = false
-	for particles: GPUParticles3D in _smoke:
-		particles.emitting = false
 
 
 func _tier_color(tier: int) -> Color:

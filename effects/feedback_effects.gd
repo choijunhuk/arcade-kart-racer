@@ -4,11 +4,15 @@ extends Node3D
 ## Race-local pooled impact renderer subscribed only to presentation events.
 
 const IMPACT_SCENE: PackedScene = preload("res://effects/impact_effect.tscn")
+## Minimum seconds between "pool exhausted" warnings, so a burst of drops
+## (e.g. an 8-kart pileup) does not spam the log once per dropped effect.
+const POOL_WARNING_INTERVAL: float = 5.0
 
 @export var tuning: FeelTuning = preload("res://data/tuning/feel_default.tres")
 
 var _pool: ObjectPool = ObjectPool.new()
 var _active: Array[ImpactEffect] = []
+var _pool_warning_cooldown: float = 0.0
 
 
 func _ready() -> void:
@@ -30,6 +34,7 @@ func _exit_tree() -> void:
 
 
 func _process(delta: float) -> void:
+	_pool_warning_cooldown = maxf(0.0, _pool_warning_cooldown - delta)
 	for effect: ImpactEffect in _active.duplicate():
 		if effect.tick(delta):
 			_active.erase(effect)
@@ -39,6 +44,12 @@ func _process(delta: float) -> void:
 func _play(world_position: Vector3, kind: ImpactEffect.Kind) -> void:
 	var effect: ImpactEffect = _pool.acquire() as ImpactEffect
 	if effect == null:
+		# Pool is at capacity: drop this impact rather than block gameplay or grow
+		# the pool unbounded. Rate-limit the warning (§29.9) so a pileup that
+		# exhausts the pool many times per second doesn't spam the log.
+		if _pool_warning_cooldown <= 0.0:
+			push_warning("FeedbackEffects: impact pool exhausted, dropping effect kind=%d" % kind)
+			_pool_warning_cooldown = POOL_WARNING_INTERVAL
 		return
 	effect.play(world_position, kind)
 	_active.append(effect)
