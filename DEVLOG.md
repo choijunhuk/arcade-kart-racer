@@ -224,6 +224,97 @@ godot --path .
 통과하지만 여유가 크다) 확인한 뒤 Phase 7 승인 여부와 밸런스 추가 튜닝
 필요 여부를 알려주면 된다.
 
+### Phase 7 리뷰 수정 — 실드/펄스 블라스트 버그 + 밸런스 지표 교체
+
+리뷰에서 발견된 3건을 수정했다(이 서브섹션은 위 Phase 7 보고 이후 별도
+세션에서 진행됨).
+
+1. **Aegis Bubble이 Pulse Blast를 막지 못하던 버그**: `HitReactor.apply()`
+   가 `type != BUMP`일 때만 실드를 소비했는데, `pulse_blast.tres`의
+   `hit_type`이 `BUMP`(0)라 카트 대 카트 범퍼 충돌과 구분되지 않고 실드를
+   항상 우회했다(spec §12.2 위반 — 실드는 Pulse Blast를 막아야 한다).
+   수정: `HitReactor.apply(type, source, from_item=false,
+   item_speed_factor=1.0)`에 `from_item` 파라미터를 추가해 "아이템에 의한
+   히트"와 "카트 대 카트 범퍼 충돌"을 구분했다. 실드 소비 조건을
+   `from_item or type != BUMP`로 바꿔 아이템 히트는 타입에 상관없이 항상
+   실드로 막히고, 카트 대 카트 BUMP(`kart_controller._on_wall_head_on`이
+   `from_item` 기본값 `false`로 호출)만 여전히 실드를 우회하게 했다.
+   `ItemBase.on_hit()`가 `target.apply_hit(hit_type, owner_kart, true,
+   data.power)`로 호출해 아이템 히트임을 표시하고, `HazardRelay`처럼
+   `from_item`을 넘기지 않는 기존 호출부는 기본값 `false`라 동작이
+   그대로 유지된다.
+2. **Pulse Blast에 감속/넉백이 전혀 없던 문제**: `HitReactor`에 BUMP용
+   `_apply_initial_physics`/`get_speed_factor` 분기가 아예 없어 맞아도
+   속도 변화가 없었다(spec §12.2: 속도 60%로 감소 + 밀려남 + 드리프트
+   취소). 수정: BUMP가 `from_item`이면 `item_speed_factor`(=
+   `ItemData.power`, Pulse Blast는 0.6)로 `KartPhysics.scale_speed()`를
+   호출하도록 `HitReactor`에 분기를 추가했다. 넉백은 `HitReactor` 밖,
+   `AreaItem.tick()`에서 처리한다 — 폭발 중심(자신의 `global_position`)에서
+   타겟 방향으로 새 `ItemData.knockback_speed` 필드(기본 8 m/s,
+   `pulse_blast.tres`에 8.0으로 명시)만큼 `kart.apply_impulse_arcade()`로
+   수평 임펄스를 가한다. `on_hit()`이 이제 히트 수락 여부를 `bool`로
+   반환해(이전엔 `void`) 실드가 흡수한 히트에는 넉백을 주지 않는다.
+3. **`mean_rank_eight_gain` 지표가 사실상 평균 회귀였던 문제**: 이 지표는
+   그리드 8번 슬롯 카트만 추적하는데, 뒤에서 출발한 카트는 아이템 없이도
+   순위가 오르는 경향이 있어(자연스러운 평균 회귀) 아이템 효과를
+   측정하지 못했다. 수정: `tests/sim/run_ai_race.gd`에
+   `EventBus.lap_completed`를 구독해 "1랩을 가장 늦게 끝낸(=그 시점
+   레이스 순위 8위) 카트"를 식별하고, 그 카트의 최종 순위로 계산한
+   `mean_lap1_rank8_gain`(그리드 슬롯이 아닌 실제 레이스 순위 기반)을
+   요약에 추가했다. **밸런스 게이트(`items_balance_pass`)는 이제
+   `mean_lap1_rank8_gain`을 사용한다** — `mean_rank_eight_gain`은 참고용
+   으로 요약에 남아 있지만 더 이상 게이트에 관여하지 않는다.
+   `--items off` 컨트롤 비교로 두 지표를 나란히 실행해봤다
+   (`tools/run_sim.sh --races 10 --difficulty normal --karts 8 --laps 3`):
+
+   | | items on | items off |
+   |---|---|---|
+   | `mean_rank_eight_gain`(그리드 슬롯, 참고용) | 5.4 | 4.1 |
+   | `mean_lap1_rank8_gain`(실제 순위, 게이트 지표) | 0.9 | 0.4 |
+   | `average_rank_one_hits_per_race` | 0.8 | 0.0 |
+
+   두 지표 모두 items off에서도 0이 아닌 값이 나와 순위 변동이 부분적으로
+   자연스러운 레이스 유동성(추월/실수)에서 온다는 걸 보여주지만,
+   `mean_rank_eight_gain`은 아이템이 꺼져 있어도 4.1이나 되는 반면
+   `mean_lap1_rank8_gain`은 0.4로 훨씬 작다 — 그리드 슬롯 지표가 지적한
+   "평균 회귀" 문제를 확인해준다. items on/off 차이(`0.9 - 0.4 = 0.5`)가
+   더 순수한 아이템 기여분에 가깝다. 10레이스 표본이라
+   `BALANCE_SAMPLE_RACES(20)` 미만이라 게이트 자체는 평가되지 않았다
+   (`balance_gate_evaluated:false`, 두 실행 모두 정상 `exit 0`) — 새 지표
+   기준 실제 게이트 판정(20레이스, items on)은 별도 세션에서 확인이
+   필요하다.
+
+### 생성/수정된 파일 (리뷰 수정)
+
+- `kart/hit_reactor.gd`(`from_item`/`item_speed_factor` 파라미터, BUMP용
+  실드/속도 분기), `kart/kart_controller.gd`(`apply_hit` 파라미터 전달),
+  `items/base/item_base.gd`(`on_hit`이 `bool` 반환, `data.power` 전달),
+  `items/base/area_item.gd`(`_apply_knockback` 추가),
+  `data/schemas/item_data.gd`(`knockback_speed` 필드),
+  `data/items/pulse_blast.tres`(`knockback_speed = 8.0`),
+  `tests/sim/run_ai_race.gd`(`mean_lap1_rank8_gain` 지표 + 게이트 전환),
+  `tests/unit/test_race_sim.gd`(게이트/요약 테스트를 새 지표에 맞게 수정),
+  `tests/integration/test_phase7_items.gd`(실드 흡수/미흡수 Pulse Blast,
+  카트 대 카트 BUMP 실드 우회 테스트 3건 추가), `DEVLOG.md`(이 서브섹션).
+
+### 테스트 방법 및 결과 (리뷰 수정 검증)
+
+- `HOME=$PWD/.tmp-home godot --headless --path . --quit` — exit 0,
+  `SCRIPT ERROR` 0.
+- `HOME=$PWD/.tmp-home tools/run_tests.sh` — GUT 9.7.1, **51 scripts /
+  272 tests / 272 passing**, 1459 assertions, 0 failures, 13.6초
+  (Phase 7 보고 시점 269 → 신규 통합 테스트 3건 추가로 272).
+- `HOME=$PWD/.tmp-home tools/validate_tracks.sh` — 4개 트랙 모두
+  `TRACK VALIDATION PASSED` (4/4).
+- `HOME=$PWD/.tmp-home tools/run_sim.sh --races 10 --difficulty normal
+  --karts 8 --laps 3 --items on` — exit 0, `success:true`,
+  `mean_lap1_rank8_gain=0.9`, `mean_rank_eight_gain=5.4`,
+  `average_rank_one_hits_per_race=0.8`.
+- `HOME=$PWD/.tmp-home tools/run_sim.sh --races 10 --difficulty normal
+  --karts 8 --laps 3 --items off` — exit 0, `success:true`,
+  `mean_lap1_rank8_gain=0.4`, `mean_rank_eight_gain=4.1`,
+  `average_rank_one_hits_per_race=0.0`.
+
 ---
 
 ## Phase 6 보고 — AI 레이서

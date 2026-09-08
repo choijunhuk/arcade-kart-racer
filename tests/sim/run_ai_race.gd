@@ -53,6 +53,12 @@ var _items_used: Dictionary[String, int] = {}
 var _item_hits: Dictionary[String, int] = {}
 var _rank_one_hits: int = 0
 var _current_position_tracker: PositionTracker
+## Tracks each kart's first lap-1 completion so the last kart to complete lap
+## 1 (i.e. rank 8 by race position, not grid slot) can be identified for the
+## lap1-rank8 balance control comparison.
+var _lap1_completions: Dictionary[String, bool] = {}
+var _lap1_last_kart_name: String = ""
+var _current_kart_count: int = 0
 
 
 func _ready() -> void:
@@ -66,6 +72,7 @@ func _run() -> void:
 	EventBus.drift_ended.connect(_on_drift_ended)
 	EventBus.item_used.connect(_on_item_used)
 	EventBus.item_hit.connect(_on_item_hit)
+	EventBus.lap_completed.connect(_on_lap_completed)
 	var options: Dictionary = parse_options(OS.get_cmdline_user_args())
 	var difficulty: AIDifficultyProfile = DIFFICULTY_PROFILES[options["difficulty"]]
 	var track_scene: PackedScene = TRACK_SCENES[options["track"]]
@@ -174,6 +181,7 @@ static func _summarize(race_outputs: Array[Dictionary], laps: int) -> Dictionary
 		hit_totals[item_id] = 0
 	var rank_one_hit_total: int = 0
 	var rank_eight_gain_total: float = 0.0
+	var lap1_rank8_gain_total: float = 0.0
 	for race_output: Dictionary in race_outputs:
 		for value: Variant in (race_output["times"] as Dictionary).values():
 			if float(value) >= 0.0:
@@ -183,6 +191,7 @@ static func _summarize(race_outputs: Array[Dictionary], laps: int) -> Dictionary
 			hit_totals[item_id] += int((race_output.get("item_hits", {}) as Dictionary).get(item_id, 0))
 		rank_one_hit_total += int(race_output.get("rank_one_hits", 0))
 		rank_eight_gain_total += float(race_output.get("rank_eight_gain", 0.0))
+		lap1_rank8_gain_total += float(race_output.get("lap1_rank8_gain", 0.0))
 	var mean_lap_time: float = 0.0
 	if not lap_time_samples.is_empty():
 		var total: float = 0.0
@@ -201,15 +210,25 @@ static func _summarize(race_outputs: Array[Dictionary], laps: int) -> Dictionary
 		"item_hits": hit_totals,
 		"hit_rate_by_item": hit_rates,
 		"average_rank_one_hits_per_race": float(rank_one_hit_total) / race_count if race_count > 0.0 else 0.0,
+		## Grid-slot-8 kart's rank gain. Mostly regression to the mean (a
+		## back-of-grid kart tends to finish ahead of its start slot even
+		## with items off) — kept for reference but no longer gates.
 		"mean_rank_eight_gain": rank_eight_gain_total / race_count if race_count > 0.0 else 0.0,
+		## Rank gain for whichever kart was actually in last place (by race
+		## position, not grid slot) at the end of lap 1. This is the balance
+		## gate metric (see `items_balance_pass`); run with `--items off` as
+		## a control to see how much of the gain is item-driven.
+		"mean_lap1_rank8_gain": lap1_rank8_gain_total / race_count if race_count > 0.0 else 0.0,
 	}
 
 
-## Returns whether the exact Phase 7 balance thresholds are both met.
+## Returns whether the exact Phase 7 balance thresholds are both met. Uses
+## the lap-1-rank-8 metric (rank by race position at the end of lap 1), not
+## the grid-slot-8 metric, since the latter is mostly regression to the mean.
 static func items_balance_pass(summary: Dictionary) -> bool:
 	return (
 		float(summary.get("average_rank_one_hits_per_race", INF)) <= MAX_RANK_ONE_HITS_PER_RACE
-		and float(summary.get("mean_rank_eight_gain", -INF)) >= MIN_RANK_EIGHT_GAIN
+		and float(summary.get("mean_lap1_rank8_gain", -INF)) >= MIN_RANK_EIGHT_GAIN
 	)
 
 
@@ -228,6 +247,7 @@ func _run_one_race(
 	track_scene: PackedScene, items_enabled: bool,
 ) -> Dictionary:
 	_reset_metrics()
+	_current_kart_count = kart_count
 	var track_data: TrackData = TrackData.new()
 	track_data.id = &"sim_track"
 	track_data.scene = track_scene
@@ -272,6 +292,8 @@ func _run_one_race(
 		times[entry.kart_name] = entry.total_time_seconds
 	var rank_eight_finish: int = finish_order.find(rank_eight_name) + 1 if not rank_eight_name.is_empty() else 0
 	var rank_eight_gain: float = float(kart_count - rank_eight_finish) if rank_eight_finish > 0 else 0.0
+	var lap1_rank8_finish: int = finish_order.find(_lap1_last_kart_name) + 1 if not _lap1_last_kart_name.is_empty() else 0
+	var lap1_rank8_gain: float = float(kart_count - lap1_rank8_finish) if lap1_rank8_finish > 0 else 0.0
 	var output: Dictionary = {
 		"race": race_number,
 		"finish_order": finish_order,
@@ -286,6 +308,7 @@ func _run_one_race(
 		"item_hits": _item_hits.duplicate(),
 		"rank_one_hits": _rank_one_hits,
 		"rank_eight_gain": rank_eight_gain,
+		"lap1_rank8_gain": lap1_rank8_gain,
 	}
 	manager.free()
 	return output
@@ -316,6 +339,8 @@ func _reset_metrics() -> void:
 	_item_hits.clear()
 	_rank_one_hits = 0
 	_current_position_tracker = null
+	_lap1_completions.clear()
+	_lap1_last_kart_name = ""
 
 
 func _on_kart_respawned(kart: Node) -> void:
@@ -343,6 +368,20 @@ func _on_item_hit(_source_kart: Node, target_kart: Node, item_id: StringName) ->
 	if _current_position_tracker != null and target_kart is KartController:
 		if _current_position_tracker.get_position(target_kart as KartController) == 1:
 			_rank_one_hits += 1
+
+
+## Records the last kart to complete lap 1 across all karts: the one still
+## running last once every kart has finished lap 1, i.e. rank 8 by race
+## position rather than by grid slot.
+func _on_lap_completed(kart: Node, lap: int, _lap_time_seconds: float) -> void:
+	if lap != 1:
+		return
+	var kart_name: String = String(_kart_names_by_id.get(kart.get_instance_id(), ""))
+	if kart_name.is_empty() or _lap1_completions.has(kart_name):
+		return
+	_lap1_completions[kart_name] = true
+	if _lap1_completions.size() == _current_kart_count:
+		_lap1_last_kart_name = kart_name
 
 
 func _on_drift_started(_kart: Node, _direction: int) -> void:

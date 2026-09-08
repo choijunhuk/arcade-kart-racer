@@ -129,6 +129,7 @@ func test_summarize_reports_item_hit_rates_and_balance_means() -> void:
 			"item_hits": {"rocket_dart": 1},
 			"rank_one_hits": 2,
 			"rank_eight_gain": 3.0,
+			"lap1_rank8_gain": 4.0,
 		},
 		{
 			"times": {"Kart1": 90.0},
@@ -136,6 +137,7 @@ func test_summarize_reports_item_hit_rates_and_balance_means() -> void:
 			"item_hits": {"rocket_dart": 1},
 			"rank_one_hits": 4,
 			"rank_eight_gain": 1.0,
+			"lap1_rank8_gain": 2.0,
 		},
 	]
 	var summary: Dictionary = script.call("_summarize", race_outputs, 3) as Dictionary
@@ -144,6 +146,7 @@ func test_summarize_reports_item_hit_rates_and_balance_means() -> void:
 	assert_almost_eq(float(rates["nitro_can"]), 0.0, 0.001)
 	assert_almost_eq(float(summary["average_rank_one_hits_per_race"]), 3.0, 0.001)
 	assert_almost_eq(float(summary["mean_rank_eight_gain"]), 2.0, 0.001)
+	assert_almost_eq(float(summary["mean_lap1_rank8_gain"]), 3.0, 0.001)
 
 
 func test_item_balance_gate_requires_both_thresholds() -> void:
@@ -152,15 +155,15 @@ func test_item_balance_gate_requires_both_thresholds() -> void:
 		return
 	assert_true(bool(script.call("items_balance_pass", {
 		"average_rank_one_hits_per_race": 3.0,
-		"mean_rank_eight_gain": 1.5,
+		"mean_lap1_rank8_gain": 1.5,
 	})))
 	assert_false(bool(script.call("items_balance_pass", {
 		"average_rank_one_hits_per_race": 3.01,
-		"mean_rank_eight_gain": 2.0,
+		"mean_lap1_rank8_gain": 2.0,
 	})))
 	assert_false(bool(script.call("items_balance_pass", {
 		"average_rank_one_hits_per_race": 2.0,
-		"mean_rank_eight_gain": 1.49,
+		"mean_lap1_rank8_gain": 1.49,
 	})))
 
 

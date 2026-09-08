@@ -198,9 +198,11 @@ func apply_impulse_arcade(delta_velocity: Vector3, yaw_nudge: float) -> void:
 	rotate(Vector3.UP, yaw_nudge)
 
 
-## Applies an external hit through the invulnerability gate.
-func apply_hit(type: HitReactor.HitType, source: Node = null) -> bool:
-	return _hit_reactor.apply(type, source)
+## Applies an external hit through the invulnerability gate. `from_item` and
+## `item_speed_factor` forward the item-hit distinction to HitReactor (spec
+## §12.2): item hits always allow shield absorption, even a BUMP.
+func apply_hit(type: HitReactor.HitType, source: Node = null, from_item: bool = false, item_speed_factor: float = 1.0) -> bool:
+	return _hit_reactor.apply(type, source, from_item, item_speed_factor)
 
 
 ## Starts the tick-driven respawn state and suppresses driving input.

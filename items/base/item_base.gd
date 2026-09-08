@@ -32,16 +32,21 @@ func tick(dt: float) -> void:
 	_advance_lifetime(dt)
 
 
-## Applies the data-selected hit type and emits the item hit event on success.
-func on_hit(target: KartController) -> void:
+## Applies the data-selected hit type and emits the item hit event on
+## success. Returns whether the hit was accepted (false when a shield
+## absorbed it), so callers like AreaItem can gate follow-up effects such as
+## knockback on the same acceptance.
+func on_hit(target: KartController) -> bool:
 	if target == null or target == owner_kart or data == null:
-		return
+		return false
 	var hit_type: HitReactor.HitType = data.hit_type as HitReactor.HitType
-	if target.apply_hit(hit_type, owner_kart):
+	if target.apply_hit(hit_type, owner_kart, true, data.power):
 		EventBus.item_hit.emit(owner_kart, target, data.id)
 		var manager: Node = context.get_item_manager() if context != null else null
 		if manager != null and manager.has_method("spawn_impact"):
 			manager.call("spawn_impact", target.global_position)
+		return true
+	return false
 
 
 ## Emits the one-shot completion signal used by ItemManager to return the pool.

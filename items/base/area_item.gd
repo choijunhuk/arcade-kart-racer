@@ -32,5 +32,17 @@ func tick(dt: float) -> void:
 		if global_position.distance_to(kart.global_position) > radius:
 			continue
 		kart.drift_controller.call("cancel")
-		on_hit(kart)
+		if on_hit(kart):
+			_apply_knockback(kart)
 	expire()
+
+
+## Pushes a hit kart away from the blast center; skipped when a shield
+## absorbed the hit (spec §12.2).
+func _apply_knockback(kart: KartController) -> void:
+	if data == null or data.knockback_speed <= 0.0:
+		return
+	var offset: Vector3 = kart.global_position - global_position
+	offset.y = 0.0
+	var direction: Vector3 = offset.normalized() if offset.length_squared() > 0.0001 else -kart.get_forward()
+	kart.apply_impulse_arcade(direction * data.knockback_speed, 0.0)

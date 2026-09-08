@@ -18,6 +18,8 @@ var _hit_type: HitType = HitType.BUMP
 var _duration: float = 0.0
 var _remaining: float = 0.0
 var _invulnerability_remaining: float = 0.0
+var _bump_from_item: bool = false
+var _bump_item_speed_factor: float = 1.0
 
 
 ## Wires optional runtime owners; null owners keep the timer unit-testable.
@@ -28,8 +30,12 @@ func setup(controller: KartController, physics: KartPhysics, tuning: PhysicsTuni
 
 
 ## Applies a hit unless invulnerability is active, returning acceptance.
-func apply(type: HitType, _source: Node) -> bool:
-	if type != HitType.BUMP and _controller != null and _controller.consume_shield():
+## `from_item` distinguishes an item hit (always shield-absorbable, even a
+## BUMP like Pulse Blast, spec §12.2) from a kart-vs-kart BUMP, which still
+## bypasses shields. `item_speed_factor` scales speed for an item BUMP only
+## (Pulse Blast's `ItemData.power`); it is ignored for every other hit type.
+func apply(type: HitType, _source: Node, from_item: bool = false, item_speed_factor: float = 1.0) -> bool:
+	if (from_item or type != HitType.BUMP) and _controller != null and _controller.consume_shield():
 		return false
 	if is_invulnerable():
 		return false
@@ -37,7 +43,9 @@ func apply(type: HitType, _source: Node) -> bool:
 	_duration = _duration_for(type)
 	_remaining = _duration
 	_invulnerability_remaining = _tuning.hit_invulnerability_duration
-	_apply_initial_physics(type)
+	_bump_from_item = from_item
+	_bump_item_speed_factor = item_speed_factor
+	_apply_initial_physics(type, from_item, item_speed_factor)
 	if is_inside_tree() and _controller != null:
 		EventBus.kart_hit.emit(_controller, type)
 	return true
@@ -92,6 +100,8 @@ func get_progress() -> float:
 ## Returns the one-shot speed factor associated with the current hit.
 func get_speed_factor() -> float:
 	match _hit_type:
+		HitType.BUMP:
+			return _bump_item_speed_factor if _bump_from_item else 1.0
 		HitType.SPIN_OUT:
 			return _tuning.hit_spin_out_speed_factor
 		HitType.TUMBLE:
@@ -144,10 +154,13 @@ func _duration_for(type: HitType) -> float:
 	return 0.0
 
 
-func _apply_initial_physics(type: HitType) -> void:
+func _apply_initial_physics(type: HitType, from_item: bool, item_speed_factor: float) -> void:
 	if _physics == null:
 		return
 	match type:
+		HitType.BUMP:
+			if from_item:
+				_physics.scale_speed(item_speed_factor)
 		HitType.SPIN_OUT:
 			_physics.scale_speed(_tuning.hit_spin_out_speed_factor)
 		HitType.TUMBLE:

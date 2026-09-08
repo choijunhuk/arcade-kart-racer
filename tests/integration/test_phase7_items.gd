@@ -5,6 +5,7 @@ const RACE_SCENE: PackedScene = preload("res://race/race.tscn")
 const SANDBOX_SCENE: PackedScene = preload("res://scenes/test/kart_sandbox.tscn")
 const HUD_SCENE: PackedScene = preload("res://ui/hud/hud.tscn")
 const TEST_TRACK: PackedScene = preload("res://track/tracks/test_loop/test_loop.tscn")
+const EPSILON: float = 0.01
 
 
 func test_phase7_nodes_are_composed_in_kart_race_sandbox_and_hud() -> void:
@@ -64,6 +65,57 @@ func test_pulse_telegraphs_then_bumps_and_cancels_target_drift() -> void:
 	assert_eq(target.get_hit_state(), -1)
 	pulse.tick(0.001)
 	assert_eq(target.get_drift_state(), DriftController.DriftState.NONE)
+	assert_eq(target.get_hit_state(), HitReactor.HitType.BUMP)
+
+
+func test_aegis_absorbs_pulse_blast_bump_hit() -> void:
+	var owner: KartController = _make_kart("Owner")
+	var target: KartController = _make_kart("Target")
+	owner.global_position = Vector3.ZERO
+	target.global_position = Vector3(1.0, 0.0, 0.0)
+	var context: ItemContext = _make_context([owner, target])
+	var shield: ShieldItem = (preload("res://data/items/aegis_bubble.tres").scene.instantiate() as ShieldItem)
+	add_child_autofree(shield)
+	shield.setup(preload("res://data/items/aegis_bubble.tres"), target, context)
+	shield.activate(InputFrame.zero())
+	var pulse_data: ItemData = preload("res://data/items/pulse_blast.tres")
+	var pulse: AreaItem = pulse_data.scene.instantiate() as AreaItem
+	add_child_autofree(pulse)
+	pulse.setup(pulse_data, owner, context)
+	pulse.activate(InputFrame.zero())
+	pulse.tick(0.3)
+	assert_false(bool(target.call("has_shield")))
+	assert_eq(target.get_hit_state(), -1)
+	assert_almost_eq(target.get_speed(), 0.0, EPSILON)
+	assert_almost_eq(target.get_lateral_speed(), 0.0, EPSILON)
+
+
+func test_unshielded_pulse_blast_scales_speed_and_applies_knockback() -> void:
+	var owner: KartController = _make_kart("Owner")
+	var target: KartController = _make_kart("Target")
+	owner.global_position = Vector3.ZERO
+	target.global_position = Vector3(1.0, 0.0, 0.0)
+	target.apply_impulse_arcade(Vector3(0.0, 0.0, -20.0), 0.0)
+	var pulse_data: ItemData = preload("res://data/items/pulse_blast.tres")
+	var pulse: AreaItem = pulse_data.scene.instantiate() as AreaItem
+	add_child_autofree(pulse)
+	pulse.setup(pulse_data, owner, _make_context([owner, target]))
+	pulse.activate(InputFrame.zero())
+	pulse.tick(0.3)
+	assert_eq(target.get_hit_state(), HitReactor.HitType.BUMP)
+	assert_almost_eq(target.get_speed(), 20.0 * pulse_data.power, EPSILON)
+	assert_almost_eq(target.get_lateral_speed(), pulse_data.knockback_speed, EPSILON)
+
+
+func test_kart_vs_kart_bump_still_bypasses_shield() -> void:
+	var target: KartController = _make_kart("Target")
+	var context: ItemContext = _make_context([target])
+	var shield: ShieldItem = (preload("res://data/items/aegis_bubble.tres").scene.instantiate() as ShieldItem)
+	add_child_autofree(shield)
+	shield.setup(preload("res://data/items/aegis_bubble.tres"), target, context)
+	shield.activate(InputFrame.zero())
+	assert_true(target.apply_hit(HitReactor.HitType.BUMP, null))
+	assert_true(bool(target.call("has_shield")))
 	assert_eq(target.get_hit_state(), HitReactor.HitType.BUMP)
 
 

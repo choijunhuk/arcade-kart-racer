@@ -22,4 +22,5 @@ enum ItemCategory {
 @export var lifetime: float = 6.0
 @export var max_bounces: int = 0
 @export_enum("Bump", "Spin Out", "Tumble", "Squash") var hit_type: int = 0
+@export var knockback_speed: float = 8.0
 @export var ai_use_profile: AIItemUseProfile

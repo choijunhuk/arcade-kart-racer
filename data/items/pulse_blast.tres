@@ -22,4 +22,5 @@ cooldown = 0.3
 lifetime = 0.3
 max_bounces = 0
 hit_type = 0
+knockback_speed = 8.0
 ai_use_profile = SubResource("AI_profile")
