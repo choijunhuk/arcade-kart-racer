@@ -55,3 +55,12 @@ func get_active_count() -> int:
 ## Returns the number of dormant reusable instances.
 func get_available_count() -> int:
 	return _available.size()
+
+
+## Drops strong references when the owning manager leaves the scene tree.
+func clear() -> void:
+	_available.clear()
+	_active.clear()
+	_scene = null
+	_parent = null
+	_created_count = 0

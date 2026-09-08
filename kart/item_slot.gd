@@ -81,3 +81,8 @@ func get_item_data() -> ItemData:
 ## Returns roulette progress for presentation observers.
 func get_roulette_progress() -> float:
 	return _roulette.get_progress()
+
+
+## Returns the result fixed at pickup time even while the reveal is active.
+func get_roulette_result() -> ItemData:
+	return _roulette.get_result()
