@@ -5,7 +5,7 @@ Mario Kart에서 *시스템과 플레이 감각*만 영감을 받은 **완전 �
 
 ## 이 레포의 현재 상태
 
-**Phase 7 — 아이템 시스템 완료.**
+**Phase 8 — 카메라 & Game Feel 구현 완료 (windowed FPS 측정 대기).**
 
 현재 메인 씬은 "Press Enter / Start to race" 플레이스홀더 메뉴다. 시작하면
 Track01 Ridgeline Circuit, 3랩, 8카트, medium 카트의 실제 레이스가 열리며
@@ -20,6 +20,16 @@ Sensors→Navigator→Driver→ItemBrain 파이프라인으로 레이싱라인�
 전담한다(발사체/유도/트랩/부스트/실드/범위/리더 견제 7개 카테고리 —
 `ARCHITECTURE.md`의 Items pipeline 참고). 아이템 on/off는
 `RaceConfig.items_enabled`/`tools/run_sim.sh --items on|off`로 전환한다.
+
+Phase 8 프레젠테이션은 카트 물리와 분리되어 있다. `RaceCamera`는 속도
+방향/드리프트 blend, wall clipping, 0.15초 look-back, speed² + boost spring
+FOV와 trauma² shake를 적용한다. 카트는 body roll/pitch, suspension bob,
+wheel steer/spin/jitter, trick/hit/squash와 shader flash를 표시한다. 연속
+ring-buffer skid strip, terrain smoke, tier sparks, boost exhaust, edge-only
+speed lines, pooled impact/dust/sparks, optional hit-stop, 임시 HUD Tween도
+race와 sandbox에 동일하게 연결된다. `SettingsManager`의
+`shake_strength`/`fov_effect_strength`는 0–100이며 0에서도 기본 주행과
+카메라 추적은 유지된다.
 
 - [`KART_RACING_DEV_PROMPT.md`](KART_RACING_DEV_PROMPT.md) — 개발 프롬프트 전체 (아키텍처, 물리, 드리프트, 아이템, AI, Phase 0~15, DoD, 작업 규칙)
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — 실제 경로와 시스템 경계
@@ -41,6 +51,7 @@ Phase 1-4 주행 샌드박스는 계속 직접 열 수 있다:
 레이스 조작: 가속 `W`/RT/A, 브레이크·후진 `S`/LT/B, 조향
 `A`/`D`/좌스틱,
 `Space`/RB 드리프트(유지 후 놓으면 도달한 티어만큼 미니 터보 부스트),
+`Q`/오른쪽 스틱 아래 뒤돌아보기,
 `Esc`/게임패드 Start 일시정지. pause/results 버튼은 방향키·D-pad/좌스틱과
 Enter/A로 이동·선택한다. 샌드박스 전용: `R` 리셋, `T` 트랙 순환
 (평지→언덕→헤어핀→Track01), `4` 헤어핀 트랙 바로
@@ -87,6 +98,10 @@ HOME=$PWD/.tmp-home tools/run_sim.sh --races 20 --difficulty normal --karts 8 --
 
 # 아이템 없이 비교(레이스 흐름/AI 판단만 검증)
 HOME=$PWD/.tmp-home tools/run_sim.sh --races 3 --items off
+
+# Phase 8 실제 렌더 성능: 12-kart, 2초 warm-up 뒤 30초 측정
+# (headless는 렌더러 FPS 근거로 사용할 수 없음)
+tools/perf_check.sh 12 30
 ```
 
 인자: `--races N`(기본 1), `--difficulty easy|normal|hard`(기본 normal,
@@ -107,6 +122,13 @@ rank_one_hits,rank_eight_gain}`와 `summary.mean_lap_time_seconds`(완주자
 
 `HOME=$PWD/.tmp-home`은 제한된 샌드박스에서만 필요하다. 일반 로컬
 환경에서는 접두어 없이 같은 명령을 실행할 수 있다.
+
+`perf_check.sh`는 마지막에 `PERF_PROBE` JSON으로 `mean_fps`,
+`worst_frame_ms`, `gpu_particles`, `renderer`를 출력한다. Phase 8 구현은
+12대에서 GPU particle node 60/60(카트당 5/6)을 정적으로 검증했지만,
+현재 자동화 샌드박스는 macOS 렌더 창을 열지 못해 실제 FPS 숫자는 아직
+기록하지 못했다. unrestricted 로그인 세션에서 위 명령을 실행해 8-kart
+F3 FPS ≥60 게이트와 함께 확정한다.
 
 ## 트랙 제작 흐름 (§15.6)
 
