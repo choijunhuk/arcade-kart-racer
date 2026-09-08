@@ -1,8 +1,6 @@
 class_name HitReactor
 extends Node
 
-signal hit_started(type: int)
-
 ## Owns deterministic hit durations and post-hit invulnerability. Physics
 ## effects are applied once on acceptance; visuals read normalized progress.
 
@@ -52,7 +50,6 @@ func apply(
 	_bump_item_speed_factor = item_speed_factor
 	_apply_initial_physics(type, from_item, item_speed_factor)
 	if emit_hit_event and is_inside_tree() and _controller != null:
-		hit_started.emit(type)
 		EventBus.kart_hit.emit(_controller, type)
 	return true
 

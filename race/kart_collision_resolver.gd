@@ -72,8 +72,8 @@ static func compute_impulse(
 
 
 func _resolve_pair(kart_a: KartController, kart_b: KartController) -> void:
-	kart_a.kart_contacted.emit()
-	kart_b.kart_contacted.emit()
+	kart_a.notify_contact()
+	kart_b.notify_contact()
 	var offset: Vector3 = kart_b.global_position - kart_a.global_position
 	offset.y = 0.0
 	var normal: Vector3 = offset.normalized() if offset.length() > 0.001 else kart_a.get_forward()

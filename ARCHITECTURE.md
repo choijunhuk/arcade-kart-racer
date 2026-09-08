@@ -675,7 +675,7 @@ presentation APIs; gameplay truth remains outside UI.
 | Emitter | Event/API | Presentation consumers |
 |---|---|---|
 | `KartPhysics` → `KartController` | `EventBus.wall_head_on(kart)` | `RaceCamera` trauma 0.5; `FeedbackEffects` wall sparks |
-| `KartPhysics` → `KartController` | `EventBus.kart_landed(kart, vertical_speed)` | `RaceCamera` 0.2–0.5 trauma; `KartVisuals` read API bob; `FeedbackEffects` dust |
+| `KartPhysics` | `EventBus.kart_landed(kart, vertical_speed)` | `RaceCamera` 0.2–0.5 trauma; `KartVisuals` read API bob; `FeedbackEffects` dust |
 | `HitReactor` | `EventBus.kart_hit(kart, hit_type)` | `RaceCamera` trauma 0.6; `KartVisuals` flash/deformation; `RaceResults` stats |
 | `ItemBase` → `ItemManager` | `EventBus.item_exploded(world_position)` | `RaceCamera` distance falloff; `FeedbackEffects` pooled burst |
 | `ItemBase` | `EventBus.item_hit(source, target, id)` | `HitStop` local windowed request; `RaceResults`/sim stats |
@@ -1350,13 +1350,14 @@ its `Curve3D` from arc points at `_ready()` — but everything else about it
 
 The implementation adds a resource library/reproducible PCM assets, a fixed
 voice pool/tick-driven BGM crossfade, and kart/race/item/menu subscriptions.
-Physics and item decisions remain unchanged; only local notification signals
-were added. No new dependencies.
+Physics and item decisions remain unchanged; feedback notifications are
+published through EventBus. No new dependencies.
 
 `AudioManagerService` is the Core audio facade; `audio/{audio_voice,sfx_pool,
 bgm_crossfade}.gd` are its infrastructure helpers (no gameplay imports).
 `RaceAudio` belongs to race composition and reads EventBus plus the explicitly
-bound player/lap count. `KartAudio` reads kart ratios and local component signals.
+bound player/lap count. `KartAudio` reads kart ratios and subscribes only to
+EventBus signals, filtering each event by its owning kart.
 Neither subscriber writes physics. MenuScreen attaches `UiAudio` to menu roots;
 pause/results attach it to their own panels, avoiding nested-menu duplicates.
 
@@ -1394,10 +1395,10 @@ world/kart voices pause and do not consume lifetime while paused.
 | countdown_tick 3,2,1 / race_started | countdown / go |
 | player lap_completed / entering last lap / kart_finished | lap / final_lap / finish |
 | player position_changed | position_up / position_down |
-| local drift_tier_changed | drift_tier_1..3 |
-| local boost_started / hit_started | boost / hit_spin, hit_tumble, hit_squash, impact_kart |
-| local wall impact / kart contact / launched / landed | impact_wall / impact_kart / jump / landing |
-| ItemSlot roulette_started / roulette_ticked / roulette_stopped | item_pickup / roulette_tick / roulette_stop |
+| EventBus.drift_tier_changed | drift_tier_1..3 |
+| EventBus.boost_started / kart_hit | boost / hit_spin, hit_tumble, hit_squash, impact_kart |
+| EventBus.wall_impacted / kart_contacted / kart_launched or kart_hopped / kart_landed | impact_wall / impact_kart / jump / landing |
+| EventBus.roulette_started / roulette_ticked / roulette_stopped (from ItemSlot) | item_pickup / roulette_tick / roulette_stop |
 | item_used / item_hit | <item_id>_fire / <item_id>_hit (all seven ids) |
 | player threat_warning | threat_warning |
 | button focus / pressed / Back action | menu_move / menu_accept / menu_back |

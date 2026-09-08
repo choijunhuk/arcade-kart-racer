@@ -1,7 +1,7 @@
 class_name KartAudio
 extends Node
 
-## Subscribes to one kart; audio leases never write gameplay or physics state.
+## Filters EventBus feedback for one kart; never writes gameplay or physics state.
 
 const ENGINE_MIN_PITCH: float = 0.7
 const ENGINE_MAX_PITCH: float = 2.1
@@ -73,17 +73,17 @@ func _bind() -> void:
 	if _kart == null:
 		push_error("KartAudio requires a KartController parent")
 		return
-	_kart.drift_controller.drift_tier_changed.connect(_on_tier)
-	_kart.drift_controller.hop_requested.connect(_on_hop)
-	_kart.boost_controller.boost_started.connect(_on_boost)
-	_kart.launched.connect(_on_jump)
-	_kart.kart_contacted.connect(_on_contact)
-	(_kart.get_node("KartPhysics") as KartPhysics).wall_impacted.connect(_on_wall)
-	(_kart.get_node("KartPhysics") as KartPhysics).landed.connect(_on_landed)
-	(_kart.get_node("HitReactor") as HitReactor).hit_started.connect(_on_hit)
-	_kart.item_slot.roulette_started.connect(_on_pickup)
-	_kart.item_slot.roulette_ticked.connect(_on_roulette_tick)
-	_kart.item_slot.roulette_stopped.connect(_on_roulette_stop)
+	EventBus.drift_tier_changed.connect(_on_tier)
+	EventBus.kart_hopped.connect(_on_jump)
+	EventBus.boost_started.connect(_on_boost)
+	EventBus.kart_launched.connect(_on_jump)
+	EventBus.kart_contacted.connect(_on_contact)
+	EventBus.wall_impacted.connect(_on_wall)
+	EventBus.kart_landed.connect(_on_landed)
+	EventBus.kart_hit.connect(_on_hit)
+	EventBus.roulette_started.connect(_on_pickup)
+	EventBus.roulette_ticked.connect(_on_roulette_tick)
+	EventBus.roulette_stopped.connect(_on_roulette_stop)
 
 
 func _loop(voice: AudioVoice, id: StringName, priority: int, bus: StringName) -> AudioVoice:
@@ -100,25 +100,29 @@ func _play(id: StringName) -> void:
 	AudioManager.play_kart_sfx(id, _kart, player_audio)
 
 
-func _on_tier(tier: int) -> void:
-	if tier > 0 and tier <= TIER_IDS.size():
+func _on_tier(kart: Node, tier: int) -> void:
+	if kart == _kart and tier > 0 and tier <= TIER_IDS.size():
 		_play(TIER_IDS[tier - 1])
 
 
-func _on_boost(_spec: BoostSpecData) -> void:
-	_play(&"boost")
+func _on_boost(kart: Node, _spec: Resource) -> void:
+	if kart == _kart:
+		_play(&"boost")
 
 
-func _on_jump() -> void:
-	_play(&"jump")
+func _on_jump(kart: Node) -> void:
+	if kart == _kart:
+		_play(&"jump")
 
 
-func _on_contact() -> void:
-	_impact(&"impact_kart")
+func _on_contact(kart: Node) -> void:
+	if kart == _kart:
+		_impact(&"impact_kart")
 
 
-func _on_wall() -> void:
-	_impact(&"impact_wall")
+func _on_wall(kart: Node) -> void:
+	if kart == _kart:
+		_impact(&"impact_wall")
 
 
 func _impact(id: StringName) -> void:
@@ -128,28 +132,26 @@ func _impact(id: StringName) -> void:
 	_play(id)
 
 
-func _on_landed(_vertical_speed: float) -> void:
-	_play(&"landing")
+func _on_landed(kart: Node, _vertical_speed: float) -> void:
+	if kart == _kart:
+		_play(&"landing")
 
 
-func _on_hit(type: int) -> void:
-	if type >= 0 and type < HIT_IDS.size():
+func _on_hit(kart: Node, type: int) -> void:
+	if kart == _kart and type >= 0 and type < HIT_IDS.size():
 		_play(HIT_IDS[type])
 
 
-func _on_pickup() -> void:
-	_play(&"item_pickup")
+func _on_pickup(kart: Node) -> void:
+	if kart == _kart:
+		_play(&"item_pickup")
 
 
-func _on_roulette_tick() -> void:
-	if player_audio:
+func _on_roulette_tick(kart: Node) -> void:
+	if kart == _kart and player_audio:
 		_play(&"roulette_tick")
 
 
-func _on_roulette_stop() -> void:
-	if player_audio:
+func _on_roulette_stop(kart: Node) -> void:
+	if kart == _kart and player_audio:
 		_play(&"roulette_stop")
-
-
-func _on_hop(_impulse: float) -> void:
-	_on_jump()

@@ -55,9 +55,21 @@ func test_race_countdown_requests_exactly_three_beeps_and_one_go() -> void:
 	assert_eq(_plays.count(&"go"), 1, "resume cannot repeat GO")
 
 
+func test_two_race_restarts_keep_exactly_three_beeps_per_countdown() -> void:
+	var race: RaceManager = _race(1, 1)
+	for countdown: int in range(3):
+		if countdown > 0:
+			_plays.clear()
+			race.restart()
+		await _wait_state(race, RaceState.RACING, COUNTDOWN_TICKS)
+		assert_eq(race.get_state(), RaceState.RACING)
+		assert_eq(_plays.count(&"countdown"), 3, "countdown %d" % countdown)
+		assert_eq(_plays.count(&"go"), 1, "countdown %d" % countdown)
+
+
 func test_real_menu_race_results_state_machine_switches_bgm() -> void:
 	var menu: MainMenu = (load("res://ui/menus/main_menu.tscn") as PackedScene).instantiate() as MainMenu
-	add_child(menu)
+	get_tree().root.add_child(menu)
 	await wait_process_frames(2)
 	assert_eq(AudioManager.bgm.current_id, &"menu")
 	menu.free()
@@ -73,31 +85,73 @@ func test_real_menu_race_results_state_machine_switches_bgm() -> void:
 	assert_eq(AudioManager.bgm.pitch_scale, 1.0)
 
 
-func test_local_drift_tier_and_all_kart_feedback_signals_play_sounds() -> void:
+func test_event_bus_kart_feedback_plays_each_sound_once() -> void:
 	var kart: KartController = KART_SCENE.instantiate() as KartController
 	add_child_autofree(kart)
 	kart.set_physics_process(false)
 	await wait_process_frames(1)
 	for tier: int in range(1, 4):
 		AudioManager.pool.release_owner(kart.get_instance_id())
-		kart.drift_controller.drift_tier_changed.emit(tier)
-		assert_true(_plays.has(StringName("drift_tier_%d" % tier)))
-	var physics: KartPhysics = kart.get_node("KartPhysics") as KartPhysics
-	var hit: HitReactor = kart.get_node("HitReactor") as HitReactor
+		EventBus.drift_tier_changed.emit(kart, tier)
+		assert_eq(_plays.count(StringName("drift_tier_%d" % tier)), 1)
 	AudioManager.pool.release_owner(kart.get_instance_id())
-	physics.wall_impacted.emit()
-	physics.landed.emit(-10.0)
-	kart.launched.emit()
-	assert_true(_plays.has(&"impact_wall"))
-	assert_true(_plays.has(&"landing"))
-	assert_true(_plays.has(&"jump"))
+	EventBus.wall_impacted.emit(kart)
+	EventBus.kart_landed.emit(kart, 10.0)
+	EventBus.kart_launched.emit(kart)
+	assert_eq(_plays.count(&"impact_wall"), 1)
+	assert_eq(_plays.count(&"landing"), 1)
+	assert_eq(_plays.count(&"jump"), 1)
 	for type: int in [HitReactor.HitType.SPIN_OUT, HitReactor.HitType.TUMBLE, HitReactor.HitType.SQUASH]:
-		hit.hit_started.emit(type)
-	assert_true(_plays.has(&"hit_spin"))
-	assert_true(_plays.has(&"hit_tumble"))
-	assert_true(_plays.has(&"hit_squash"))
-	kart.boost_controller.boost_started.emit(BoostSpecData.new())
-	assert_true(_plays.has(&"boost"))
+		EventBus.kart_hit.emit(kart, type)
+	assert_eq(_plays.count(&"hit_spin"), 1)
+	assert_eq(_plays.count(&"hit_tumble"), 1)
+	assert_eq(_plays.count(&"hit_squash"), 1)
+	EventBus.boost_started.emit(kart, BoostSpecData.new())
+	assert_eq(_plays.count(&"boost"), 1)
+
+
+func test_kart_audio_ignores_events_owned_by_another_kart() -> void:
+	var kart: KartController = KART_SCENE.instantiate() as KartController
+	(kart.get_node("KartAudio") as KartAudio).set_player_audio(true)
+	add_child_autofree(kart)
+	kart.set_physics_process(false)
+	var other: Node = Node.new()
+	add_child_autofree(other)
+	await wait_process_frames(1)
+	_plays.clear()
+	EventBus.drift_tier_changed.emit(other, 1)
+	EventBus.boost_started.emit(other, BoostSpecData.new())
+	EventBus.kart_launched.emit(other)
+	EventBus.kart_hopped.emit(other)
+	EventBus.kart_contacted.emit(other)
+	EventBus.wall_impacted.emit(other)
+	EventBus.kart_landed.emit(other, 10.0)
+	EventBus.kart_hit.emit(other, HitReactor.HitType.SPIN_OUT)
+	EventBus.roulette_started.emit(other)
+	EventBus.roulette_ticked.emit(other)
+	EventBus.roulette_stopped.emit(other)
+	assert_eq(_plays.size(), 0, "foreign events cannot play through this kart")
+
+
+func test_real_launch_contact_and_hit_play_once_per_owner() -> void:
+	var kart: KartController = KART_SCENE.instantiate() as KartController
+	var other: KartController = KART_SCENE.instantiate() as KartController
+	add_child_autofree(kart)
+	add_child_autofree(other)
+	kart.set_physics_process(false)
+	other.set_physics_process(false)
+	await wait_process_frames(1)
+	kart.launch(Vector3(0.0, 8.0, -10.0))
+	assert_eq(_plays.count(&"jump"), 1)
+	var resolver: KartCollisionResolver = KartCollisionResolver.new()
+	add_child_autofree(resolver)
+	resolver.set_physics_process(false)
+	resolver._resolve_pair(kart, other)
+	assert_eq(_plays.count(&"impact_kart"), 2, "one contact sound per kart")
+	assert_true(kart.apply_hit(HitReactor.HitType.SPIN_OUT))
+	assert_eq(_plays.count(&"hit_spin"), 1)
+	assert_false(kart.apply_hit(HitReactor.HitType.SPIN_OUT))
+	assert_eq(_plays.count(&"hit_spin"), 1, "rejected hits stay silent")
 
 
 func test_player_roulette_signals_emit_pickup_tick_and_stop() -> void:
@@ -107,9 +161,9 @@ func test_player_roulette_signals_emit_pickup_tick_and_stop() -> void:
 	kart.item_slot.begin_roulette(ITEM)
 	kart.item_slot.tick_roulette(ItemSlot.AUDIO_TICK_SECONDS)
 	kart.item_slot.tick_roulette(ItemRoulette.DURATION_SECONDS)
-	assert_true(_plays.has(&"item_pickup"))
-	assert_true(_plays.has(&"roulette_tick"))
-	assert_true(_plays.has(&"roulette_stop"))
+	assert_eq(_plays.count(&"item_pickup"), 1)
+	assert_eq(_plays.count(&"roulette_tick"), 1)
+	assert_eq(_plays.count(&"roulette_stop"), 1)
 
 
 func test_real_drift_charge_transition_emits_a_chime_without_audio_writing_physics() -> void:
@@ -122,6 +176,7 @@ func test_real_drift_charge_transition_emits_a_chime_without_audio_writing_physi
 	frame.drift = true
 	frame.drift_pressed = true
 	kart.drift_controller.step(frame, DRIFT_SPEED, true, 0.0, 1.0, false, DRIFT_DT)
+	assert_eq(_plays.count(&"jump"), 1, "a drift hop plays through EventBus once")
 	frame.drift_pressed = false
 	for _tick: int in range(90):
 		kart.drift_controller.step(frame, DRIFT_SPEED, true, 0.0, 1.0, false, DRIFT_DT)
@@ -165,13 +220,13 @@ func test_item_fire_hit_threat_and_player_only_rank_feedback() -> void:
 	EventBus.position_changed.emit(player, 1, 2)
 	assert_eq(_plays, [&"position_up", &"position_down"])
 	EventBus.threat_warning.emit(player, &"storm_beacon", 3.0)
-	assert_true(_plays.has(&"threat_warning"))
+	assert_eq(_plays.count(&"threat_warning"), 1)
 	for id: StringName in [&"rocket_dart", &"hunter_drone", &"spike_mine", &"nitro_can", &"aegis_bubble", &"pulse_blast", &"storm_beacon"]:
 		AudioManager.pool.stop_sfx()
 		EventBus.item_used.emit(player, id)
 		EventBus.item_hit.emit(player, ai, id)
-		assert_true(_plays.has(StringName("%s_fire" % id)))
-		assert_true(_plays.has(StringName("%s_hit" % id)))
+		assert_eq(_plays.count(StringName("%s_fire" % id)), 1)
+		assert_eq(_plays.count(StringName("%s_hit" % id)), 1)
 
 
 func test_lap_stingers_and_guarded_pitch_update_immediately() -> void:
@@ -179,10 +234,10 @@ func test_lap_stingers_and_guarded_pitch_update_immediately() -> void:
 	var kart: KartController = race.get_karts()[0]
 	SettingsManager.update_setting(&"audio", &"final_lap_pitch", true)
 	EventBus.lap_completed.emit(kart, 1, 10.0)
-	assert_true(_plays.has(&"lap"))
+	assert_eq(_plays.count(&"lap"), 1)
 	assert_eq(AudioManager.bgm.pitch_scale, 1.0)
 	EventBus.lap_completed.emit(kart, 2, 20.0)
-	assert_true(_plays.has(&"final_lap"))
+	assert_eq(_plays.count(&"final_lap"), 1)
 	assert_almost_eq(AudioManager.bgm.pitch_scale, 1.03, EPSILON)
 	SettingsManager.update_setting(&"audio", &"final_lap_pitch", false)
 	assert_eq(AudioManager.bgm.pitch_scale, 1.0)
@@ -222,7 +277,7 @@ func test_eight_karts_keep_exact_player_budget_with_owned_loops_and_cleanup() ->
 	var karts: Array[KartController] = race.get_karts()
 	for _tick: int in range(120):
 		for kart: KartController in karts:
-			kart.drift_controller.drift_tier_changed.emit(1)
+			EventBus.drift_tier_changed.emit(kart, 1)
 			assert_lte(AudioManager.pool.count_owner(kart.get_instance_id()), 3)
 		assert_lte(AudioManager.pool.count_active(true), 16)
 		assert_lte(AudioManager.pool.count_active(false), 8)
