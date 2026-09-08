@@ -9,18 +9,24 @@ const PAUSE_OBSERVATION_TICKS: int = 30
 const POSITION_EPSILON: float = 0.001
 
 var _state_history: Array[int] = []
+var _race_started_count: int = 0
 
 
 func before_each() -> void:
 	_state_history.clear()
+	_race_started_count = 0
 	if not EventBus.race_state_changed.is_connected(_on_race_state_changed):
 		EventBus.race_state_changed.connect(_on_race_state_changed)
+	if not EventBus.race_started.is_connected(_on_race_started):
+		EventBus.race_started.connect(_on_race_started)
 
 
 func after_each() -> void:
 	get_tree().paused = false
 	if EventBus.race_state_changed.is_connected(_on_race_state_changed):
 		EventBus.race_state_changed.disconnect(_on_race_state_changed)
+	if EventBus.race_started.is_connected(_on_race_started):
+		EventBus.race_started.disconnect(_on_race_started)
 
 
 func test_race_scene_delegates_each_race_responsibility_to_a_child_node() -> void:
@@ -60,6 +66,7 @@ func test_four_scripted_karts_complete_pause_results_and_restart_cycle() -> void
 	await wait_physics_frames(PAUSE_OBSERVATION_TICKS)
 	assert_almost_eq(karts[0].global_position.distance_to(paused_position), 0.0, POSITION_EPSILON)
 	manager.call("resume_race")
+	assert_eq(_race_started_count, 1, "resume must not emit a second race_started event")
 
 	await _wait_for_state(manager, RaceState.RESULTS, RACE_TIMEOUT_TICKS)
 	assert_eq(int(manager.call("get_state")), RaceState.RESULTS)
@@ -114,3 +121,7 @@ func _wait_for_state(manager: Node, target_state: int, max_ticks: int) -> void:
 
 func _on_race_state_changed(_old_state: int, new_state: int) -> void:
 	_state_history.append(new_state)
+
+
+func _on_race_started() -> void:
+	_race_started_count += 1

@@ -277,13 +277,14 @@ func _transition_to(new_state: int) -> void:
 	if not can_transition(_state, new_state):
 		push_error("Illegal race transition %d -> %d" % [_state, new_state])
 		return
+	var old_state: int = _state
 	_force_state(new_state)
 	_set_race_systems_active(new_state == RaceState.RACING or new_state == RaceState.FINISHING)
 	if new_state == RaceState.PAUSED:
 		_pause_menu.show_menu(self)
 	else:
 		_pause_menu.hide_menu()
-	if new_state == RaceState.RACING:
+	if new_state == RaceState.RACING and old_state == RaceState.COUNTDOWN:
 		EventBus.race_started.emit()
 	elif new_state == RaceState.FINISHING:
 		_finishing_elapsed = 0.0
