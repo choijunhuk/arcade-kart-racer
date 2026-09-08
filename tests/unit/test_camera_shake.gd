@@ -39,6 +39,26 @@ func test_zero_setting_produces_zero_rotation_and_position_offsets() -> void:
 	assert_eq(sample.get("position_offset"), Vector3.ZERO)
 
 
+func test_landing_trauma_interpolates_from_point_two_to_point_five() -> void:
+	var script: GDScript = load("res://camera/race_camera.gd") as GDScript
+	if not script.has_method("landing_trauma"):
+		fail_test("RaceCamera.landing_trauma is missing")
+		return
+	assert_almost_eq(float(script.call("landing_trauma", 4.0, 4.0, 18.0, 0.2, 0.5)), 0.2, EPSILON)
+	assert_almost_eq(float(script.call("landing_trauma", 11.0, 4.0, 18.0, 0.2, 0.5)), 0.35, EPSILON)
+	assert_almost_eq(float(script.call("landing_trauma", 18.0, 4.0, 18.0, 0.2, 0.5)), 0.5, EPSILON)
+
+
+func test_explosion_trauma_falls_linearly_to_zero_at_radius() -> void:
+	var script: GDScript = load("res://camera/race_camera.gd") as GDScript
+	if not script.has_method("explosion_trauma"):
+		fail_test("RaceCamera.explosion_trauma is missing")
+		return
+	assert_almost_eq(float(script.call("explosion_trauma", 0.0, 25.0, 0.7)), 0.7, EPSILON)
+	assert_almost_eq(float(script.call("explosion_trauma", 12.5, 25.0, 0.7)), 0.35, EPSILON)
+	assert_almost_eq(float(script.call("explosion_trauma", 25.0, 25.0, 0.7)), 0.0, EPSILON)
+
+
 func _make_shake() -> RefCounted:
 	var script: GDScript = _require_script()
 	if script == null:

@@ -4,6 +4,7 @@ extends CharacterBody3D
 ## camera/HUD/AI. Never reads the `Input` singleton directly (spec §23);
 ## drives from whatever `InputProvider` is installed. Spec: §8, §9.3.
 signal state_changed(old_state: int, new_state: int)
+const ENGINE_BOOST_PITCH_ADD: float = 0.3
 @export var kart_data: KartData = preload("res://data/karts/medium.tres")
 @export var tuning: PhysicsTuning = preload("res://data/tuning/physics_default.tres")
 @onready var _physics: KartPhysics = $KartPhysics
@@ -131,7 +132,7 @@ func get_speed_ratio() -> float:
 	return clampf(absf(_physics.speed) / maxf(kart_data.max_speed, 0.001), 0.0, 1.0)
 ## Phase 10 audio hook: speed ratio plus the specified boost pitch addition.
 func get_engine_pitch_ratio() -> float:
-	return get_speed_ratio() + (0.3 if is_boosting() else 0.0)
+	return get_speed_ratio() + (ENGINE_BOOST_PITCH_ADD if is_boosting() else 0.0)
 ## Phase 10 audio hook: normalized lateral slip magnitude for tyre squeal.
 func get_drift_squeal_ratio() -> float:
 	return clampf(absf(get_lateral_speed()) / maxf(kart_data.max_speed, 0.001), 0.0, 1.0)

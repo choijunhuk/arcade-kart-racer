@@ -18,6 +18,7 @@ var _fov_model: CameraFov = CameraFov.new()
 
 
 func _ready() -> void:
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	_shake.configure(tuning)
 	_fov_model.configure(tuning)
 	_connect_events()
@@ -35,7 +36,7 @@ func set_target(target: KartController) -> void:
 	_shake.clear()
 	if _target == null:
 		return
-	global_position = _desired_position(_look_direction())
+	global_position = _desired_position(_look_direction(), 1.0)
 	_apply_look_rotation(Vector3.ZERO)
 
 
@@ -44,7 +45,8 @@ func _process(delta: float) -> void:
 		return
 	_update_look_back(delta)
 	var look_direction: Vector3 = _look_direction().rotated(Vector3.UP, PI * _look_back_blend)
-	var desired: Vector3 = _resolve_clipping(_desired_position(look_direction))
+	var drift_weight: float = clampf(tuning.feedback_lerp_speed * delta, 0.0, 1.0)
+	var desired: Vector3 = _resolve_clipping(_desired_position(look_direction, drift_weight))
 	global_position = global_position.lerp(desired, clampf(tuning.follow_stiffness * delta, 0.0, 1.0))
 	var sample: CameraShake.Sample = _shake.step(delta, SettingsManager.get_shake_strength())
 	_apply_look_rotation(sample.rotation_offset)
@@ -65,9 +67,9 @@ func get_trauma() -> float:
 	return _shake.get_trauma()
 
 
-func _desired_position(look_direction: Vector3) -> Vector3:
+func _desired_position(look_direction: Vector3, drift_weight: float) -> Vector3:
 	var target_offset: float = -float(_target.get_drift_direction()) * tuning.drift_side_offset
-	_drift_offset = lerpf(_drift_offset, target_offset, 0.15)
+	_drift_offset = lerpf(_drift_offset, target_offset, drift_weight)
 	var right: Vector3 = look_direction.cross(Vector3.UP).normalized()
 	return _target.global_position - look_direction * tuning.camera_distance + Vector3.UP * tuning.camera_height + right * _drift_offset
 
@@ -151,14 +153,32 @@ func _on_wall_head_on(kart: Node) -> void:
 func _on_kart_landed(kart: Node, vertical_speed: float) -> void:
 	if kart != _target:
 		return
-	var speed_range: float = maxf(tuning.landing_shake_max_speed - tuning.landing_shake_min_speed, 0.001)
-	var weight: float = clampf((vertical_speed - tuning.landing_shake_min_speed) / speed_range, 0.0, 1.0)
-	_shake.add_trauma(lerpf(tuning.landing_trauma_min, tuning.landing_trauma_max, weight))
+	_shake.add_trauma(landing_trauma(
+		vertical_speed, tuning.landing_shake_min_speed, tuning.landing_shake_max_speed,
+		tuning.landing_trauma_min, tuning.landing_trauma_max,
+	))
 
 
 func _on_item_exploded(world_position: Vector3) -> void:
 	if _target == null:
 		return
 	var distance: float = _target.global_position.distance_to(world_position)
-	var falloff: float = 1.0 - clampf(distance / maxf(tuning.item_explosion_shake_radius, 0.001), 0.0, 1.0)
-	_shake.add_trauma(tuning.item_explosion_trauma * falloff)
+	_shake.add_trauma(explosion_trauma(
+		distance, tuning.item_explosion_shake_radius, tuning.item_explosion_trauma,
+	))
+
+
+## Pure landing-speed mapping for the specified 0.2-0.5 trauma range.
+static func landing_trauma(
+	vertical_speed: float, minimum_speed: float, maximum_speed: float,
+	minimum_trauma: float, maximum_trauma: float,
+) -> float:
+	var speed_range: float = maxf(maximum_speed - minimum_speed, 0.001)
+	var weight: float = clampf((vertical_speed - minimum_speed) / speed_range, 0.0, 1.0)
+	return lerpf(minimum_trauma, maximum_trauma, weight)
+
+
+## Pure linear distance falloff for item explosion trauma.
+static func explosion_trauma(distance: float, radius: float, maximum_trauma: float) -> float:
+	var falloff: float = 1.0 - clampf(distance / maxf(radius, 0.001), 0.0, 1.0)
+	return maxf(maximum_trauma, 0.0) * falloff

@@ -5,7 +5,6 @@ extends CanvasLayer
 ## TODO(phase-9): Replace the placeholder typography/layout with final HUD art.
 
 const GO_DISPLAY_SECONDS: float = 1.0
-const ROULETTE_SPIN_RADIANS_PER_SECOND: float = 10.0
 const SHIELD_FULL_SECONDS: float = 8.0
 
 @export var tuning: FeelTuning = preload("res://data/tuning/feel_default.tres")
@@ -162,7 +161,7 @@ func _animate_lap_slide() -> void:
 	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
-func _update_item_hud(delta: float) -> void:
+func _update_item_hud(_delta: float) -> void:
 	if _player_kart == null:
 		return
 	var slot: ItemSlot = _player_kart.item_slot

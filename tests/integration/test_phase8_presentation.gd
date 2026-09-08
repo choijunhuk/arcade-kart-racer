@@ -4,6 +4,7 @@ const KART_SCENE: PackedScene = preload("res://kart/kart.tscn")
 const HUD_SCENE: PackedScene = preload("res://ui/hud/hud.tscn")
 const RESULTS_SCENE: PackedScene = preload("res://ui/results/results_screen.tscn")
 const SPEED_LINES_PATH: String = "res://effects/speed_lines.tscn"
+const PERF_PROBE_PATH: String = "res://scenes/test/perf_probe.tscn"
 const EPSILON: float = 0.001
 
 
@@ -84,3 +85,23 @@ func test_phase_ten_pitch_hooks_expose_speed_boost_and_lateral_ratios() -> void:
 	assert_almost_eq(kart.get_drift_squeal_ratio(), 3.0 / kart.get_kart_data().max_speed, EPSILON)
 	kart.request_boost(kart.tuning.trick_boost, &"test")
 	assert_almost_eq(kart.get_engine_pitch_ratio(), 10.0 / kart.get_kart_data().max_speed + 0.3, EPSILON)
+
+
+func test_windowed_performance_probe_scene_is_runnable() -> void:
+	assert_true(ResourceLoader.exists(PERF_PROBE_PATH))
+	if not ResourceLoader.exists(PERF_PROBE_PATH):
+		return
+	var probe: Node = (load(PERF_PROBE_PATH) as PackedScene).instantiate()
+	autofree(probe)
+	assert_true(probe.has_method("build_config"))
+
+
+func test_tire_smoke_rule_covers_drift_offroad_and_hard_braking() -> void:
+	var script: GDScript = load("res://effects/drift_effects.gd") as GDScript
+	if not script.has_method("should_emit_smoke"):
+		fail_test("DriftEffects.should_emit_smoke is missing")
+		return
+	assert_true(bool(script.call("should_emit_smoke", true, &"asphalt", 0.0, 0.2, 0.7, 0.35)))
+	assert_true(bool(script.call("should_emit_smoke", false, &"grass", 0.0, 0.4, 0.7, 0.35)))
+	assert_true(bool(script.call("should_emit_smoke", false, &"asphalt", 0.8, 0.5, 0.7, 0.35)))
+	assert_false(bool(script.call("should_emit_smoke", false, &"asphalt", 0.2, 0.5, 0.7, 0.35)))

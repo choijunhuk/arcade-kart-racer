@@ -12,6 +12,7 @@ enum Kind {
 const ITEM_COLOR: Color = Color(1.0, 0.28, 0.08, 0.9)
 const WALL_COLOR: Color = Color(1.0, 0.82, 0.2, 0.9)
 const LANDING_COLOR: Color = Color(0.62, 0.48, 0.32, 0.65)
+const IMPACT_GROWTH_RATE: float = 3.0
 
 @export var tuning: FeelTuning = preload("res://data/tuning/feel_default.tres")
 
@@ -46,7 +47,7 @@ func play(world_position: Vector3, kind: Kind = Kind.ITEM) -> void:
 func tick(delta: float) -> bool:
 	_remaining = maxf(0.0, _remaining - maxf(delta, 0.0))
 	var elapsed: float = tuning.impact_duration - _remaining
-	scale = Vector3.ONE * (1.0 + elapsed * 3.0)
+	scale = Vector3.ONE * (1.0 + elapsed * IMPACT_GROWTH_RATE)
 	if _remaining <= 0.0:
 		_particles.emitting = false
 	return _remaining <= 0.0

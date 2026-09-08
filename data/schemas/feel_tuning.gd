@@ -61,6 +61,8 @@ extends Resource
 @export var skid_mark_alpha: float = 0.75
 @export var skid_mark_ground_offset: float = 0.28
 @export var boost_speed_line_add: float = 0.45
+@export var smoke_brake_threshold: float = 0.7
+@export var smoke_min_speed_ratio: float = 0.35
 @export var drift_tier_cyan: Color = Color(0.1, 0.9, 1.0)
 @export var drift_tier_amber: Color = Color(1.0, 0.62, 0.1)
 @export var drift_tier_magenta: Color = Color(1.0, 0.1, 0.72)

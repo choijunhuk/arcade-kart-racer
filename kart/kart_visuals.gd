@@ -5,6 +5,7 @@ extends Node3D
 
 const WHEEL_RADIUS: float = 0.28
 const MIN_BOB_SPEED_RATIO: float = 0.25
+const BOB_NOISE_SEED: int = 3_141
 
 @export var feel_tuning: FeelTuning = preload("res://data/tuning/feel_default.tres")
 
@@ -29,12 +30,15 @@ var _trick_spin: float = 0.0
 var _flash_material: ShaderMaterial
 var _flash_segments_remaining: int = 0
 var _flash_segment_remaining: float = 0.0
+var _bob_noise: FastNoiseLite = FastNoiseLite.new()
 
 
 func _ready() -> void:
 	_base_local_y = position.y
 	_rear_left_base = _wheel_rl.position
 	_rear_right_base = _wheel_rr.position
+	_bob_noise.seed = BOB_NOISE_SEED
+	_bob_noise.frequency = 1.0
 	_install_hit_flash_material()
 	if not EventBus.kart_hit.is_connected(_on_kart_hit):
 		EventBus.kart_hit.connect(_on_kart_hit)
@@ -98,7 +102,7 @@ func _update_suspension(delta: float) -> void:
 	_was_grounded = grounded
 	var speed_scale: float = lerpf(MIN_BOB_SPEED_RATIO, 1.0, _controller.get_speed_ratio())
 	_bob_phase += feel_tuning.suspension_bob_frequency * speed_scale * delta
-	var road_noise: float = sin(_bob_phase) * feel_tuning.suspension_bob_amplitude if grounded else 0.0
+	var road_noise: float = _bob_noise.get_noise_1d(_bob_phase) * feel_tuning.suspension_bob_amplitude if grounded else 0.0
 	var acceleration: float = (
 		(road_noise - _bob_offset) * feel_tuning.suspension_stiffness
 		- _bob_velocity * feel_tuning.suspension_damping
