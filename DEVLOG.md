@@ -1572,3 +1572,6 @@ Phase 1에서 `KartController`, `KartPhysics`, `KartVisuals`, 플레이어 입�
 - 20레이스 normal/8카트/3랩, items on: rank-1 피격 0.65~0.75/레이스 (예산 3 ✅), lap1-8위 상승 0.8 (목표 1.5 ❌), items off 대조군 0.4.
 - 하위권 행을 Drone/Nitro/Beacon 위주로 재가중(6~8위 행)해도 0.8로 변화 없음 → 지표가 동급 AI 실력 편차에 지배되어 아이템 데이터로 움직이지 않음. 스펙 §12.3 표로 복원.
 - 결정: `run_ai_race.gd`의 밸런스 게이트를 `--strict-balance on`일 때만 실패 처리(기본 advisory, `balance_gate_pass` 필드로 출력). Phase 11 하드닝에서 지표 재정의(items on/off 델타 ≥ +0.4 제안) 및 튜닝 재시도.
+
+### Phase 8 perf probe (main thread, windowed, Apple M3 Max)
+- `godot --path . res://scenes/test/perf_probe.tscn -- 12 30` → 12 karts, 60 GPU particles, mean FPS 119.9, worst frame 47.7 ms (single spike at spawn/warmup), duration 30 s. DoD ≥ 60 fps for 8 karts ✅.
