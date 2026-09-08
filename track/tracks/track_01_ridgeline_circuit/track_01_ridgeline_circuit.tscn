@@ -1,0 +1,227 @@
+[gd_scene load_steps=14 format=3]
+
+[ext_resource type="Script" path="res://track/tracks/track_01_ridgeline_circuit/track_01_track.gd" id="1_track"]
+[ext_resource type="Script" path="res://track/tracks/track_01_ridgeline_circuit/track_01_line.gd" id="2_line"]
+[ext_resource type="PackedScene" path="res://track/elements/checkpoint.tscn" id="3_checkpoint"]
+[ext_resource type="PackedScene" path="res://track/elements/item_box.tscn" id="4_item_box"]
+[ext_resource type="PackedScene" path="res://track/elements/boost_pad.tscn" id="5_boost_pad"]
+[ext_resource type="PackedScene" path="res://track/elements/jump_pad.tscn" id="6_jump_pad"]
+[ext_resource type="PackedScene" path="res://track/elements/offroad_zone.tscn" id="7_offroad"]
+[ext_resource type="Resource" path="res://data/terrain/dirt.tres" id="8_dirt"]
+[ext_resource type="PackedScene" path="res://track/elements/kill_zone.tscn" id="9_kill"]
+[ext_resource type="PackedScene" path="res://track/elements/moving_obstacle.tscn" id="10_obstacle"]
+[ext_resource type="Script" path="res://track/elements/shortcut.gd" id="11_shortcut"]
+
+[sub_resource type="Environment" id="Environment_world"]
+background_mode = 1
+background_color = Color(0.3, 0.5, 0.72, 1)
+ambient_light_source = 3
+ambient_light_color = Color(0.75, 0.8, 0.9, 1)
+ambient_light_energy = 0.7
+
+[sub_resource type="BoxShape3D" id="Shape_gate_ns"]
+size = Vector3(2, 3, 14)
+
+[sub_resource type="BoxShape3D" id="Shape_shortcut_trigger"]
+size = Vector3(10, 3, 44)
+
+[node name="Track01" type="Node3D"]
+script = ExtResource("1_track")
+
+[node name="Geometry" type="StaticBody3D" parent="."]
+collision_layer = 1
+collision_mask = 0
+
+[node name="Environment" type="Node3D" parent="."]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="Environment"]
+environment = SubResource("Environment_world")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="Environment"]
+rotation_degrees = Vector3(-55, -35, 0)
+light_energy = 1.1
+shadow_enabled = true
+
+[node name="RacingLine" type="Path3D" parent="."]
+script = ExtResource("2_line")
+
+[node name="Checkpoints" type="Node3D" parent="."]
+
+[node name="Checkpoint00" parent="Checkpoints" instance=ExtResource("3_checkpoint")]
+position = Vector3(0, 1, -20)
+rotation_degrees = Vector3(0, 90, 0)
+[node name="CollisionShape3D" parent="Checkpoints/Checkpoint00" index="0"]
+shape = SubResource("Shape_gate_ns")
+
+[node name="Checkpoint01" parent="Checkpoints" instance=ExtResource("3_checkpoint")]
+position = Vector3(-260, 1, -20)
+rotation_degrees = Vector3(0, 90, 0)
+[node name="CollisionShape3D" parent="Checkpoints/Checkpoint01" index="0"]
+shape = SubResource("Shape_gate_ns")
+
+[node name="Checkpoint02" parent="Checkpoints" instance=ExtResource("3_checkpoint")]
+position = Vector3(-380, 1, -20)
+rotation_degrees = Vector3(0, 90, 0)
+[node name="CollisionShape3D" parent="Checkpoints/Checkpoint02" index="0"]
+shape = SubResource("Shape_gate_ns")
+
+[node name="Checkpoint03" parent="Checkpoints" instance=ExtResource("3_checkpoint")]
+position = Vector3(-700, 1, 0)
+rotation_degrees = Vector3(0, 180, 0)
+
+[node name="Checkpoint04" parent="Checkpoints" instance=ExtResource("3_checkpoint")]
+position = Vector3(-680, 1, 20)
+rotation_degrees = Vector3(0, -90, 0)
+[node name="CollisionShape3D" parent="Checkpoints/Checkpoint04" index="0"]
+shape = SubResource("Shape_gate_ns")
+
+[node name="Checkpoint05" parent="Checkpoints" instance=ExtResource("3_checkpoint")]
+position = Vector3(-350, 1, 20)
+rotation_degrees = Vector3(0, -90, 0)
+[node name="CollisionShape3D" parent="Checkpoints/Checkpoint05" index="0"]
+shape = SubResource("Shape_gate_ns")
+
+[node name="Checkpoint06" parent="Checkpoints" instance=ExtResource("3_checkpoint")]
+position = Vector3(-60, 1, 20)
+rotation_degrees = Vector3(0, -90, 0)
+[node name="CollisionShape3D" parent="Checkpoints/Checkpoint06" index="0"]
+shape = SubResource("Shape_gate_ns")
+
+[node name="Checkpoint07" parent="Checkpoints" instance=ExtResource("3_checkpoint")]
+position = Vector3(20, 1, 0)
+rotation_degrees = Vector3(0, 0, 0)
+
+[node name="StartGrid" type="Node3D" parent="."]
+
+[node name="Grid01" type="Marker3D" parent="StartGrid"]
+position = Vector3(-3, 0.5, -21.1)
+rotation_degrees = Vector3(0, 90, 0)
+[node name="Grid02" type="Marker3D" parent="StartGrid"]
+position = Vector3(-3, 0.5, -18.9)
+rotation_degrees = Vector3(0, 90, 0)
+[node name="Grid03" type="Marker3D" parent="StartGrid"]
+position = Vector3(-6.5, 0.5, -21.1)
+rotation_degrees = Vector3(0, 90, 0)
+[node name="Grid04" type="Marker3D" parent="StartGrid"]
+position = Vector3(-6.5, 0.5, -18.9)
+rotation_degrees = Vector3(0, 90, 0)
+[node name="Grid05" type="Marker3D" parent="StartGrid"]
+position = Vector3(-10, 0.5, -21.1)
+rotation_degrees = Vector3(0, 90, 0)
+[node name="Grid06" type="Marker3D" parent="StartGrid"]
+position = Vector3(-10, 0.5, -18.9)
+rotation_degrees = Vector3(0, 90, 0)
+[node name="Grid07" type="Marker3D" parent="StartGrid"]
+position = Vector3(-13.5, 0.5, -21.1)
+rotation_degrees = Vector3(0, 90, 0)
+[node name="Grid08" type="Marker3D" parent="StartGrid"]
+position = Vector3(-13.5, 0.5, -18.9)
+rotation_degrees = Vector3(0, 90, 0)
+
+[node name="ItemBoxes" type="Node3D" parent="."]
+
+[node name="ItemBoxRowA00" parent="ItemBoxes" instance=ExtResource("4_item_box")]
+position = Vector3(-150, 0.6, -26)
+[node name="ItemBoxRowA01" parent="ItemBoxes" instance=ExtResource("4_item_box")]
+position = Vector3(-150, 0.6, -23)
+[node name="ItemBoxRowA02" parent="ItemBoxes" instance=ExtResource("4_item_box")]
+position = Vector3(-150, 0.6, -20)
+[node name="ItemBoxRowA03" parent="ItemBoxes" instance=ExtResource("4_item_box")]
+position = Vector3(-150, 0.6, -17)
+[node name="ItemBoxRowA04" parent="ItemBoxes" instance=ExtResource("4_item_box")]
+position = Vector3(-150, 0.6, -14)
+
+[node name="ItemBoxRowB00" parent="ItemBoxes" instance=ExtResource("4_item_box")]
+position = Vector3(-480, 0.6, 14)
+[node name="ItemBoxRowB01" parent="ItemBoxes" instance=ExtResource("4_item_box")]
+position = Vector3(-480, 0.6, 17)
+[node name="ItemBoxRowB02" parent="ItemBoxes" instance=ExtResource("4_item_box")]
+position = Vector3(-480, 0.6, 20)
+[node name="ItemBoxRowB03" parent="ItemBoxes" instance=ExtResource("4_item_box")]
+position = Vector3(-480, 0.6, 23)
+[node name="ItemBoxRowB04" parent="ItemBoxes" instance=ExtResource("4_item_box")]
+position = Vector3(-480, 0.6, 26)
+
+[node name="ItemBoxRowC00" parent="ItemBoxes" instance=ExtResource("4_item_box")]
+position = Vector3(-90, 0.6, 15.5)
+[node name="ItemBoxRowC01" parent="ItemBoxes" instance=ExtResource("4_item_box")]
+position = Vector3(-90, 0.6, 18.5)
+[node name="ItemBoxRowC02" parent="ItemBoxes" instance=ExtResource("4_item_box")]
+position = Vector3(-90, 0.6, 21.5)
+[node name="ItemBoxRowC03" parent="ItemBoxes" instance=ExtResource("4_item_box")]
+position = Vector3(-90, 0.6, 24.5)
+
+[node name="BoostPads" type="Node3D" parent="."]
+
+[node name="BoostPad00" parent="BoostPads" instance=ExtResource("5_boost_pad")]
+position = Vector3(-40, 0.3, 20)
+rotation_degrees = Vector3(0, -90, 0)
+[node name="BoostPad01" parent="BoostPads" instance=ExtResource("5_boost_pad")]
+position = Vector3(-30, 0.3, 20)
+rotation_degrees = Vector3(0, -90, 0)
+[node name="BoostPad02" parent="BoostPads" instance=ExtResource("5_boost_pad")]
+position = Vector3(-20, 0.3, 20)
+rotation_degrees = Vector3(0, -90, 0)
+
+[node name="JumpPads" type="Node3D" parent="."]
+
+[node name="MainJump" parent="JumpPads" instance=ExtResource("6_jump_pad")]
+position = Vector3(-520, 0.3, 20)
+rotation_degrees = Vector3(0, -90, 0)
+launch_velocity = Vector3(0, 8, -16)
+
+[node name="OffroadZones" type="Node3D" parent="."]
+
+[node name="ShortcutDirt" parent="OffroadZones" instance=ExtResource("7_offroad")]
+position = Vector3(-680, 0, 0)
+scale = Vector3(9, 1, 42)
+terrain = ExtResource("8_dirt")
+
+[node name="Hazards" type="Node3D" parent="."]
+
+[node name="KillZones" type="Node3D" parent="."]
+
+[node name="FallPlane" parent="KillZones" instance=ExtResource("9_kill")]
+position = Vector3(-340, -6, 0)
+scale = Vector3(760, 1, 90)
+
+[node name="MovingObstacles" type="Node3D" parent="."]
+
+[node name="BarrierPathA" type="Path3D" parent="MovingObstacles"]
+position = Vector3(-230, 1, 25)
+
+[node name="BarrierA" parent="MovingObstacles" instance=ExtResource("10_obstacle")]
+position = Vector3(-230, 1, 25)
+path = NodePath("../BarrierPathA")
+speed = 5.0
+loop = true
+
+[node name="BarrierPathB" type="Path3D" parent="MovingObstacles"]
+position = Vector3(-170, 1, 15)
+
+[node name="BarrierB" parent="MovingObstacles" instance=ExtResource("10_obstacle")]
+position = Vector3(-170, 1, 15)
+path = NodePath("../BarrierPathB")
+speed = 5.0
+loop = true
+
+[node name="Shortcuts" type="Node3D" parent="."]
+
+[node name="HairpinCutoff" type="Node3D" parent="Shortcuts"]
+script = ExtResource("11_shortcut")
+entry_offset = 685.0
+exit_offset = 748.0
+required_speed = 10.0
+risk = 0.7
+alt_curve = NodePath("AltCurve")
+
+[node name="TriggerArea" type="Area3D" parent="Shortcuts/HairpinCutoff"]
+collision_layer = 256
+collision_mask = 2
+position = Vector3(-680, 1, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Shortcuts/HairpinCutoff/TriggerArea"]
+shape = SubResource("Shape_shortcut_trigger")
+
+[node name="AltCurve" type="Path3D" parent="Shortcuts/HairpinCutoff"]
+position = Vector3(-680, 1, -20)
