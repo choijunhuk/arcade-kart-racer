@@ -60,6 +60,7 @@ race/race.tscn                                       [race_manager.gd]
     ├── KartCollisionResolver
     ├── Countdown
     ├── RaceResults
+    ├── RaceAudio            (EventBus audio adapter)
     ├── FeedbackEffects     (pooled item/wall/landing bursts)
     ├── HitStop             (local windowed play only)
     ├── ParticleBudgetController
@@ -110,6 +111,7 @@ Kart (CharacterBody3D, layer 2 / mask 1)  [kart_controller.gd]
 ├── DriftController (Node)    [drift_controller.gd]
 ├── BoostController (Node)    [boost_controller.gd]
 ├── ItemSlot (Node)           [item_slot.gd]
+├── KartAudio (Node)          [kart_audio.gd] pooled engine/squeal + local feedback
 ├── DriftEffects (Node3D)     [effects/drift_effects.gd] tier sparks + terrain-tinted smoke
 ├── BoostEffects (Node3D)     [effects/boost_effects.gd] exhaust particles
 └── Visuals (Node3D)          [kart_visuals.gd]
@@ -741,7 +743,7 @@ res://
 ├── ai/.gitkeep
 ├── camera/.gitkeep
 ├── ui/{theme,hud,menus,results,components}/
-├── audio/placeholder/
+├── audio/{audio_voice,sfx_pool,bgm_crossfade,race_audio}.gd
 ├── effects/.gitkeep
 ├── data/
 │   ├── schemas/
@@ -1346,10 +1348,10 @@ its `Curve3D` from arc points at `_ready()` — but everything else about it
 
 ### Phase 10 audio
 
-Implementation plan: (1) resource library and reproducible PCM assets, (2) fixed
-voice pool and tick-driven BGM crossfade, (3) kart/race/item/menu subscriptions
-and settings, (4) regression tests, headless import/parse, four track validators
-and an eight-kart simulation. No physics tuning or new dependencies.
+The implementation adds a resource library/reproducible PCM assets, a fixed
+voice pool/tick-driven BGM crossfade, and kart/race/item/menu subscriptions.
+Physics and item decisions remain unchanged; only local notification signals
+were added. No new dependencies.
 
 `AudioManagerService` is the Core audio facade; `audio/{audio_voice,sfx_pool,
 bgm_crossfade}.gd` are its infrastructure helpers (no gameplay imports).
@@ -1363,6 +1365,8 @@ low-pass effect. Its toggle follows the local player's offroad state; because
 this is a shared bus, all engines receive that coloration. In all-AI simulations
 the filter stays off. SettingsManager remains the sole persisted volume source;
 AudioManager maps linear values to dB and explicitly mutes exactly zero.
+The existing Phase 8 engine ratio includes boost already; KartAudio subtracts
+that addition before clamping/interpolating speed, then adds +0.3 exactly once.
 Music ducking adds -8 dB to the user's current level and never overwrites it.
 
 The hard budget is **16 AudioStreamPlayer3D + 8 AudioStreamPlayer** total,
@@ -1370,13 +1374,17 @@ including kart loops and the two reserved non-stealable BGM crossfade voices.
 KartAudio leases at most three voices per kart (player engine/squeal use 2D).
 Idle first, then lowest-priority/oldest eligible voice; lower priorities cannot
 steal higher ones. Engine loops outrank transient effects, squeal loops yield
-first and reacquire when eligible. Owner/id checks prevent a stolen lease from
+first and reacquire when eligible; loops cannot steal equal-priority loops,
+avoiding repeated restarts under saturation. Owner/id checks prevent a stolen lease from
 being updated by its former owner. No nodes or voice records allocate per play.
 Explicit lifetime ticks make headless assertions independent of audio hardware.
+Headless skips only player.play(): Dummy audio can retain playback objects on
+immediate exit. Voice identities, gains, priority and lifetime use the same path.
 
 BGM uses two preallocated voices and an explicit `step(delta)` linear-gain
-crossfade. Interrupted transitions start from current gains; zero duration is
-immediate. Menu -> race (COUNTDOWN) -> results uses idempotent track requests.
+crossfade. Interrupted transitions start from current gains; a third track replaces the
+quieter slot because the budget is two music voices. Zero duration is immediate.
+New music starts at silence before play(), avoiding a full-gain first audio block. Menu -> race (COUNTDOWN) -> results uses idempotent track requests.
 Final lap pitch is 1.03 when `audio.final_lap_pitch` is enabled, otherwise 1.0;
 restart/menu restores 1.0. BGM and menu audio keep processing during pause;
 world/kart voices pause and do not consume lifetime while paused.
@@ -1399,3 +1407,9 @@ and pitch variance. Missing ids warn once per library. Build-time generation
 writes deterministic mono 22.05 kHz 16-bit PCM WAVs, including eight-bar menu,
 race and results arpeggios; imported loop settings preserve loop endpoints.
 TODO(phase-13): replace generated CC0 placeholders and tune the final mix by ear.
+
+
+Official API references consulted for the installed Godot 4.7 implementation:
+[AudioStreamWAV PCM/save/loop properties](https://docs.godotengine.org/en/latest/classes/class_audiostreamwav.html),
+[AudioServer bus/effect API](https://docs.godotengine.org/en/latest/classes/class_audioserver.html),
+and [AudioStreamPlayer3D](https://docs.godotengine.org/en/latest/classes/class_audiostreamplayer3d.html).
