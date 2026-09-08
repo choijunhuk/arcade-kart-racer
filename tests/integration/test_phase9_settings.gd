@@ -60,3 +60,16 @@ func test_pause_settings_back_keeps_the_race_tree_paused() -> void:
 	assert_true(get_tree().paused)
 	assert_false(settings_menu.visible)
 	assert_true(pause_menu.get_node("Panel").visible)
+
+
+func test_loading_race_scene_preserves_race_mode() -> void:
+	var config: RaceConfig = RaceConfigBuilder.build(DRIVER, KART, TRACK, DIFFICULTY, 1, 1)
+	config.items_enabled = false
+	GameState.current_mode = GameState.Mode.RACE
+	var manager: RaceManager = RACE_SCENE.instantiate() as RaceManager
+	manager.configure(config)
+	add_child_autofree(manager)
+
+	await wait_physics_frames(1)
+
+	assert_eq(GameState.current_mode, GameState.Mode.RACE)

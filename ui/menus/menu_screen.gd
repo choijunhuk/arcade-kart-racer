@@ -5,7 +5,8 @@ extends Control
 
 
 func _ready() -> void:
-	GameState.current_mode = GameState.Mode.MENU
+	if get_parent() == get_tree().root:
+		GameState.current_mode = GameState.Mode.MENU
 
 
 func _unhandled_input(event: InputEvent) -> void:

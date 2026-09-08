@@ -6,6 +6,7 @@ const REMAP_LOGIC_PATH: String = "res://ui/menus/remap_logic.gd"
 const MINIMAP_PROJECTION_PATH: String = "res://ui/hud/minimap_projection.gd"
 const RESULTS_ORDERING_PATH: String = "res://ui/results/results_ordering.gd"
 const SCAN_DIRECTORY: String = "user://phase9_resource_scan"
+const DIFFICULTY_DIRECTORY: String = "res://data/ai"
 const FLOAT_EPSILON: float = 0.001
 
 
@@ -46,6 +47,40 @@ func test_resource_scan_ignores_non_tres_files() -> void:
 	var resources: Array = script.call("scan_tres", SCAN_DIRECTORY) as Array
 
 	assert_eq(resources.size(), 1)
+	assert_eq((resources[0] as Resource).resource_name, "driver")
+
+
+func test_resource_scan_normalizes_exported_tres_remap_listing() -> void:
+	var script: GDScript = _load_required_script(RESOURCE_SCANNER_PATH)
+	if script == null:
+		return
+	_create_scan_directory()
+	_save_named_resource("driver.tres", "driver")
+	var exported_listing := PackedStringArray(["driver.tres.remap"])
+	var scan_argument_count: int = _script_method_argument_count(script, &"scan_tres")
+	assert_eq(scan_argument_count, 2)
+	if scan_argument_count != 2:
+		return
+
+	var resources: Array = script.call("scan_tres", SCAN_DIRECTORY, exported_listing) as Array
+
+	assert_eq(resources.size(), 1)
+	assert_eq((resources[0] as Resource).resource_name, "driver")
+	assert_eq((resources[0] as Resource).resource_path, SCAN_DIRECTORY + "/driver.tres")
+
+
+func test_resource_scan_accepts_binary_res_resources() -> void:
+	var script: GDScript = _load_required_script(RESOURCE_SCANNER_PATH)
+	if script == null:
+		return
+	_create_scan_directory()
+	_save_named_resource("driver.res", "driver")
+
+	var resources: Array = script.call("scan_tres", SCAN_DIRECTORY) as Array
+
+	assert_eq(resources.size(), 1)
+	if resources.is_empty():
+		return
 	assert_eq((resources[0] as Resource).resource_name, "driver")
 
 
@@ -124,6 +159,17 @@ func test_remap_conflict_swaps_the_previous_binding() -> void:
 	assert_eq(remaps["ui_accept"], [accept_event], "pure helper must not mutate its input")
 
 
+func test_difficulty_lookup_warns_and_falls_back_for_a_stale_id() -> void:
+	var menu: DifficultySelectMenu = DifficultySelectMenu.new()
+	autofree(menu)
+
+	var fallback: Resource = menu.call("_find_resource", DIFFICULTY_DIRECTORY, &"missing_difficulty") as Resource
+
+	assert_push_warning("missing_difficulty")
+	assert_not_null(fallback)
+	assert_eq(StringName(str(fallback.get("id"))), &"easy")
+
+
 func test_minimap_projection_preserves_aspect_and_centers_the_short_axis() -> void:
 	var script: GDScript = _load_required_script(MINIMAP_PROJECTION_PATH)
 	if script == null:
@@ -194,6 +240,14 @@ func _load_required_script(path: String) -> GDScript:
 	var exists: bool = ResourceLoader.exists(path)
 	assert_true(exists, "%s must exist" % path)
 	return load(path) as GDScript if exists else null
+
+
+func _script_method_argument_count(script: GDScript, method_name: StringName) -> int:
+	for method: Dictionary in script.get_script_method_list():
+		if StringName(str(method.get("name", ""))) == method_name:
+			var arguments: Array = method.get("args", []) as Array
+			return arguments.size()
+	return -1
 
 
 func _create_scan_directory() -> void:

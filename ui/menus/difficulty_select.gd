@@ -54,4 +54,10 @@ func _find_resource(directory: String, resource_id: StringName) -> Resource:
 	for resource: Resource in resources:
 		if StringName(str(resource.get("id"))) == resource_id:
 			return resource
-	return resources[0] if not resources.is_empty() else null
+	if resources.is_empty():
+		return null
+	push_warning(
+		"Resource id '%s' was not found in %s; using the first available resource."
+		% [String(resource_id), directory],
+	)
+	return resources[0]

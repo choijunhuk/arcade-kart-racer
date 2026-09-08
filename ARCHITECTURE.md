@@ -637,9 +637,10 @@ Race PauseMenu -> embedded SettingsMenu -> PauseMenu
                  (SceneTree.paused remains true)
 ```
 
-`ResourceScanner.scan_tres()` accepts one directory, ignores every non-`.tres`
-file, sorts filenames before loading, and returns resources in deterministic
-content order. Selection screens filter that generic result to their typed
+`ResourceScanner.scan_tres()` accepts one directory (plus an optional injected
+listing for deterministic tests), recognizes `.tres`, exported `.tres.remap`
+aliases normalized back to their logical `.tres` paths, and `.res`, then sorts
+before loading. Selection screens filter that generic result to their typed
 schema. Adding a driver/kart/track/difficulty is therefore a data-file change,
 not a menu registry edit.
 
