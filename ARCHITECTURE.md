@@ -1,6 +1,6 @@
 # Arcade Kart Racer Architecture
 
-This document is the repository-specific architecture contract through Phase 4. It
+This document is the repository-specific architecture contract through Phase 5. It
 translates sections 6–8 of `KART_RACING_DEV_PROMPT.md` into the concrete paths
 used by this project. Later phases must update this document before changing a
 major boundary or dependency direction.
@@ -19,44 +19,58 @@ major boundary or dependency direction.
    player, AI, replay, network peer, or test double.
 6. Scenes assemble nodes. Scripts own one focused behavior and stay below 400
    lines unless a documented exception is necessary.
-7. Phase delivery is additive: Phase 2 owns advanced arcade physics while drift,
-   race flow, items, and AI remain behind their later-phase seams.
+7. Phase delivery is additive: kart physics, drift, track rules, and race flow are
+   live; items, proper AI, final camera feel, and final UI remain behind their
+   later-phase seams.
 
 ## Runtime composition
 
 `project.godot` starts `res://scenes/main.tscn` and registers six autoloads:
 
 - `GameState` — `core/autoload/game_state.gd`: current mode and selected
-  driver, kart, and track identifiers; scene-change request API.
+  identifiers, `pending_race_config`, and validated scene-change API.
 - `EventBus` — `core/autoload/event_bus.gd`: global signal declarations only;
   it does not contain gameplay decisions.
 - `SettingsManager` — `core/autoload/settings_manager.gd`: `ConfigFile`
   defaults, load/save, and immediate application of supported settings.
 - `SaveManager` — `core/autoload/save_manager.gd`: versioned JSON save data,
-  backup recovery, and atomic-enough primary/backup replacement.
+  backup recovery, atomic-enough primary/backup replacement, and lower-is-better
+  track best-lap/best-position updates.
 - `AudioManager` — `core/autoload/audio_manager.gd`: Master/Music/SFX/Engine
   bus setup, linear volume accessors, and a reusable SFX-player pool.
 - `DebugOverlay` — `core/autoload/debug_overlay.tscn` with
   `core/autoload/debug_overlay.gd`: F3 overlay, FPS/physics tick display,
   callable watches, and runtime sliders.
 
-The scene graph remains small in Phase 2:
+The main scene is now a minimal start prompt; accepting it stores the default
+`RaceConfig` and changes to this Phase 5 runtime tree:
 
 ```text
-scenes/main.tscn
+scenes/main.tscn                                      [main.gd]
 └── Main (Node)
-    └── KartSandbox (instanced scenes/test/kart_sandbox.tscn)  [kart_sandbox.gd]
-        ├── TestLoop or TestLoopHills (switchable with T)
-        ├── Kart (instanced kart/kart.tscn)          [kart_controller.gd]
-        ├── RaceCamera (instanced camera/race_camera.tscn)
-        ├── KartCollisionResolver                    [kart_collision_resolver.gd]
-        └── RespawnSystem                            [respawn_system.gd]
+    └── Center/VBox/StartButton
+
+race/race.tscn                                       [race_manager.gd]
+└── RaceScene (Node3D / RaceManager)
+    ├── Track (dynamic TrackData.scene instance)
+    ├── LapTracker
+    ├── PositionTracker
+    ├── RespawnSystem
+    ├── KartCollisionResolver
+    ├── Countdown
+    ├── RaceResults
+    ├── Karts
+    │   ├── PlayerKart       (PlayerInputProvider)
+    │   └── DummyKart x N    (ScriptedRaceInputProvider, Phase 5 only)
+    ├── RaceCamera
+    ├── HUD                  (CanvasLayer)
+    │   └── DriftMeter
+    ├── PauseMenu            (CanvasLayer, PROCESS_MODE_ALWAYS)
+    └── ResultsScreen        (CanvasLayer)
 ```
 
-The sandbox wires a `PlayerInputProvider`, camera, collision resolver, and
-respawn system. `R` resets, `T` swaps the two test tracks, `1/2/3` selects the
-weight class, and `B` creates three input-neutral collision targets. Debug
-watches expose terrain, slipstream, hit, invulnerability, and air time.
+The Phase 1-4 driving sandbox remains available directly at
+`scenes/test/kart_sandbox.tscn`; it is no longer the main scene.
 
 ## Domain ownership and dependency direction
 
@@ -223,12 +237,37 @@ spring-damped FOV kick while `is_boosting()`. Shake and look-back are Phase 8.
 
 ### Race
 
-Future race orchestration lives in `race/`. `RaceManager` will own only the
-race state machine and composition (Phase 5). Phase 2 adds
-`KartCollisionResolver` and `RespawnSystem` as separate nodes. The resolver
-handles BumpArea pairs without HIT; respawn runs FADE -> teleport/protect ->
-FROZEN from physics ticks. A caller-supplied transform callable keeps track
-lookup out of the kart domain.
+`RaceManager` (`race/race_manager.gd`, root script of `race/race.tscn`) owns
+only composition and legal transitions:
+`LOADING -> COUNTDOWN -> RACING -> FINISHING -> RESULTS`, with `PAUSED`
+reachable only from `COUNTDOWN`/`RACING`. It resolves
+`GameState.pending_race_config` or creates the Track 01 / 3-lap / 8-kart /
+medium fallback, instantiates the track, places karts on ordered StartGrid
+slots, registers them with the four delegated runtime systems, and binds the
+camera/HUD to the player. Every transition emits
+`EventBus.race_state_changed(old, new)`; only the first
+`COUNTDOWN -> RACING` edge emits `race_started`.
+
+`Countdown` (`race/countdown.gd`) advances 3-2-1-GO from physics deltas using
+`RaceTuning.countdown_step_seconds`. Karts continue polling their provider
+while FROZEN, exposing only a defensive latest-frame snapshot to Countdown.
+Start input is adjudicated once through
+`BoostController.evaluate_start_input()`; boost/wheelspin is held pending and
+applied at GO so boost duration is never consumed during COUNTDOWN.
+
+`RaceManager` receives only `LapTracker.kart_finished`. A finished kart gets
+`KartController.set_finished()` plus a fresh line follower capped at 50%; when
+the player finishes the state enters FINISHING. All-finished or the 15-second
+`RaceTuning.finish_timeout_seconds` closes the field, then PositionTracker's
+finished-by-time / unfinished-by-progress ranking is finalized after the tuned
+results delay. `RaceResults` derives per-lap times from cumulative
+`lap_completed` events, counts accepted hits/item-use events, creates result
+rows, and writes the player's lower best lap/position through SaveManager.
+
+`restart()` clears registrations and dynamic track/kart instances in place,
+then rebuilds the same config. This preserves UI references to RaceManager.
+Pause sets `SceneTree.paused`; only RaceManager and PauseMenu run ALWAYS so
+resume/restart/menu input remains available while all gameplay physics stops.
 
 Phase 4 adds `LapTracker` and `PositionTracker`, both bound to a track via a
 `setup(track)`/`setup(track, lap_tracker)` call and then per-kart
@@ -251,9 +290,8 @@ time if another kart occupies the spot (spec §14.5); the existing per-kart
 caller (the sandbox, later `RaceManager`) just binds a callable to the new
 resolver instead of writing its own lookup. `HazardRelay` mirrors
 `RespawnSystem`'s bridge role for `Hazard` -> `KartController.apply_hit()`.
-`RaceConfig` (schema only, no manager yet) and `StartGrid.generate()` (a pure
-staggered-grid layout function used to pad tracks with fewer than 8 markers)
-round out the phase.
+`RaceConfig` includes a zero-based `player_slot`; `StartGrid.generate()` remains
+the pure staggered layout fallback for tracks with fewer than 8 markers.
 
 ### Track
 
@@ -321,7 +359,11 @@ the checkpoint/element contract from spec §15:
 Item behavior will live in `items/`; AI behavior will live in `ai/`. Phase 0
 creates their directory contracts and data schemas, not runtime behavior.
 Future AI produces `InputFrame` objects and never changes kart physics state
-directly.
+directly. `race/scripted_race_input_provider.gd` is deliberately not Phase 6
+AI: it performs fixed racing-line pursuit/corner braking only so Phase 5 races
+and headless simulations can finish. It contains no overtaking, avoidance,
+difficulty, shortcut, item, or rubber-band decisions and is marked for Phase 6
+replacement.
 
 ### Camera, UI, audio, and effects
 
@@ -507,8 +549,10 @@ its `Curve3D` from arc points at `_ready()` — but everything else about it
 ## Testing and verification
 
 - Unit tests: `tools/run_tests.sh` runs GUT over `tests/` recursively.
-- Simulation: `tools/run_sim.sh` is a successful Phase 0 placeholder and states
-  that simulation begins in Phase 6.
+- Simulation: `tools/run_sim.sh --laps N --karts N --races N` boots
+  `tests/sim/run_ai_race.tscn` with normal project autoloads, runs real Track 01
+  races with scripted providers at `Engine.time_scale = 4`, prints JSON finish
+  order/times/respawns/head-on count, and exits 1 if any kart is a DNF.
 - Track contract: `tools/validate_tracks.sh` runs `track/track_validator.gd`
   headlessly against `test_loop.tscn`, `test_loop_hills.tscn`,
   `test_hairpin.tscn`, and `track_01_ridgeline_circuit.tscn`.
@@ -522,6 +566,11 @@ its `Curve3D` from arc points at `_ready()` — but everything else about it
   break lap completion, plus dedicated checks for wrong-way set/clear,
   skipped-checkpoint lap withholding, and cliff-fall respawn resolving to the
   last passed checkpoint's `RespawnPoint`.
+- Phase 5 unit/integration tests cover transition and timeout tables, exact
+  countdown cadence, start boost/wheelspin application, result aggregation and
+  save bests, stable FROZEN/FINISHED kart states, the real four-kart test-loop
+  state cycle, pause immobility, restart reset, HUD events, UI focus, and main
+  config creation.
 
 ## Decision log
 
@@ -743,3 +792,31 @@ its `Curve3D` from arc points at `_ready()` — but everything else about it
   `_data` layout is undocumented, and an early draft of Track 01's moving
   obstacle paths and shortcut alt-curve, written by hand, produced scenes
   that failed to parse.
+
+### Phase 5
+
+- `RaceManager` owns transitions and composition but calls public reset/setup
+  seams on the existing trackers. It does not duplicate lap, progress,
+  respawn, or collision state. In-place restart was chosen over
+  `SceneTree.reload_current_scene()` so pause/results controls keep a valid
+  manager reference across unlimited restart cycles.
+- `KartController` now distinguishes race freeze, start-wheelspin freeze, and
+  finished-state persistence. Race freeze skips physics integration and clears
+  motion while still polling one raw provider frame per tick; Countdown reads
+  a clone of that frame rather than polling the provider a second time.
+- Start outcomes are decided on the throttle edge but applied only at GO.
+  Applying a Tier 1/2 request when it was judged would spend its duration while
+  the kart was still frozen; delaying only the effect preserves the existing
+  pure `BoostController.evaluate_start_input()` contract.
+- `RaceResults` treats `EventBus.lap_completed`'s third argument as cumulative
+  race time and subtracts the prior cumulative value per kart. No LapTracker
+  signal contract changed, and best-lap persistence stays owned by the result
+  boundary.
+- `race/scripted_race_input_provider.gd` is a Phase 5 completion harness, not an
+  early AI implementation. Proper perception, navigation, driving decisions,
+  difficulty, overtaking, avoidance, shortcuts, items, and rubber banding stay
+  in Phase 6+.
+- The simulator boots a `.tscn` rather than using `godot -s` as a custom
+  `SceneTree`. Direct script-main-loop execution did not compose project
+  autoloads, so scripts referencing `EventBus`, `GameState`, or `SaveManager`
+  failed compilation before the runner could return a meaningful exit code.

@@ -1,5 +1,155 @@
 # Development Log
 
+## Phase 5 보고 — 레이스 흐름
+
+### 구현된 기능
+
+- `race/race.tscn`의 root `RaceManager`가 승인된 전이
+  `LOADING→COUNTDOWN→RACING→FINISHING→RESULTS`와
+  COUNTDOWN/RACING에서만 진입 가능한 `PAUSED`를 소유한다. 각 전이는
+  `EventBus.race_state_changed(old, new)`, 최초 COUNTDOWN→RACING만
+  `race_started`를 방출한다. pause resume에서 `race_started`가 중복되지 않는
+  회귀 테스트도 추가했다.
+- `GameState.pending_race_config`를 소비하고, 없으면 Track01/3랩/8카트/
+  medium/player slot 0 기본값을 만든다. TrackData scene을 동적 로드하고
+  StartGrid 순서대로 카트를 생성한 뒤 `LapTracker`, `PositionTracker`,
+  `RespawnSystem`, `KartCollisionResolver`에 등록하고 RaceCamera/HUD를
+  플레이어에 바인딩한다.
+- `RaceTuning` + `race_default.tres`: countdown 1.0초, finish timeout 15초,
+  position update 5Hz, results delay 1초를 하드코딩에서 분리했다.
+  `Countdown`은 physics delta로 3-2-1-GO를 진행하고
+  `EventBus.countdown_tick(value)`를 방출한다.
+- 카트는 COUNTDOWN 중 물리 적분/모멘텀을 정지시키면서 입력 공급자를 틱당
+  한 번 계속 읽고 최신 raw `InputFrame` 복사본만 제공한다. Countdown은
+  throttle edge를 기존 `BoostController.evaluate_start_input()`에 전달하고,
+  Tier 1/2 부스트 또는 early wheelspin을 GO 시점에 적용한다. 따라서 부스트
+  지속시간이 COUNTDOWN에서 소모되지 않는다.
+- 플레이어 완주 시 FINISHING으로 전환하고, 모든 카트 완주 또는 15초 후
+  PositionTracker의 완주시간/진행도 순위로 결과를 확정한다. 완주 카트는
+  `KartController.set_finished()`로 FINISHED 상태를 유지하면서 단순 추종기의
+  50% 속도 제한으로 계속 안전 주행한다.
+- `RaceResults`는 EventBus의 lap/hit/item 신호를 모아 순위, 총시간,
+  베스트랩, 피격 수, 아이템 사용 수(현재 실제 아이템 동작은 없어 기본 0)를
+  만든다. `SaveManager.record_race_result()`가 track id별 더 빠른 best lap과
+  더 높은 best position만 `save.json`에 기록한다.
+- pause는 `SceneTree.paused`를 사용한다. `RaceManager`와 PauseMenu만
+  PROCESS_MODE_ALWAYS라 Continue/Restart/Menu 입력이 살아 있고 카트/트래커
+  물리는 멈춘다. restart는 같은 config로 동적 track/kart와 시스템 레코드를
+  정리·재조립하므로 결과→재시작을 반복해도 lap이 0에서 다시 시작한다.
+- 임시 UI: HUD(순위 `N/8`, 랩 `L/3`, 3-2-1-GO, WRONG WAY, FINAL LAP,
+  FINISH, 기존 DriftMeter), PauseMenu(Continue/Restart/Quit to Menu),
+  ResultsScreen(텍스트 표 + Restart/Menu). 표시될 때 첫 버튼에 focus를 주어
+  키보드/게임패드로 이동 가능하다. 최종 스타일은 Phase 9다.
+- `scenes/main.tscn`은 "Press Enter / Start to race" 화면으로 교체했다.
+  Enter/Space/A 또는 게임패드 Start 입력이 기본 RaceConfig를 만들고
+  `GameState.change_scene("res://race/race.tscn")`로 전환한다.
+- `tests/sim/run_ai_race.gd(.tscn)` + `tools/run_sim.sh`: 실제 Track01을 모든
+  카트 scripted follower로 주행한다. `--laps N --karts N --races N`,
+  `Engine.time_scale=4`, JSON finish order/times/respawns/wall head-on count를
+  제공하고 DNF가 하나라도 있으면 exit 1이다. 적절한 AI 판단은 Phase 6로
+  남겼다.
+
+### 생성/수정된 파일
+
+- Race: `race/race_manager.gd`, `race/race.tscn`, `race/countdown.gd`,
+  `race/race_results.gd`, `race/scripted_race_input_provider.gd`,
+  `race/race_config.gd`, tracker/respawn/collision reset·cadence API.
+- Data/Core/Kart: `data/schemas/race_tuning.gd`,
+  `data/tuning/race_default.tres`, `core/autoload/game_state.gd`,
+  `event_bus.gd`, `save_manager.gd`, `kart/kart_controller.gd`.
+- UI/Main: `ui/hud/hud.gd(.tscn)`, `ui/menus/pause_menu.gd(.tscn)`,
+  `ui/results/results_screen.gd(.tscn)`, `scenes/main.gd(.tscn)`.
+- Simulation: `tests/sim/run_ai_race.gd(.tscn)`, `tools/run_sim.sh`.
+- 신규 테스트: unit 15개 + integration 7개 = **22개**. countdown/start,
+  transition/timeout, results/save, frozen/finished kart, sim options/failure,
+  실제 4-kart race/pause/restart, HUD/menu/results/main input을 검증한다.
+
+### 핵심 설계 결정과 이유
+
+- `RaceManager`에는 lap/progress/respawn 계산을 넣지 않았다. tracker/system의
+  `setup/register/reset` public API만 호출해 §6.1 God Object 금지를 유지했다.
+- start boost는 입력 판정과 효과 적용을 분리했다. 판정 즉시 boost를 요청하면
+  frozen countdown 동안 duration이 줄어드는 오류가 생기므로, 결과만 저장하고
+  GO에서 적용한다.
+- restart는 SceneTree 전체 reload가 아니라 RaceManager 내부 재조립이다.
+  기존 manager 참조를 가진 pause/results UI가 끊기지 않고 동일 config 반복을
+  통합 테스트에서 직접 확인할 수 있다.
+- `ScriptedRaceInputProvider`는 레이싱라인 추종/고정 곡률 제동·드리프트/
+  속도 제한뿐이다. 추월·회피·센서·난이도·지름길·아이템·고무줄 판단은 전혀
+  넣지 않아 Phase 6 범위를 침범하지 않는다.
+- sim은 `godot -s` custom SceneTree가 아니라 `.tscn`으로 부팅한다. 전자는
+  프로젝트 autoload가 조립되지 않아 EventBus/GameState/SaveManager 식별자
+  컴파일 오류를 냈고, 씬 부팅은 실제 게임과 같은 autoload 경계를 사용한다.
+
+### 테스트 방법 및 결과
+
+- `HOME=$PWD/.tmp-home /opt/homebrew/bin/godot --headless --path . --import`
+  — exit 0, 신규 `.gd.uid` 전부 생성·커밋.
+- `HOME=$PWD/.tmp-home /opt/homebrew/bin/godot --headless --path . --quit`
+  — exit 0, `SCRIPT ERROR` 0. 제한된 macOS 인증서 조회 메시지는 남지만
+  `project.godot`에 `[network]`/TLS 우회 설정을 추가하지 않았다.
+- `HOME=$PWD/.tmp-home tools/run_tests.sh` — GUT 9.6.1,
+  **38 scripts / 163 tests / 163 passing**, 0 failures(Phase 5 신규 22개).
+- `HOME=$PWD/.tmp-home tools/validate_tracks.sh` — `test_loop`,
+  `test_loop_hills`, `test_hairpin`, `track_01_ridgeline_circuit` 모두
+  `TRACK VALIDATION PASSED`.
+- `HOME=$PWD/.tmp-home tools/run_sim.sh --laps 1 --karts 4 --races 1` — exit 0,
+  `success:true`. 실제 출력: finish order
+  DummyKart3→DummyKart4→PlayerKart→DummyKart2, times 82.133/82.600/86.933/
+  88.467초, respawns `{DummyKart3:1, others:0}`, wall head-on count 8.
+- 모든 production `.gd` ≤400줄(`kart/kart_physics.gd` 395줄 최대),
+  `race/race_manager.gd` 332줄. `project.godot`에 network/TLS section 없음.
+
+### 현재 문제점 / 알려진 제한
+
+- 임시 UI는 기능/포커스만 검증했고, 이 headless 환경에서는 사람 눈의
+  레이아웃/가독성/주행 감각을 검증할 수 없다. 아래 플레이 지시로 확인한다.
+- scripted follower는 Phase 5 완주 하네스라 경쟁적 AI처럼 추월/회피하지
+  않는다. Track01 4카트 1랩 검증에서 DummyKart3가 1회 리스폰했지만 전원
+  완주했다.
+- dummy renderer 종료 시 기존과 같은 RID leak 진단 1줄이 남는다. 테스트와
+  sim exit code에는 영향을 주지 않으며 실제 렌더 시각 검증은 별도다.
+
+### TODO / PLACEHOLDER 목록
+
+- TODO(phase-6): `ScriptedRaceInputProvider`를
+  AIController/Navigator/Driver/Sensors 기반 입력으로 교체하고 추월·회피·
+  지름길·난이도·제한적 고무줄 및 반복 통계를 구현한다.
+- TODO(phase-7): ItemBox 획득을 실제 ItemManager/ItemSlot/아이템 효과와
+  연결한다. Phase 5 결과의 item use count 수집 경계만 준비돼 있다.
+- TODO(phase-8): 최종 카메라 shake/look-back 및 Track01 점프 착지 연출.
+- TODO(phase-9): main/pause/results/HUD의 최종 메뉴·스타일·접근성 폴리시.
+- TODO(phase-10): 실제 BGM/SFX/engine audio 라이브러리와 재생 정책.
+- PLACEHOLDER(phase-13): Track01 점프대 착지는 갭 없는 연속 그레이박스.
+
+### 다음 Phase 계획
+
+사용자 승인 후 Phase 6에서 임시 follower를 정식 AI 시스템으로 교체한다.
+
+### 플레이 지시
+
+```text
+1. 프로젝트 루트에서 `godot --path .`를 실행한다.
+2. 메인 화면에서 Enter/Space 또는 게임패드 A/Start를 눌러 기본 Track01
+   3랩·8카트 레이스를 시작한다.
+3. 3-2-1 중 "1"과 GO 사이에 W/RT/A를 처음 눌러 스타트 부스트를 확인한다.
+   더 일찍 누른 경우 GO 직후 약 0.8초 wheelspin 정지가 보이는지 확인한다.
+4. 주행 중 HUD의 순위/랩/드리프트 미터와 역주행 시 WRONG WAY,
+   마지막 랩 FINAL LAP, 완주 시 FINISH 표시를 확인한다.
+5. Esc/게임패드 Start로 pause하고 카트가 완전히 멈추는지 확인한 뒤,
+   방향키/D-pad/좌스틱 + Enter/A로 Continue/Restart/Quit to Menu를 선택한다.
+6. 완주 결과 표에서 순위/총시간/베스트랩/피격/아이템 사용 수를 확인하고
+   Restart가 같은 설정의 COUNTDOWN으로, Menu가 메인 화면으로 돌아가는지
+   여러 번 반복 확인한다.
+```
+
+### 사용자에게 필요한 결정
+
+위 플레이 지시로 레이스 시작→3랩→결과→재시작의 흐름과 임시 UI 가독성을
+확인한 뒤 Phase 5 승인 여부를 알려주면 된다.
+
+---
+
 ## Phase 4 보고 — 트랙 시스템 & 체크포인트
 
 ### 구현된 기능
@@ -156,8 +306,7 @@ DebugOverlay에서 `lap`/`next_checkpoint`/`progress`/`wrong_way` 확인 가능.
 
 ### TODO / PLACEHOLDER 목록
 
-- TODO(phase-5): `RaceConfig`를 실제로 소비하는 `RaceManager`, 카운트다운,
-  결과 화면.
+- RESOLVED(phase-5): `RaceConfig` 소비, `RaceManager`, 카운트다운, 결과 화면.
 - TODO(phase-7): `ItemBox.collected` → 실제 아이템 부여/효과. 지금은
   숨김/재생성 + 제네릭 시그널만 존재.
 - TODO(phase-6): AI가 `TrackShortcut.risk`를 이용해 지름길 진입 여부를
@@ -307,8 +456,8 @@ RESULTS→PAUSED), `RaceConfig` 소비, 카운트다운 + 스타트 부스트, �
 - TODO(phase-4): authored RacingLine/checkpoints/RespawnPoint 기반 리스폰,
   banked geometry 정렬, item-box 및 kill-zone coverage validator 완성
   (Phase 2 보고에서 이월).
-- TODO(phase-5): `BoostController.evaluate_start_input()`을 실제 카운트다운
-  UI/입력과 연결.
+- RESOLVED(phase-5): `BoostController.evaluate_start_input()`을 실제
+  카운트다운 입력/GO 적용과 연결.
 - TODO(phase-9): `ui/hud/drift_meter`를 실제 레이스 HUD로 교체.
 
 ### 다음 Phase 계획
