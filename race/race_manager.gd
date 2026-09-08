@@ -32,6 +32,9 @@ const LEGAL_TRANSITIONS: Dictionary = {
 @onready var _race_results: RaceResults = $RaceResults
 @onready var _karts_root: Node3D = $Karts
 @onready var _camera: RaceCamera = $RaceCamera
+@onready var _hud: RaceHud = $HUD
+@onready var _pause_menu: PauseMenu = $PauseMenu
+@onready var _results_screen: ResultsScreen = $ResultsScreen
 
 var _state: int = RaceState.LOADING
 var _paused_from_state: int = RaceState.RACING
@@ -149,6 +152,9 @@ func _begin_loading(is_restart: bool) -> void:
 	_race_results.setup(_config.track.id, _karts, _player_kart)
 	_countdown.setup(tuning, _karts)
 	_camera.set_target(_player_kart)
+	_hud.bind(_player_kart, _lap_tracker, _position_tracker, _karts.size(), _config.laps)
+	_pause_menu.hide_menu()
+	_results_screen.hide_results()
 	_transition_to(RaceState.COUNTDOWN)
 	_countdown.start()
 
@@ -252,6 +258,7 @@ func _finalize_results() -> void:
 			finish_times[kart.get_instance_id()] = _lap_tracker.get_finish_time(kart)
 	_final_entries = _race_results.finalize(ranking, finish_times)
 	_transition_to(RaceState.RESULTS)
+	_results_screen.show_results(_final_entries, self)
 
 
 func _finished_count() -> int:
@@ -272,6 +279,10 @@ func _transition_to(new_state: int) -> void:
 		return
 	_force_state(new_state)
 	_set_race_systems_active(new_state == RaceState.RACING or new_state == RaceState.FINISHING)
+	if new_state == RaceState.PAUSED:
+		_pause_menu.show_menu(self)
+	else:
+		_pause_menu.hide_menu()
 	if new_state == RaceState.RACING:
 		EventBus.race_started.emit()
 	elif new_state == RaceState.FINISHING:

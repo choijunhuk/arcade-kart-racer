@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://race/race_manager.gd" id="1_manager"]
 [ext_resource type="Script" path="res://race/lap_tracker.gd" id="2_laps"]
@@ -8,6 +8,9 @@
 [ext_resource type="Script" path="res://race/countdown.gd" id="6_countdown"]
 [ext_resource type="Script" path="res://race/race_results.gd" id="7_results"]
 [ext_resource type="PackedScene" path="res://camera/race_camera.tscn" id="8_camera"]
+[ext_resource type="PackedScene" path="res://ui/hud/hud.tscn" id="9_hud"]
+[ext_resource type="PackedScene" path="res://ui/menus/pause_menu.tscn" id="10_pause"]
+[ext_resource type="PackedScene" path="res://ui/results/results_screen.tscn" id="11_results_screen"]
 
 [node name="RaceScene" type="Node3D"]
 script = ExtResource("1_manager")
@@ -34,3 +37,9 @@ script = ExtResource("7_results")
 
 [node name="RaceCamera" parent="." instance=ExtResource("8_camera")]
 current = true
+
+[node name="HUD" parent="." instance=ExtResource("9_hud")]
+
+[node name="PauseMenu" parent="." instance=ExtResource("10_pause")]
+
+[node name="ResultsScreen" parent="." instance=ExtResource("11_results_screen")]

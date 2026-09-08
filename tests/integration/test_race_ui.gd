@@ -78,7 +78,7 @@ func test_results_screen_builds_rows_and_focuses_restart() -> void:
 func test_main_scene_builds_default_config_and_offers_start_button() -> void:
 	var main: Node = (load(MAIN_PATH) as PackedScene).instantiate()
 	autofree(main)
-	assert_not_null(main.get_node_or_null("Center/StartButton"))
+	assert_not_null(main.get_node_or_null("Center/VBox/StartButton"))
 	assert_true(main.has_method("build_default_config"))
 	if not main.has_method("build_default_config"):
 		return
