@@ -27,6 +27,10 @@ var _slipstream_active: bool = false
 var _respawning: bool = false
 var _ungrounded_ticks: int = 0
 var _throttle_held: bool = false
+var _latest_input_frame: InputFrame = InputFrame.zero()
+var _race_frozen: bool = false
+var _finished: bool = false
+var _start_wheelspin_remaining: float = 0.0
 
 
 func _ready() -> void:
@@ -49,6 +53,11 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	var frame: InputFrame = _get_input_frame()
+	_start_wheelspin_remaining = maxf(0.0, _start_wheelspin_remaining - delta)
+	if _race_frozen or _start_wheelspin_remaining > 0.0:
+		_physics.reset_motion()
+		_set_state(KartState.FROZEN)
+		return
 	var terrain: KartPhysics.TerrainSample = _sample_terrain(boost_controller.get_result().ignores_offroad)
 	var ground: KartPhysics.GroundProbe = _physics.probe_ground()
 	var drift_result: KartPhysics.DriftResult = _update_drift(frame, ground)
@@ -61,6 +70,41 @@ func _physics_process(delta: float) -> void:
 ## Installs a new input source. Karts never read `Input` directly (spec §23).
 func set_input_provider(provider: InputProvider) -> void:
 	input_provider = provider
+
+
+## Freezes or releases race motion while continuing to poll the input provider.
+func set_frozen(frozen: bool) -> void:
+	_race_frozen = frozen
+	if frozen:
+		_physics.reset_motion()
+		_set_state(KartState.FROZEN)
+	elif _start_wheelspin_remaining <= 0.0 and not _finished:
+		_set_state(KartState.GROUNDED)
+
+
+## Installs safe post-finish input and keeps the public state at FINISHED.
+func set_finished(provider: InputProvider) -> void:
+	_finished = true
+	_race_frozen = false
+	input_provider = provider
+	_set_state(KartState.FINISHED)
+
+
+## Applies the early-throttle penalty beginning at GO.
+func apply_start_wheelspin(duration: float) -> void:
+	_start_wheelspin_remaining = maxf(_start_wheelspin_remaining, duration)
+	_physics.reset_motion()
+	_set_state(KartState.FROZEN)
+
+
+## Returns the remaining early-throttle wheelspin freeze in seconds.
+func get_start_wheelspin_remaining() -> float:
+	return _start_wheelspin_remaining
+
+
+## Returns a defensive copy of the latest raw provider frame.
+func get_input_frame_snapshot() -> InputFrame:
+	return _latest_input_frame.clone()
 
 
 func get_speed() -> float:
@@ -243,8 +287,9 @@ func finish_respawn() -> void:
 ## desynchronize once HitReactor/RespawnSystem/Countdown exist in later phases.
 func _get_input_frame() -> InputFrame:
 	var frame: InputFrame = input_provider.get_frame()
+	_latest_input_frame = frame.clone()
 	_throttle_held = frame.throttle > 0.0
-	if state == KartState.RESPAWNING or state == KartState.FROZEN:
+	if state == KartState.RESPAWNING or _race_frozen or _start_wheelspin_remaining > 0.0:
 		return InputFrame.zero()
 	if state == KartState.HIT:
 		return _hit_reactor.filter_input(frame)
@@ -284,6 +329,12 @@ func _update_hit_reactor(delta: float) -> void:
 func _update_state(ground: KartPhysics.GroundProbe) -> void:
 	if _respawning:
 		_set_state(KartState.RESPAWNING)
+		return
+	if _race_frozen or _start_wheelspin_remaining > 0.0:
+		_set_state(KartState.FROZEN)
+		return
+	if _finished:
+		_set_state(KartState.FINISHED)
 		return
 	if _hit_reactor.is_active():
 		_set_state(KartState.HIT)

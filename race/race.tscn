@@ -1,0 +1,45 @@
+[gd_scene load_steps=12 format=3]
+
+[ext_resource type="Script" path="res://race/race_manager.gd" id="1_manager"]
+[ext_resource type="Script" path="res://race/lap_tracker.gd" id="2_laps"]
+[ext_resource type="Script" path="res://race/position_tracker.gd" id="3_positions"]
+[ext_resource type="Script" path="res://race/respawn_system.gd" id="4_respawn"]
+[ext_resource type="Script" path="res://race/kart_collision_resolver.gd" id="5_collisions"]
+[ext_resource type="Script" path="res://race/countdown.gd" id="6_countdown"]
+[ext_resource type="Script" path="res://race/race_results.gd" id="7_results"]
+[ext_resource type="PackedScene" path="res://camera/race_camera.tscn" id="8_camera"]
+[ext_resource type="PackedScene" path="res://ui/hud/hud.tscn" id="9_hud"]
+[ext_resource type="PackedScene" path="res://ui/menus/pause_menu.tscn" id="10_pause"]
+[ext_resource type="PackedScene" path="res://ui/results/results_screen.tscn" id="11_results_screen"]
+
+[node name="RaceScene" type="Node3D"]
+script = ExtResource("1_manager")
+
+[node name="LapTracker" type="Node" parent="."]
+script = ExtResource("2_laps")
+
+[node name="PositionTracker" type="Node" parent="."]
+script = ExtResource("3_positions")
+
+[node name="RespawnSystem" type="Node" parent="."]
+script = ExtResource("4_respawn")
+
+[node name="KartCollisionResolver" type="Node" parent="."]
+script = ExtResource("5_collisions")
+
+[node name="Countdown" type="Node" parent="."]
+script = ExtResource("6_countdown")
+
+[node name="RaceResults" type="Node" parent="."]
+script = ExtResource("7_results")
+
+[node name="Karts" type="Node3D" parent="."]
+
+[node name="RaceCamera" parent="." instance=ExtResource("8_camera")]
+current = true
+
+[node name="HUD" parent="." instance=ExtResource("9_hud")]
+
+[node name="PauseMenu" parent="." instance=ExtResource("10_pause")]
+
+[node name="ResultsScreen" parent="." instance=ExtResource("11_results_screen")]

@@ -1,5 +1,8 @@
 #!/bin/sh
 set -eu
 
-echo "sim not implemented until Phase 6"
-exit 0
+PROJECT_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+GODOT_BIN=${GODOT_BIN:-/opt/homebrew/bin/godot}
+
+cd "$PROJECT_ROOT"
+exec "$GODOT_BIN" --headless --path . --fixed-fps 480 tests/sim/run_ai_race.tscn -- "$@"

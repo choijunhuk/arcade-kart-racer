@@ -53,6 +53,21 @@ func save_data(data: Dictionary) -> Error:
 	return _write_json(save_path, normalized)
 
 
+## Records a track result, retaining only lower positive lap times/positions.
+func record_race_result(track_id: StringName, best_lap_ms: int, position: int) -> Error:
+	var data: Dictionary = load_data()
+	var track_key: String = String(track_id)
+	var best_laps: Dictionary = data.get("best_laps", {}) as Dictionary
+	var best_positions: Dictionary = data.get("best_positions", {}) as Dictionary
+	if best_lap_ms > 0 and (not best_laps.has(track_key) or best_lap_ms < int(best_laps[track_key])):
+		best_laps[track_key] = best_lap_ms
+	if position > 0 and (not best_positions.has(track_key) or position < int(best_positions[track_key])):
+		best_positions[track_key] = position
+	data["best_laps"] = best_laps
+	data["best_positions"] = best_positions
+	return save_data(data)
+
+
 func _read_valid_data(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
 		return {}

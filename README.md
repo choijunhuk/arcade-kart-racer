@@ -5,17 +5,14 @@ Mario Kart에서 *시스템과 플레이 감각*만 영감을 받은 **완전 �
 
 ## 이 레포의 현재 상태
 
-**Phase 4 — 트랙 시스템 & 체크포인트 완료.**
+**Phase 5 — 레이스 흐름 완료.**
 
-현재 메인 씬은 실제로 주행 가능한 카트(`kart/kart.tscn`), 전환 가능한
-네 테스트 트랙(평지/언덕/헤어핀/Track01 Ridgeline Circuit), 지형 감속,
-슬립스트림, 무게 기반 카트 충돌, 피격 반응, 미니 터보 드리프트, 통합
-부스트 스택, 부스트 패드/점프대/트릭, 체크포인트 순서·랩 판정
-(`LapTracker`), 진행도·순위(`PositionTracker`), 레이싱 라인 기준 리스폰
-(`RespawnSystem`), 아이템박스/장애물/지름길 트랙 요소, 스프링 추적
-카메라, 드리프트 미터 + "LAP x/3" HUD와 F3 디버그 오버레이가 있는
-샌드박스를 연다. 레이스 흐름(카운트다운/결과)·아이템 효과·AI는 이후
-범위다.
+현재 메인 씬은 "Press Enter / Start to race" 플레이스홀더 메뉴다. 시작하면
+Track01 Ridgeline Circuit, 3랩, 8카트, medium 카트의 실제 레이스가 열리며
+3-2-1-GO/스타트 부스트, 랩·순위·리스폰·카트 충돌, FINISHING 타임아웃,
+결과/재시작/메뉴, 일시정지, 임시 HUD(순위/랩/WRONG WAY/FINAL LAP/FINISH/
+기존 드리프트 미터)가 연결된다. 상대 카트는 Phase 5 완주 검증용 단순
+레이싱라인 추종기이며, 판단형 AI와 아이템 효과는 Phase 6/7 범위다.
 
 - [`KART_RACING_DEV_PROMPT.md`](KART_RACING_DEV_PROMPT.md) — 개발 프롬프트 전체 (아키텍처, 물리, 드리프트, 아이템, AI, Phase 0~15, DoD, 작업 규칙)
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — 실제 경로와 시스템 경계
@@ -27,16 +24,19 @@ Mario Kart에서 *시스템과 플레이 감각*만 영감을 받은 **완전 �
 /opt/homebrew/bin/godot --path .
 ```
 
-메인 씬을 통해 실행하면 `scenes/test/kart_sandbox.tscn`이 자동으로 열린다.
-같은 샌드박스를 직접 열 수도 있다:
+메인 씬에서 Enter/Space 또는 게임패드 A/Start를 눌러 기본 레이스를 시작한다.
+Phase 1-4 주행 샌드박스는 계속 직접 열 수 있다:
 
 ```sh
 /opt/homebrew/bin/godot --path . scenes/test/kart_sandbox.tscn
 ```
 
-조작: 가속 `W`/RT, 브레이크·후진 `S`/LT, 조향 `A`/`D`/좌스틱,
+레이스 조작: 가속 `W`/RT/A, 브레이크·후진 `S`/LT/B, 조향
+`A`/`D`/좌스틱,
 `Space`/RB 드리프트(유지 후 놓으면 도달한 티어만큼 미니 터보 부스트),
-`R` 리셋, `T` 트랙 순환(평지→언덕→헤어핀→Track01), `4` 헤어핀 트랙 바로
+`Esc`/게임패드 Start 일시정지. pause/results 버튼은 방향키·D-pad/좌스틱과
+Enter/A로 이동·선택한다. 샌드박스 전용: `R` 리셋, `T` 트랙 순환
+(평지→언덕→헤어핀→Track01), `4` 헤어핀 트랙 바로
 선택, `5` Track01(Ridgeline Circuit) 바로 선택, `1`/`2`/`3`
 light/medium/heavy 전환, `B` 충돌용 더미 카트 3대 생성.
 F3으로 terrain/slipstream/hit/invulnerable/air_time,
@@ -58,8 +58,11 @@ HOME=$PWD/.tmp-home tools/run_tests.sh
 # 트랙 구조 검증 (test_loop + test_loop_hills + test_hairpin + track_01, §15.5 전체)
 HOME=$PWD/.tmp-home tools/validate_tracks.sh
 
-# Phase 6 전까지 성공 메시지만 출력하는 시뮬레이션 자리표시자
-tools/run_sim.sh
+# Track 01 실제 scripted race (기본 3랩, 8카트, 1회)
+HOME=$PWD/.tmp-home tools/run_sim.sh
+
+# 빠른 DoD 예시: 1랩, 4카트, 1회; JSON 출력, DNF가 있으면 exit 1
+HOME=$PWD/.tmp-home tools/run_sim.sh --laps 1 --karts 4 --races 1
 ```
 
 `HOME=$PWD/.tmp-home`은 제한된 샌드박스에서만 필요하다. 일반 로컬
@@ -93,11 +96,11 @@ tools/run_sim.sh
    ```sh
    godot --headless --path . -s track/track_validator.gd -- \
      res://track/tracks/track_xx_<이름>/track_xx_<이름>.tscn
-   tools/run_sim.sh   # AI 완주 확인은 Phase 6부터
+   tools/run_sim.sh --laps 1 --karts 4 --races 1
    ```
-   AI 시뮬레이션이 없는 지금은 `tests/support/scripted_input_provider.gd`
-   (`ScriptedInputProvider`)로 레이싱 라인을 따라 자동 주행시켜 랩 완주를
-   확인한다 — `tests/integration/test_track01_auto_drive.gd`가 그 예시다.
+   Phase 5의 `ScriptedRaceInputProvider`로 실제 레이스 흐름과 전원 완주를
+   확인한다. 추월/회피/난이도 판단을 포함한 AI 시뮬레이션은 Phase 6에서
+   같은 JSON/exit-code 계약을 이어받는다.
 6. 샌드박스에서 직접 확인하려면 `scenes/test/kart_sandbox.gd`의
    `TRACK_SCENES`/`TRACK_NODE_NAMES`에 트랙을 추가하고 숫자 키를 배정한다
    (Track01은 `5`).

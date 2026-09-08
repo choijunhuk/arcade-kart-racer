@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="RaceTuning" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/schemas/race_tuning.gd" id="1_race_tuning"]
+
+[resource]
+script = ExtResource("1_race_tuning")
+countdown_step_seconds = 1.0
+finish_timeout_seconds = 15.0
+results_delay_seconds = 1.0
+position_update_hz = 5.0
+
