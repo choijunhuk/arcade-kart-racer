@@ -18,6 +18,9 @@ var selected_driver_id: StringName = &""
 var selected_kart_id: StringName = &""
 var selected_track_id: StringName = &""
 var pending_race_config: RaceConfig
+## Set by automated tools (snapshot/perf probes): disables focus-loss pause and
+## other human-only conveniences so unattended windows keep running.
+var automation_mode: bool = false
 var is_networked: bool = false
 
 

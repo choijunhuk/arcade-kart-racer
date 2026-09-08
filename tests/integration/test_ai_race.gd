@@ -12,7 +12,7 @@ const NORMAL_DIFFICULTY: AIDifficultyProfile = preload("res://data/ai/normal.tre
 const EASY_DIFFICULTY: AIDifficultyProfile = preload("res://data/ai/easy.tres")
 const HARD_DIFFICULTY: AIDifficultyProfile = preload("res://data/ai/hard.tres")
 const SIM_TIME_SCALE: float = 4.0
-const MAX_TICKS: int = 6000
+const MAX_TICKS: int = 24_000
 const FIXED_SEED: int = 1234
 ## Multiple seeds so the Easy-vs-Hard pacing comparison is a mean over several
 ## independent AI rolls, not one seed's noise (spec §13.8: Hard must pace
@@ -22,6 +22,7 @@ const DIFFICULTY_ORDER_SEEDS: Array[int] = [101, 202, 303]
 ## difference, not a statistical coin flip.
 const DIFFICULTY_ORDER_MARGIN_SECONDS: float = 0.1
 
+var _original_physics_hz: int = 60
 var _respawn_count: int = 0
 var _drift_started_count: int = 0
 
@@ -29,6 +30,8 @@ var _drift_started_count: int = 0
 func before_each() -> void:
 	_respawn_count = 0
 	_drift_started_count = 0
+	_original_physics_hz = Engine.physics_ticks_per_second
+	Engine.physics_ticks_per_second = roundi(float(_original_physics_hz) * SIM_TIME_SCALE)
 	Engine.time_scale = SIM_TIME_SCALE
 	EventBus.kart_respawned.connect(_on_kart_respawned)
 	EventBus.drift_started.connect(_on_drift_started)
@@ -36,6 +39,7 @@ func before_each() -> void:
 
 func after_each() -> void:
 	Engine.time_scale = 1.0
+	Engine.physics_ticks_per_second = _original_physics_hz
 	if EventBus.kart_respawned.is_connected(_on_kart_respawned):
 		EventBus.kart_respawned.disconnect(_on_kart_respawned)
 	if EventBus.drift_started.is_connected(_on_drift_started):
@@ -90,9 +94,11 @@ func _run_one_lap_and_get_finish_time(difficulty: AIDifficultyProfile, seed: int
 	await _wait_for_state(manager, RaceState.RESULTS, MAX_TICKS)
 	assert_eq(manager.get_state(), RaceState.RESULTS)
 	var entries: Array[RaceResults.Entry] = manager.get_results()
-	if entries.is_empty():
-		return -1.0
-	return entries[0].total_time_seconds
+	var finish_time: float = entries[0].total_time_seconds if not entries.is_empty() else -1.0
+	# Each seed needs its own field: finished karts still cruise and collide.
+	# autofree alone retains all six race scenes until the comparison test ends.
+	manager.free()
+	return finish_time
 
 
 func _make_manager(config: RaceConfig) -> RaceManager:

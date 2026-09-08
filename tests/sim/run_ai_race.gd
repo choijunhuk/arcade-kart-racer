@@ -29,15 +29,15 @@ const SIM_TIME_SCALE: float = 8.0
 const MAX_SECONDS_PER_LAP: float = 150.0
 const FLOW_MARGIN_SECONDS: float = 30.0
 const PHYSICS_TICKS_PER_SECOND: int = 60
+const SIM_PHYSICS_TICKS: int = int(PHYSICS_TICKS_PER_SECOND * SIM_TIME_SCALE)
 ## Spec §13.8 DoD: respawns/kart and wall head-ons/lap budgets.
 const MAX_RESPAWNS_PER_KART: int = 2
 const MAX_HEAD_ON_PER_LAP: float = 3.0
-const MAX_RANK_ONE_HITS_PER_RACE: float = 3.0
-const MIN_RANK_EIGHT_GAIN: float = 1.5
 const BALANCE_SAMPLE_RACES: int = 20
-const ITEM_IDS: Array[String] = [
-	"rocket_dart", "hunter_drone", "spike_mine", "nitro_can",
-	"aegis_bubble", "pulse_blast", "storm_beacon",
+const MIXED_SAMPLE_RACES: int = 12
+const KART_CLASSES: Array[KartData] = [
+	preload("res://data/karts/light.tres"), MEDIUM_KART,
+	preload("res://data/karts/heavy.tres"),
 ]
 var _kart_names_by_id: Dictionary[int, String] = {}
 var _respawns: Dictionary[String, int] = {}
@@ -59,6 +59,8 @@ var _current_kart_count: int = 0
 func _ready() -> void:
 	call_deferred("_run")
 func _run() -> void:
+	var original_physics_hz: int = Engine.physics_ticks_per_second
+	Engine.physics_ticks_per_second = SIM_PHYSICS_TICKS
 	Engine.time_scale = SIM_TIME_SCALE
 	EventBus.kart_respawned.connect(_on_kart_respawned)
 	EventBus.drift_started.connect(_on_drift_started)
@@ -71,19 +73,34 @@ func _run() -> void:
 	var track_scene: PackedScene = TRACK_SCENES[options["track"]]
 	var race_outputs: Array[Dictionary] = []
 	var failed: bool = false
+	var control_outputs: Array[Dictionary] = []
+	var balance_evaluated: bool = should_evaluate_item_balance(options)
 	for race_index: int in range(int(options["races"])):
 		var race_output: Dictionary = await _run_one_race(
-			int(options["laps"]), int(options["karts"]), race_index + 1,
-			difficulty, track_scene, bool(options["items"]),
+			int(options["laps"]), int(options["karts"]), int(options["seed"]) + race_index,
+			difficulty, track_scene, bool(options["items"]), bool(options["mixed_karts"]),
 		)
 		race_outputs.append(race_output)
-		failed = failed or _race_failed(race_output, int(options["laps"]))
+		failed = _race_failed(race_output, int(options["laps"])) or failed
+		if balance_evaluated:
+			var control: Dictionary = await _run_one_race(
+				int(options["laps"]), int(options["karts"]), int(options["seed"]) + race_index,
+				difficulty, track_scene, false, bool(options["mixed_karts"]),
+			)
+			control_outputs.append(control)
+			failed = _race_failed(control, int(options["laps"])) or failed
+		print("SIM_RACE %d/%d complete" % [race_index + 1, int(options["races"])])
 	Engine.time_scale = 1.0
+	Engine.physics_ticks_per_second = original_physics_hz
 	var summary: Dictionary = _summarize(race_outputs, int(options["laps"]))
-	var balance_evaluated: bool = should_evaluate_item_balance(options)
+	if balance_evaluated:
+		summary = RaceSimMetrics.with_control(summary, _summarize(control_outputs, int(options["laps"])))
 	var balance_pass: bool = items_balance_pass(summary)
 	if balance_evaluated and not balance_pass and bool(options.get("strict_balance", false)):
 		failed = true
+	var classes_evaluated: bool = bool(options["mixed_karts"]) and int(options["races"]) >= MIXED_SAMPLE_RACES
+	var classes_pass: bool = RaceSimMetrics.classes_balance_pass(summary)
+	failed = failed or (classes_evaluated and not classes_pass)
 	var payload: Dictionary = {
 		"success": not failed,
 		"difficulty": String(options["difficulty"]),
@@ -94,15 +111,22 @@ func _run() -> void:
 		"balance_gate_evaluated": balance_evaluated,
 		"balance_gate_pass": balance_pass if balance_evaluated else true,
 		"races": race_outputs,
+		"control_races": control_outputs,
+		"strict_balance": options["strict_balance"],
+		"mixed_karts": options["mixed_karts"],
+		"classes_gate_evaluated": classes_evaluated,
+		"classes_gate_pass": classes_pass if classes_evaluated else true,
 		"summary": summary,
 	}
 	print(JSON.stringify(payload))
+	print("SIM_SUMMARY ", JSON.stringify(summary))
 	get_tree().quit(1 if failed else 0)
 ## Parses `--laps N --karts N --races N --difficulty easy|normal|hard
 ## --track NAME`, clamping numeric values to safe bounds and falling back to
 ## the default for an unrecognized difficulty/track name.
 static func parse_options(args: PackedStringArray) -> Dictionary:
 	var options: Dictionary = {
+		"seed": 1,
 		"laps": DEFAULT_LAPS,
 		"karts": DEFAULT_KARTS,
 		"races": DEFAULT_RACES,
@@ -110,7 +134,9 @@ static func parse_options(args: PackedStringArray) -> Dictionary:
 		"track": DEFAULT_TRACK,
 		"items": DEFAULT_ITEMS_ENABLED,
 		"strict_balance": false,
+		"mixed_karts": false,
 	}
+	var strict_explicit: bool = false
 	var index: int = 0
 	while index < args.size():
 		var key: String = args[index]
@@ -118,6 +144,8 @@ static func parse_options(args: PackedStringArray) -> Dictionary:
 			break
 		var raw_value: String = args[index + 1]
 		match key:
+			"--seed":
+				options["seed"] = raw_value.to_int()
 			"--laps":
 				options["laps"] = maxi(MIN_VALUE, raw_value.to_int())
 			"--karts":
@@ -135,11 +163,14 @@ static func parse_options(args: PackedStringArray) -> Dictionary:
 					options["items"] = true
 				elif raw_value == "off":
 					options["items"] = false
+			"--mixed-karts":
+				options["mixed_karts"] = raw_value == "on"
 			"--strict-balance":
-				# Balance gate (§12.4) is advisory until the Phase 11 tuning pass:
-				# with equal-skill AI the lap1-rank8 metric is dominated by parity, not items.
+				strict_explicit = true
 				options["strict_balance"] = raw_value == "on"
 		index += 2
+	if not strict_explicit:
+		options["strict_balance"] = int(options["races"]) >= BALANCE_SAMPLE_RACES
 	return options
 ## Returns true when any kart is missing a non-negative finish time.
 static func has_unfinished(times: Dictionary) -> bool:
@@ -161,65 +192,13 @@ static func _race_failed(race_output: Dictionary, laps: int) -> bool:
 		if float(count) > MAX_HEAD_ON_PER_LAP * float(laps):
 			return true
 	return false
-## Mean per-lap finish time across every finisher in every race (spec §13.8:
-## this is what separates Easy/Normal/Hard when `tools/run_sim.sh` is run
-## once per difficulty and the three summaries are compared).
+## Preserves the simulator's public summary seam for regression tests.
 static func _summarize(race_outputs: Array[Dictionary], laps: int) -> Dictionary:
-	var lap_time_samples: Array[float] = []
-	var used_totals: Dictionary[String, int] = {}
-	var hit_totals: Dictionary[String, int] = {}
-	for item_id: String in ITEM_IDS:
-		used_totals[item_id] = 0
-		hit_totals[item_id] = 0
-	var rank_one_hit_total: int = 0
-	var rank_eight_gain_total: float = 0.0
-	var lap1_rank8_gain_total: float = 0.0
-	for race_output: Dictionary in race_outputs:
-		for value: Variant in (race_output["times"] as Dictionary).values():
-			if float(value) >= 0.0:
-				lap_time_samples.append(float(value) / float(laps))
-		for item_id: String in ITEM_IDS:
-			used_totals[item_id] += int((race_output.get("items_used", {}) as Dictionary).get(item_id, 0))
-			hit_totals[item_id] += int((race_output.get("item_hits", {}) as Dictionary).get(item_id, 0))
-		rank_one_hit_total += int(race_output.get("rank_one_hits", 0))
-		rank_eight_gain_total += float(race_output.get("rank_eight_gain", 0.0))
-		lap1_rank8_gain_total += float(race_output.get("lap1_rank8_gain", 0.0))
-	var mean_lap_time: float = 0.0
-	if not lap_time_samples.is_empty():
-		var total: float = 0.0
-		for sample: float in lap_time_samples:
-			total += sample
-		mean_lap_time = total / float(lap_time_samples.size())
-	var hit_rates: Dictionary[String, float] = {}
-	for item_id: String in ITEM_IDS:
-		var used: int = used_totals[item_id]
-		hit_rates[item_id] = float(hit_totals[item_id]) / float(used) if used > 0 else 0.0
-	var race_count: float = float(race_outputs.size())
-	return {
-		"mean_lap_time_seconds": mean_lap_time,
-		"finisher_samples": lap_time_samples.size(),
-		"items_used": used_totals,
-		"item_hits": hit_totals,
-		"hit_rate_by_item": hit_rates,
-		"average_rank_one_hits_per_race": float(rank_one_hit_total) / race_count if race_count > 0.0 else 0.0,
-		## Grid-slot-8 kart's rank gain. Mostly regression to the mean (a
-		## back-of-grid kart tends to finish ahead of its start slot even
-		## with items off) — kept for reference but no longer gates.
-		"mean_rank_eight_gain": rank_eight_gain_total / race_count if race_count > 0.0 else 0.0,
-		## Rank gain for whichever kart was actually in last place (by race
-		## position, not grid slot) at the end of lap 1. This is the balance
-		## gate metric (see `items_balance_pass`); run with `--items off` as
-		## a control to see how much of the gain is item-driven.
-		"mean_lap1_rank8_gain": lap1_rank8_gain_total / race_count if race_count > 0.0 else 0.0,
-	}
-## Returns whether the exact Phase 7 balance thresholds are both met. Uses
-## the lap-1-rank-8 metric (rank by race position at the end of lap 1), not
-## the grid-slot-8 metric, since the latter is mostly regression to the mean.
+	return RaceSimMetrics.summarize(race_outputs, laps)
+
+## Gates the paired items-on minus items-off lap-1-last rank gain.
 static func items_balance_pass(summary: Dictionary) -> bool:
-	return (
-		float(summary.get("average_rank_one_hits_per_race", INF)) <= MAX_RANK_ONE_HITS_PER_RACE
-		and float(summary.get("mean_lap1_rank8_gain", -INF)) >= MIN_RANK_EIGHT_GAIN
-	)
+	return RaceSimMetrics.items_balance_pass(summary)
 ## Evaluates balance only for the specified 20-race, 8-kart, 3-lap sample.
 static func should_evaluate_item_balance(options: Dictionary) -> bool:
 	return (
@@ -230,7 +209,7 @@ static func should_evaluate_item_balance(options: Dictionary) -> bool:
 	)
 func _run_one_race(
 	laps: int, kart_count: int, race_number: int, difficulty: AIDifficultyProfile,
-	track_scene: PackedScene, items_enabled: bool,
+	track_scene: PackedScene, items_enabled: bool, mixed_karts: bool = false,
 ) -> Dictionary:
 	_reset_metrics()
 	_current_kart_count = kart_count
@@ -246,6 +225,9 @@ func _run_one_race(
 	config.ai_difficulty = difficulty
 	config.items_enabled = items_enabled
 	config.seed = race_number # vary each race's AI rolls instead of repeating race 1
+	if mixed_karts:
+		for slot: int in range(kart_count):
+			config.kart_roster.append(KART_CLASSES[(slot + race_number - 1) % KART_CLASSES.size()])
 	var manager: RaceManager = RACE_SCENE.instantiate() as RaceManager
 	manager.configure(config)
 	get_tree().root.add_child(manager)
@@ -261,7 +243,7 @@ func _run_one_race(
 	var rank_eight_name: String = String(manager.get_karts().back().name) if kart_count >= DEFAULT_KARTS else ""
 	var max_ticks: int = roundi(
 		(float(laps) * MAX_SECONDS_PER_LAP + FLOW_MARGIN_SECONDS)
-		* float(PHYSICS_TICKS_PER_SECOND) / SIM_TIME_SCALE
+		* float(SIM_PHYSICS_TICKS) / SIM_TIME_SCALE
 	)
 	for _tick: int in range(max_ticks):
 		if manager.get_state() == RaceState.RESULTS:
@@ -278,7 +260,18 @@ func _run_one_race(
 	var rank_eight_gain: float = float(kart_count - rank_eight_finish) if rank_eight_finish > 0 else 0.0
 	var lap1_rank8_finish: int = finish_order.find(_lap1_last_kart_name) + 1 if not _lap1_last_kart_name.is_empty() else 0
 	var lap1_rank8_gain: float = float(kart_count - lap1_rank8_finish) if lap1_rank8_finish > 0 else 0.0
+	var winning_class: String = ""
+	for kart: KartController in manager.get_karts():
+		if not finish_order.is_empty() and String(kart.name) == finish_order[0]:
+			winning_class = String(kart.get_kart_data().id)
+	var unfinished: Dictionary = {}
+	var tracker: LapTracker = manager.get_node("LapTracker") as LapTracker
+	for kart: KartController in manager.get_karts():
+		if not tracker.is_finished(kart):
+			unfinished[String(kart.name)] = {"lap": tracker.get_lap(kart), "next_checkpoint": tracker.get_next_checkpoint_index(kart), "position": str(kart.global_position), "speed": kart.get_speed()}
 	var output: Dictionary = {
+		"unfinished": unfinished,
+		"winning_class": winning_class,
 		"race": race_number,
 		"finish_order": finish_order,
 		"times": times,

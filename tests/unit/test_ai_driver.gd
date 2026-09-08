@@ -134,3 +134,72 @@ func test_target_speed_never_exceeds_kart_max_speed_with_max_rubber_band_gap_on_
 	var driver: AIDriver = AIDriver.new(RandomNumberGenerator.new())
 	var target_speed: float = driver._compute_target_speed(kart, HARD_DIFFICULTY, nav, context)
 	assert_lte(target_speed, kart.get_kart_data().max_speed, "AI target speed must never exceed the kart's own max_speed")
+
+
+func test_active_boost_raises_straight_target_without_raising_corner_limit() -> void:
+	var kart: KartController = KART_SCENE.instantiate() as KartController
+	add_child_autofree(kart)
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	var driver: AIDriver = AIDriver.new(rng)
+	var nav: AINavigator.NavResult = AINavigator.NavResult.new()
+	var profile: AIDifficultyProfile = HARD_DIFFICULTY.duplicate(true) as AIDifficultyProfile
+	var context: AIRaceContext = AIRaceContext.new()
+	var base: float = driver._compute_target_speed(kart, profile, nav, context)
+	var boost: BoostSpecData = BoostSpecData.new()
+	boost.speed_mult = 1.4
+	boost.duration = 2.0
+	kart.request_boost(boost, &"item_boost")
+	var boosted: float = driver._compute_target_speed(kart, profile, nav, context)
+	assert_gt(boosted, base, "AI must not brake away its own Nitro on straights")
+	assert_lte(boosted, kart.get_kart_data().max_speed * kart.boost_controller.get_result().speed_mult)
+	nav.curvature_ahead = 0.1
+	assert_almost_eq(driver._compute_target_speed(kart, profile, nav, context), sqrt(profile.max_lateral_accel / nav.curvature_ahead), 0.001)
+
+
+func test_ai_hold_preserves_countersteer_to_widen_a_drift() -> void:
+	var kart: KartController = KART_SCENE.instantiate() as KartController
+	add_child_autofree(kart)
+	var planner: AIDriftPlanner = AIDriftPlanner.new(RandomNumberGenerator.new())
+	planner._locked_direction = 1
+	var frame: InputFrame = InputFrame.zero()
+	frame.steer = -0.25
+	planner._update_hold(frame, kart, HARD_DIFFICULTY, 0.06, 1.0 / 30.0)
+	assert_eq(frame.steer, -0.25, "KartPhysics keeps drift direction locked; AI can countersteer without reversing it")
+	var profile: AIDifficultyProfile = HARD_DIFFICULTY.duplicate(true) as AIDifficultyProfile
+	profile.drift_skill = 1.0 # Isolate countersteer from random early releases.
+	var dt: float = 1.0 / 60.0
+	frame.steer = 1.0
+	frame.drift = true
+	frame.drift_pressed = true
+	kart.drift_controller.step(frame, 20.0, true, 0.0, 1.0, false, dt)
+	frame.drift_pressed = false
+	kart.drift_controller.step(frame, 20.0, true, 0.0, 1.0, false, kart.tuning.drift_hop_duration)
+	assert_eq(kart.get_drift_state(), DriftController.DriftState.HOLD)
+	var nav: AINavigator.NavResult = AINavigator.NavResult.new()
+	nav.signed_curvature_ahead = 0.06
+	for _tick: int in range(120):
+		frame = InputFrame.zero()
+		frame.steer = -1.0
+		planner.update(frame, kart, profile, nav, dt)
+		assert_gt(frame.steer, -kart.tuning.drift_min_steer, "countersteer must stay strictly below the cancel threshold")
+		assert_lt(frame.steer, 0.0, "the navigator must still be able to widen the turn")
+		kart.drift_controller.step(frame, 20.0, true, 0.0, 1.0, false, dt)
+		assert_eq(kart.get_drift_state(), DriftController.DriftState.HOLD, "two seconds of countersteer must not cancel HOLD")
+
+
+func test_ai_hold_limits_only_opposite_steer_for_either_locked_direction() -> void:
+	var kart: KartController = KART_SCENE.instantiate() as KartController
+	add_child_autofree(kart)
+	kart.tuning = kart.tuning.duplicate(true) as PhysicsTuning
+	kart.tuning.drift_min_steer = 0.2
+	var planner: AIDriftPlanner = AIDriftPlanner.new(RandomNumberGenerator.new())
+	for direction: int in [-1, 1]:
+		planner._locked_direction = direction
+		var frame: InputFrame = InputFrame.zero()
+		frame.steer = float(direction)
+		planner._update_hold(frame, kart, HARD_DIFFICULTY, 0.06, 1.0 / 30.0)
+		assert_eq(frame.steer, float(direction), "same-direction steer must remain unclamped")
+		frame.steer = -float(direction)
+		planner._update_hold(frame, kart, HARD_DIFFICULTY, 0.06, 1.0 / 30.0)
+		assert_lt(absf(frame.steer), kart.tuning.drift_min_steer, "use the kart's configured threshold in either direction")
+		assert_lt(frame.steer * float(direction), 0.0)

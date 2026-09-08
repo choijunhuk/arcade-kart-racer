@@ -105,6 +105,23 @@ func _read_valid_data(path: String) -> Dictionary:
 		return {}
 	if version < 0 or version > CURRENT_VERSION:
 		return {}
+	# Syntactically valid JSON can still violate the types consumed by menus/results.
+	for key: String in ["best_laps", "best_positions", "last_selection"]:
+		if data.has(key) and not data[key] is Dictionary:
+			return {}
+	for key: String in ["best_laps", "best_positions"]:
+		var records: Dictionary = data.get(key, {})
+		for value: Variant in records.values():
+			if not (value is int or value is float):
+				return {}
+			if not is_finite(float(value)) or float(value) <= 0.0:
+				return {}
+	var selection: Dictionary = data.get("last_selection", {})
+	for value: Variant in selection.values():
+		if not value is String:
+			return {}
+	if data.has("unlocks") and not data["unlocks"] is Array:
+		return {}
 	return data
 
 

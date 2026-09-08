@@ -2,12 +2,9 @@ class_name KartPhysics
 extends Node
 
 ## Longitudinal/lateral scalar model, ground probing, and wall response for the
-## kart's `CharacterBody3D`. Spec: KART_RACING_DEV_PROMPT.md §9.4-§9.8. Phase 1
-## implements accel/brake/reverse/steer/grip/ground/slope/wall; slipstream,
-## terrain friction, and kart-kart collision are Phase 2 (kept neutral here).
+## kart's `CharacterBody3D`, consuming terrain, drift and boost snapshots (§9.4–§9.8).
 
-## Result of a single ground probe: whether enough rays hit a driveable
-## surface, and the averaged surface normal of the hits that count.
+## Driveable ground hits and their averaged surface normal.
 class GroundProbe extends RefCounted:
 	var grounded: bool = false
 	var normal: Vector3 = Vector3.UP
@@ -23,8 +20,7 @@ class TerrainSample extends RefCounted:
 	var grip_mult: float = 1.0
 	var drag_mult: float = 1.0
 	var terrain_id: StringName = &"asphalt"
-	## Set from the active `BoostController.BoostResult.ignores_offroad` flag
-	## (boost pads, items) so a boosted kart is not penalized by terrain.
+	## Active pad/item boosts bypass offroad penalties.
 	var ignores_offroad: bool = false
 
 

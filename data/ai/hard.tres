@@ -26,5 +26,5 @@ brake_look_ahead = 25.0
 drift_curvature_threshold = 0.05
 overtake_range = 10.0
 ai_tick_hz = 30.0
-lane_offset_min = -1.5
-lane_offset_max = 1.5
+lane_offset_min = -3.0
+lane_offset_max = 3.0

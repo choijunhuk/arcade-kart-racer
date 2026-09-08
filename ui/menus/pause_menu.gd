@@ -11,10 +11,12 @@ extends CanvasLayer
 @onready var _settings_menu: SettingsMenu = $SettingsMenu
 
 var _manager: RaceManager
+var _pause_on_focus_loss: bool = true
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	get_window().focus_exited.connect(_on_focus_exited)
 	UiAudio.attach(_panel)
 	_continue_button.pressed.connect(_on_continue_pressed)
 	_restart_button.pressed.connect(_on_restart_pressed)
@@ -39,8 +41,14 @@ func _unhandled_input(event: InputEvent) -> void:
 
 ## Attaches the owning race manager so pause can be toggled before the
 ## overlay is first shown.
-func bind(manager: RaceManager) -> void:
+func bind(manager: RaceManager, pause_on_focus_loss: bool = true) -> void:
 	_manager = manager
+	_pause_on_focus_loss = pause_on_focus_loss
+
+
+func _on_focus_exited() -> void:
+	if _pause_on_focus_loss and is_instance_valid(_manager):
+		_manager.pause_race()
 
 
 ## Displays the overlay and enters keyboard/gamepad focus at Continue.

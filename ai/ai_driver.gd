@@ -185,11 +185,13 @@ func _angle_to_target(kart: KartController, target_point: Vector3) -> float:
 
 func _compute_target_speed(kart: KartController, profile: AIDifficultyProfile, nav: AINavigator.NavResult, context: AIRaceContext) -> float:
 	var max_speed: float = kart.get_kart_data().max_speed
+	# Use the same earned boost cap as player physics; corner grip still limits speed.
+	max_speed *= kart.boost_controller.get_result().speed_mult
 	var corner_speed: float = compute_corner_speed(profile.max_lateral_accel, nav.curvature_ahead, max_speed, profile.speed_confidence)
 	var gap: float = _rubber_band_gap(kart, context)
 	_rubber_band_mult = compute_rubber_band_mult(gap, profile.rubber_band_strength, MAX_RUBBER_BAND)
 	# The rubber-band catch-up multiplier may never push the AI's target past
-	# its own kart's spec max speed (spec §13.6).
+	# its own kart's currently boosted spec max speed (spec §13.6).
 	_last_target_speed = minf(corner_speed * _rubber_band_mult, max_speed)
 	return _last_target_speed
 
