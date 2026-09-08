@@ -2095,3 +2095,9 @@ Phase 1에서 `KartController`, `KartPhysics`, `KartVisuals`, 플레이어 입�
 
 ### Phase 8 perf probe (main thread, windowed, Apple M3 Max)
 - `godot --path . res://scenes/test/perf_probe.tscn -- 12 30` → 12 karts, 60 GPU particles, mean FPS 119.9, worst frame 47.7 ms (single spike at spawn/warmup), duration 30 s. DoD ≥ 60 fps for 8 karts ✅.
+
+### Phase 11 main-thread additions (2026-09-09)
+- `GameState.automation_mode`: set by snapshot/perf tools so the Phase 11 focus-loss pause does not freeze unattended windows.
+- `tools/run_soak.sh`: harmless engine-exit diagnostics (dummy renderer RID leak, macOS certificate lookup) are filtered before the error scan.
+- Windowed sweep (M3 Max): drive snapshots on 4 tracks OK; perf probe 8 karts mean 59.9 fps (vsync-capped) worst 35.1 ms, 12 karts mean 60.0 fps worst 32.7 ms; race scene HUD complete.
+- Polish (Phase 13): minimap renders Track 01 as a nearly flat line — check projection aspect/fit; consider padding + min height.

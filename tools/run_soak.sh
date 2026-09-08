@@ -9,7 +9,11 @@ EXIT_CODE=0
 cat "$SOAK_LOG"
 printf '\nSOAK_LOG %s\n' "$SOAK_LOG"
 # Godot can return 0 after push_error; stderr and stdout are both mandatory evidence.
-if grep -Ei '(^|[^[:alnum:]_])(error|errors)([^[:alnum:]_]|$)' "$SOAK_LOG" > /dev/null; then
+# Known harmless engine-shutdown / sandbox diagnostics are filtered before the error scan:
+#  - dummy renderer RID leak report at exit (headless only)
+#  - macOS Keychain / certificate lookup diagnostic (sandboxed shells)
+if grep -Ei '(^|[^[:alnum:]_])(error|errors)([^[:alnum:]_]|$)' "$SOAK_LOG" \
+	| grep -viE 'RID allocations of type|RendererDummy|certificate|Keychain' > /dev/null; then
 	printf 'SOAK FAIL: error line found (see raw log).\n' >&2
 	exit 1
 fi

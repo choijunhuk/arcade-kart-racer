@@ -18,6 +18,7 @@ var _capture_pending: bool = false
 
 
 func _ready() -> void:
+	GameState.automation_mode = true
 	var args: PackedStringArray = OS.get_cmdline_user_args()
 	var scene_path: String = args[0] if args.size() > 0 else DEFAULT_SCENE
 	_out_dir = args[1] if args.size() > 1 else DEFAULT_OUT_DIR

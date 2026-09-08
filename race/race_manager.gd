@@ -153,7 +153,7 @@ func _begin_loading(is_restart: bool) -> void:
 		_player_kart, _lap_tracker, _position_tracker, _karts.size(), _config.laps,
 		_item_manager, _track.get_racing_line(), _karts,
 	)
-	_pause_menu.bind(self, _player_kart != null)
+	_pause_menu.bind(self, _player_kart != null and not GameState.automation_mode)
 	_pause_menu.hide_menu()
 	_results_screen.hide_results()
 	_transition_to(RaceState.COUNTDOWN)

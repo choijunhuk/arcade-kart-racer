@@ -29,6 +29,7 @@ var _worst_frame_monitors: Dictionary = {}
 
 
 func _ready() -> void:
+	GameState.automation_mode = true
 	_parse_arguments(OS.get_cmdline_user_args())
 	_race = RACE_SCENE.instantiate() as RaceManager
 	_race.configure(build_config(_kart_count))
