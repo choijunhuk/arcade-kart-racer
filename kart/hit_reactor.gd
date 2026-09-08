@@ -29,6 +29,8 @@ func setup(controller: KartController, physics: KartPhysics, tuning: PhysicsTuni
 
 ## Applies a hit unless invulnerability is active, returning acceptance.
 func apply(type: HitType, _source: Node) -> bool:
+	if type != HitType.BUMP and _controller != null and _controller.consume_shield():
+		return false
 	if is_invulnerable():
 		return false
 	_hit_type = type

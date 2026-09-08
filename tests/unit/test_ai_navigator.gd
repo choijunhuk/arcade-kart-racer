@@ -47,3 +47,9 @@ func test_shortcut_take_prob_of_zero_never_takes_it() -> void:
 	rng.seed = 7
 	for _i: int in range(20):
 		assert_false(AINavigator.decide_shortcut(0.0, 20.0, 10.0, rng))
+
+
+func test_item_box_seek_runs_only_for_empty_slots_on_gentle_track() -> void:
+	assert_true(AINavigator.should_seek_item(false, 0.01, 2))
+	assert_false(AINavigator.should_seek_item(true, 0.01, 2))
+	assert_false(AINavigator.should_seek_item(false, 0.03, 2))

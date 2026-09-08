@@ -19,6 +19,7 @@ signal state_changed(old_state: int, new_state: int)
 @onready var _hit_reactor: HitReactor = $HitReactor
 @onready var drift_controller: DriftController = $DriftController
 @onready var boost_controller: BoostController = $BoostController
+@onready var item_slot: ItemSlot = $ItemSlot
 
 var input_provider: InputProvider = InputProvider.new()
 var state: int = KartState.GROUNDED
@@ -31,6 +32,7 @@ var _latest_input_frame: InputFrame = InputFrame.zero()
 var _race_frozen: bool = false
 var _finished: bool = false
 var _start_wheelspin_remaining: float = 0.0
+var _shield_item: ShieldItem
 
 
 func _ready() -> void:
@@ -53,6 +55,7 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	var frame: InputFrame = _get_input_frame()
+	item_slot.capture_input(frame)
 	_start_wheelspin_remaining = maxf(0.0, _start_wheelspin_remaining - delta)
 	if _race_frozen or _start_wheelspin_remaining > 0.0:
 		_physics.reset_motion()
@@ -273,6 +276,38 @@ func get_drift_visual_angle_degrees() -> float:
 ## Returns whether any boost currently affects physics.
 func is_boosting() -> bool:
 	return boost_controller.get_result().active
+
+
+## Attaches or replaces the one active shield item.
+func install_shield(shield: ShieldItem) -> void:
+	if _shield_item != null and _shield_item != shield and not _shield_item.is_expired():
+		_shield_item.expire()
+	_shield_item = shield
+
+
+## Returns whether a live one-charge shield is attached.
+func has_shield() -> bool:
+	if _shield_item == null or not is_instance_valid(_shield_item) or not _shield_item.is_available():
+		_shield_item = null
+		return false
+	return true
+
+
+## Consumes one shield charge, returning true only for the absorbed hit.
+func consume_shield() -> bool:
+	if not has_shield():
+		return false
+	var absorbed: bool = _shield_item.consume()
+	if absorbed:
+		_shield_item = null
+	return absorbed
+
+
+## Returns shield seconds remaining for HUD/debug observers.
+func get_shield_remaining() -> float:
+	if not has_shield():
+		return 0.0
+	return maxf(0.0, _shield_item.data.duration - _shield_item.elapsed_seconds)
 
 
 ## Ends respawn freeze and returns state control to ground probing.

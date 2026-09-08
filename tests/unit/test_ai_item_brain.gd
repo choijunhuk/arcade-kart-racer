@@ -95,3 +95,14 @@ func test_should_use_never_fires_when_ineligible_even_with_perfect_accuracy() ->
 	context.rank = 1 # leading: storm_beacon rule needs rank >= 3
 	var profile: AIDifficultyProfile = _make_profile(0.0, 1.0)
 	assert_false(brain.should_use(view, AIItemUseProfile.new(), profile, context, 1.0))
+
+
+func test_real_slot_view_reads_the_bound_item_resource() -> void:
+	var slot: ItemSlot = ItemSlot.new()
+	add_child_autofree(slot)
+	slot.set_item(preload("res://data/items/pulse_blast.tres"))
+	var view: ItemSlotView = ItemSlotView.new()
+	view.call("bind", slot)
+	assert_true(view.has_item())
+	assert_eq(view.get_category(), ItemData.ItemCategory.AREA)
+	assert_eq(view.get_item_id(), &"pulse_blast")

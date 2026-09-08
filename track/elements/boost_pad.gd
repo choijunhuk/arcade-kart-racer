@@ -11,3 +11,4 @@ func _ready() -> void:
 func _on_body_entered(body: Node3D) -> void:
 	if body is KartController:
 		(body as KartController).boost_controller.request(tuning.boost_pad_boost, &"boost_pad")
+		EventBus.item_defense_triggered.emit(body)

@@ -39,6 +39,9 @@ func on_hit(target: KartController) -> void:
 	var hit_type: HitReactor.HitType = data.hit_type as HitReactor.HitType
 	if target.apply_hit(hit_type, owner_kart):
 		EventBus.item_hit.emit(owner_kart, target, data.id)
+		var manager: Node = context.get_item_manager() if context != null else null
+		if manager != null and manager.has_method("spawn_impact"):
+			manager.call("spawn_impact", target.global_position)
 
 
 ## Emits the one-shot completion signal used by ItemManager to return the pool.
@@ -67,6 +70,11 @@ func can_activate() -> bool:
 ## Returns whether manager-wide live state permits another instance.
 func can_spawn(_active_items: Array[ItemBase]) -> bool:
 	return true
+
+
+## Returns world travel direction for projectile threat sensing.
+func get_travel_direction() -> Vector3:
+	return Vector3.ZERO
 
 
 func _advance_lifetime(dt: float) -> bool:

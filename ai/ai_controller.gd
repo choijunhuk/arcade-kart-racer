@@ -21,6 +21,7 @@ var _input_provider: AIInputProvider = AIInputProvider.new()
 var _tick_interval: float = 1.0 / 30.0
 var _tick_accumulator: float = 0.0
 var _last_lane_offset: float = 0.0
+var _item_slot_view: ItemSlotView = ItemSlotView.new()
 
 
 ## Wires every dependency and rolls this kart's fixed random seed. Call once
@@ -38,12 +39,13 @@ func setup(kart: KartController, track: TrackRoot, context: AIRaceContext, profi
 	_tick_accumulator = phase_offset
 	_sensors = AISensors.new()
 	add_child(_sensors)
-	_sensors.setup(kart)
+	_sensors.setup(kart, context.item_manager)
 	var base_lane_offset: float = AIDifficulty.sample_base_lane_offset(profile, rng)
-	_navigator = AINavigator.new(context.racing_line, base_lane_offset, _item_box_anchors(), _shortcuts())
+	_navigator = AINavigator.new(context.racing_line, base_lane_offset, _item_box_anchors(), _shortcuts(), kart.item_slot)
 	_driver = AIDriver.new(rng)
 	_driver.plan_start_boost(kart, profile)
 	_item_brain = AIItemBrain.new(rng)
+	_item_slot_view.bind(kart.item_slot)
 	kart.set_input_provider(_input_provider)
 
 
@@ -90,6 +92,9 @@ func _run_tick(dt: float) -> void:
 	var avoid_bias: float = AIDriver.compute_avoid_bias(sensor_report, AIDriver.AVOID_STRENGTH)
 	var overtake_bias: float = AIDriver.compute_overtake_bias(sensor_report, _profile, _navigator.get_last_curvature_ahead())
 	var bias: float = clampf(avoid_bias + overtake_bias, _profile.lane_offset_min, _profile.lane_offset_max)
+	if sensor_report.incoming_projectile and _rng.randf() < _profile.projectile_dodge_prob:
+		var dodge_side: float = -1.0 if _last_lane_offset >= 0.0 else 1.0
+		bias = clampf(bias + dodge_side * AIDriver.AVOID_STRENGTH, _profile.lane_offset_min, _profile.lane_offset_max)
 	var nav: AINavigator.NavResult = _navigator.compute(_kart.global_position, _kart.get_speed(), _profile, bias, dt, _rng)
 	var frame: InputFrame = _driver.compute_frame(_kart, _profile, nav, sensor_report, _context, dt)
 	_evaluate_item_use(frame, sensor_report, nav, dt)
@@ -97,13 +102,13 @@ func _run_tick(dt: float) -> void:
 	_last_lane_offset = nav.lane_offset
 
 
-## PLACEHOLDER(phase-7): `ItemSlotView`/`AIItemUseProfile` are stand-ins until
-## a real `ItemSlot` exists; `view.has_item()` is always false so this never
-## actually fires, but the full Sensors->Navigator->Driver->ItemBrain pipeline
-## from spec §13.2 is exercised structurally.
+## Evaluates the real kart slot and that item's data-authored use profile.
 func _evaluate_item_use(frame: InputFrame, sensor_report: AISensors.SensorReport, nav: AINavigator.NavResult, dt: float) -> void:
-	var view: ItemSlotView = ItemSlotView.new()
-	var use_profile: AIItemUseProfile = AIItemUseProfile.new()
+	if not _item_slot_view.has_item():
+		frame.item = false
+		return
+	var item_data: ItemData = _kart.item_slot.get_item_data()
+	var use_profile: AIItemUseProfile = item_data.ai_use_profile
 	var decision_context: AIItemBrain.ItemDecisionContext = AIItemBrain.ItemDecisionContext.new()
 	decision_context.kart_ahead_distance = sensor_report.kart_ahead_distance
 	decision_context.kart_ahead_in_fire_cone = sensor_report.kart_ahead_side == AISensors.Side.CENTER and sensor_report.kart_ahead_distance <= use_profile.fire_range
@@ -112,7 +117,10 @@ func _evaluate_item_use(frame: InputFrame, sensor_report: AISensors.SensorReport
 	decision_context.is_boosting = _kart.is_boosting()
 	decision_context.incoming_projectile = sensor_report.incoming_projectile
 	decision_context.rank = _context.position_tracker.get_position(_kart) if _context.position_tracker != null else 8
-	frame.item = _item_brain.should_use(view, use_profile, _profile, decision_context, dt)
+	decision_context.nearby_kart_count = int(sensor_report.kart_ahead_distance < INF) + int(sensor_report.rear_kart_distance < INF)
+	decision_context.being_overtaken = sensor_report.rear_kart_distance < INF and sensor_report.rear_kart_relative_speed > 0.0
+	decision_context.at_corner_apex = nav.curvature_ahead >= _profile.drift_curvature_threshold
+	frame.item = _item_brain.should_use(_item_slot_view, use_profile, _profile, decision_context, dt)
 
 
 func _item_box_anchors() -> Array[Node3D]:

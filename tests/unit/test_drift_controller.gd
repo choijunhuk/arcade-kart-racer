@@ -215,6 +215,16 @@ func test_trick_press_before_minimum_air_time_is_ignored() -> void:
 	assert_false(bool(_controller.call("is_trick_armed")))
 
 
+func test_area_item_cancel_ends_hold_without_a_boost_reward() -> void:
+	if not _require_controller():
+		return
+	_enter_hold(1.0)
+	assert_eq(int(_controller.call("get_state")), DriftController.DriftState.HOLD)
+	_controller.call("cancel")
+	assert_eq(int(_controller.call("get_state")), DriftController.DriftState.NONE)
+	assert_null(_controller.call("get_pending_boost_spec"))
+
+
 func _require_controller() -> bool:
 	if _controller != null:
 		return true

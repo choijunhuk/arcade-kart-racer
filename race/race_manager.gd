@@ -28,6 +28,7 @@ const LEGAL_TRANSITIONS: Dictionary = {
 @onready var _position_tracker: PositionTracker = $PositionTracker
 @onready var _respawn_system: RespawnSystem = $RespawnSystem
 @onready var _collision_resolver: KartCollisionResolver = $KartCollisionResolver
+@onready var _item_manager: ItemManager = $ItemManager
 @onready var _countdown: Countdown = $Countdown
 @onready var _race_results: RaceResults = $RaceResults
 @onready var _karts_root: Node3D = $Karts
@@ -146,7 +147,7 @@ func _begin_loading(is_restart: bool) -> void:
 	_race_results.setup(_config.track.id, _karts, _player_kart)
 	_countdown.setup(tuning, _karts)
 	_camera.set_target(_player_kart)
-	_hud.bind(_player_kart, _lap_tracker, _position_tracker, _karts.size(), _config.laps)
+	_hud.bind(_player_kart, _lap_tracker, _position_tracker, _karts.size(), _config.laps, _item_manager)
 	_pause_menu.bind(self)
 	_pause_menu.hide_menu()
 	_results_screen.hide_results()
@@ -179,8 +180,12 @@ func _setup_systems() -> void:
 	_position_tracker.set_race_active(false)
 	_respawn_system.clear_karts()
 	_collision_resolver.clear_karts()
+	_item_manager.reset()
+	_item_manager.items_enabled = _config.items_enabled
+	_item_manager.setup(_position_tracker, _track.get_racing_line(), _collision_resolver, _config.seed)
 	_respawn_system.set_physics_process(false)
 	_collision_resolver.set_physics_process(false)
+	_item_manager.set_physics_process(false)
 	if not _lap_tracker.kart_finished.is_connected(_on_kart_finished):
 		_lap_tracker.kart_finished.connect(_on_kart_finished)
 
@@ -211,6 +216,7 @@ func _spawn_karts() -> void:
 		_lap_tracker.register_kart(kart)
 		_position_tracker.register_kart(kart)
 		_collision_resolver.register_kart(kart)
+		_item_manager.register_kart(kart)
 		_respawn_system.register_kart(kart, _get_respawn_transform)
 	_ai_context.player_kart = _player_kart
 
@@ -220,6 +226,7 @@ func _make_ai_context() -> AIRaceContext:
 	context.racing_line = _track.get_racing_line()
 	context.track = _track
 	context.position_tracker = _position_tracker
+	context.item_manager = _item_manager
 	context.request_respawn = _respawn_system.request_respawn
 	context.get_countdown_phase_seconds = _countdown.get_phase_seconds
 	return context
@@ -260,6 +267,11 @@ func _register_track_elements() -> void:
 		for child: Node in kill_zones.get_children():
 			if child is KillZone:
 				_respawn_system.register_kill_zone(child as KillZone)
+	var item_boxes: Node = _track.get_node_or_null("ItemBoxes")
+	if item_boxes != null:
+		for child: Node in item_boxes.get_children():
+			if child is ItemBox:
+				_item_manager.register_item_box(child as ItemBox)
 
 
 func _on_kart_finished(kart: KartController, finish_time_seconds: float) -> void:
@@ -350,6 +362,7 @@ func _set_race_systems_active(active: bool) -> void:
 	_position_tracker.set_race_active(active)
 	_respawn_system.set_physics_process(active)
 	_collision_resolver.set_physics_process(active)
+	_item_manager.set_physics_process(active and _config.items_enabled)
 
 
 func _clear_runtime() -> void:
@@ -360,6 +373,7 @@ func _clear_runtime() -> void:
 	_position_tracker.reset()
 	_respawn_system.clear_karts()
 	_collision_resolver.clear_karts()
+	_item_manager.reset()
 	for kart: KartController in _karts:
 		if is_instance_valid(kart):
 			kart.free()

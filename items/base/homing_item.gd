@@ -57,3 +57,8 @@ func tick(dt: float) -> void:
 ## Homing threats share the active projectile registry.
 func is_projectile() -> bool:
 	return true
+
+
+## Returns current guided travel direction for AI threat sensing.
+func get_travel_direction() -> Vector3:
+	return direction

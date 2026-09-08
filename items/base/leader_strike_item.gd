@@ -35,7 +35,10 @@ func activate(_frame: InputFrame) -> void:
 
 ## Strikes after the warning unless the target triggered an immunity counter.
 func tick(dt: float) -> void:
-	if _advance_lifetime(dt) or elapsed_seconds < WARNING_SECONDS:
+	if is_expired():
+		return
+	elapsed_seconds += maxf(dt, 0.0)
+	if elapsed_seconds < WARNING_SECONDS:
 		return
 	if not _immune and is_instance_valid(target_kart):
 		global_position = target_kart.global_position

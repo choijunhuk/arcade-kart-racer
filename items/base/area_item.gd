@@ -21,7 +21,10 @@ func activate(_frame: InputFrame) -> void:
 
 ## Detonates once after the telegraph, bumps targets, and cancels their drift.
 func tick(dt: float) -> void:
-	if _advance_lifetime(dt) or not telegraph_complete(elapsed_seconds, TELEGRAPH_SECONDS):
+	if is_expired():
+		return
+	elapsed_seconds += maxf(dt, 0.0)
+	if not telegraph_complete(elapsed_seconds, TELEGRAPH_SECONDS):
 		return
 	for kart: KartController in context.get_karts():
 		if kart == owner_kart or not is_instance_valid(kart):

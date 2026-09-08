@@ -24,6 +24,7 @@ const DEFAULT_KARTS: int = 8
 const DEFAULT_RACES: int = 1
 const DEFAULT_DIFFICULTY: StringName = &"normal"
 const DEFAULT_TRACK: StringName = &"track_01"
+const DEFAULT_ITEMS_ENABLED: bool = true
 const MAX_KARTS: int = 8
 const MIN_VALUE: int = 1
 const SIM_TIME_SCALE: float = 8.0
@@ -33,6 +34,13 @@ const PHYSICS_TICKS_PER_SECOND: int = 60
 ## Spec §13.8 DoD: respawns/kart and wall head-ons/lap budgets.
 const MAX_RESPAWNS_PER_KART: int = 2
 const MAX_HEAD_ON_PER_LAP: float = 3.0
+const MAX_RANK_ONE_HITS_PER_RACE: float = 3.0
+const MIN_RANK_EIGHT_GAIN: float = 1.5
+const BALANCE_SAMPLE_RACES: int = 20
+const ITEM_IDS: Array[String] = [
+	"rocket_dart", "hunter_drone", "spike_mine", "nitro_can",
+	"aegis_bubble", "pulse_blast", "storm_beacon",
+]
 
 var _kart_names_by_id: Dictionary[int, String] = {}
 var _respawns: Dictionary[String, int] = {}
@@ -41,6 +49,10 @@ var _wall_head_on_count: int = 0
 var _drift_started_count: int = 0
 var _tier3_release_count: int = 0
 var _shortcut_take_count: int = 0
+var _items_used: Dictionary[String, int] = {}
+var _item_hits: Dictionary[String, int] = {}
+var _rank_one_hits: int = 0
+var _current_position_tracker: PositionTracker
 
 
 func _ready() -> void:
@@ -50,9 +62,10 @@ func _ready() -> void:
 func _run() -> void:
 	Engine.time_scale = SIM_TIME_SCALE
 	EventBus.kart_respawned.connect(_on_kart_respawned)
-	EventBus.kart_hit.connect(_on_kart_hit)
 	EventBus.drift_started.connect(_on_drift_started)
 	EventBus.drift_ended.connect(_on_drift_ended)
+	EventBus.item_used.connect(_on_item_used)
+	EventBus.item_hit.connect(_on_item_hit)
 	var options: Dictionary = parse_options(OS.get_cmdline_user_args())
 	var difficulty: AIDifficultyProfile = DIFFICULTY_PROFILES[options["difficulty"]]
 	var track_scene: PackedScene = TRACK_SCENES[options["track"]]
@@ -60,19 +73,26 @@ func _run() -> void:
 	var failed: bool = false
 	for race_index: int in range(int(options["races"])):
 		var race_output: Dictionary = await _run_one_race(
-			int(options["laps"]), int(options["karts"]), race_index + 1, difficulty, track_scene,
+			int(options["laps"]), int(options["karts"]), race_index + 1,
+			difficulty, track_scene, bool(options["items"]),
 		)
 		race_outputs.append(race_output)
 		failed = failed or _race_failed(race_output, int(options["laps"]))
 	Engine.time_scale = 1.0
+	var summary: Dictionary = _summarize(race_outputs, int(options["laps"]))
+	var balance_evaluated: bool = should_evaluate_item_balance(options)
+	if balance_evaluated and not items_balance_pass(summary):
+		failed = true
 	var payload: Dictionary = {
 		"success": not failed,
 		"difficulty": String(options["difficulty"]),
 		"track": String(options["track"]),
 		"laps": int(options["laps"]),
 		"karts": int(options["karts"]),
+		"items": bool(options["items"]),
+		"balance_gate_evaluated": balance_evaluated,
 		"races": race_outputs,
-		"summary": _summarize(race_outputs, int(options["laps"])),
+		"summary": summary,
 	}
 	print(JSON.stringify(payload))
 	get_tree().quit(1 if failed else 0)
@@ -88,6 +108,7 @@ static func parse_options(args: PackedStringArray) -> Dictionary:
 		"races": DEFAULT_RACES,
 		"difficulty": DEFAULT_DIFFICULTY,
 		"track": DEFAULT_TRACK,
+		"items": DEFAULT_ITEMS_ENABLED,
 	}
 	var index: int = 0
 	while index < args.size():
@@ -108,6 +129,11 @@ static func parse_options(args: PackedStringArray) -> Dictionary:
 			"--track":
 				var track_name: StringName = StringName(raw_value)
 				options["track"] = track_name if TRACK_SCENES.has(track_name) else DEFAULT_TRACK
+			"--items":
+				if raw_value == "on":
+					options["items"] = true
+				elif raw_value == "off":
+					options["items"] = false
 		index += 2
 	return options
 
@@ -141,20 +167,66 @@ static func _race_failed(race_output: Dictionary, laps: int) -> bool:
 ## once per difficulty and the three summaries are compared).
 static func _summarize(race_outputs: Array[Dictionary], laps: int) -> Dictionary:
 	var lap_time_samples: Array[float] = []
+	var used_totals: Dictionary[String, int] = {}
+	var hit_totals: Dictionary[String, int] = {}
+	for item_id: String in ITEM_IDS:
+		used_totals[item_id] = 0
+		hit_totals[item_id] = 0
+	var rank_one_hit_total: int = 0
+	var rank_eight_gain_total: float = 0.0
 	for race_output: Dictionary in race_outputs:
 		for value: Variant in (race_output["times"] as Dictionary).values():
 			if float(value) >= 0.0:
 				lap_time_samples.append(float(value) / float(laps))
+		for item_id: String in ITEM_IDS:
+			used_totals[item_id] += int((race_output.get("items_used", {}) as Dictionary).get(item_id, 0))
+			hit_totals[item_id] += int((race_output.get("item_hits", {}) as Dictionary).get(item_id, 0))
+		rank_one_hit_total += int(race_output.get("rank_one_hits", 0))
+		rank_eight_gain_total += float(race_output.get("rank_eight_gain", 0.0))
 	var mean_lap_time: float = 0.0
 	if not lap_time_samples.is_empty():
 		var total: float = 0.0
 		for sample: float in lap_time_samples:
 			total += sample
 		mean_lap_time = total / float(lap_time_samples.size())
-	return {"mean_lap_time_seconds": mean_lap_time, "finisher_samples": lap_time_samples.size()}
+	var hit_rates: Dictionary[String, float] = {}
+	for item_id: String in ITEM_IDS:
+		var used: int = used_totals[item_id]
+		hit_rates[item_id] = float(hit_totals[item_id]) / float(used) if used > 0 else 0.0
+	var race_count: float = float(race_outputs.size())
+	return {
+		"mean_lap_time_seconds": mean_lap_time,
+		"finisher_samples": lap_time_samples.size(),
+		"items_used": used_totals,
+		"item_hits": hit_totals,
+		"hit_rate_by_item": hit_rates,
+		"average_rank_one_hits_per_race": float(rank_one_hit_total) / race_count if race_count > 0.0 else 0.0,
+		"mean_rank_eight_gain": rank_eight_gain_total / race_count if race_count > 0.0 else 0.0,
+	}
 
 
-func _run_one_race(laps: int, kart_count: int, race_number: int, difficulty: AIDifficultyProfile, track_scene: PackedScene) -> Dictionary:
+## Returns whether the exact Phase 7 balance thresholds are both met.
+static func items_balance_pass(summary: Dictionary) -> bool:
+	return (
+		float(summary.get("average_rank_one_hits_per_race", INF)) <= MAX_RANK_ONE_HITS_PER_RACE
+		and float(summary.get("mean_rank_eight_gain", -INF)) >= MIN_RANK_EIGHT_GAIN
+	)
+
+
+## Evaluates balance only for the specified 20-race, 8-kart, 3-lap sample.
+static func should_evaluate_item_balance(options: Dictionary) -> bool:
+	return (
+		bool(options.get("items", false))
+		and int(options.get("races", 0)) >= BALANCE_SAMPLE_RACES
+		and int(options.get("karts", 0)) == DEFAULT_KARTS
+		and int(options.get("laps", 0)) == DEFAULT_LAPS
+	)
+
+
+func _run_one_race(
+	laps: int, kart_count: int, race_number: int, difficulty: AIDifficultyProfile,
+	track_scene: PackedScene, items_enabled: bool,
+) -> Dictionary:
 	_reset_metrics()
 	var track_data: TrackData = TrackData.new()
 	track_data.id = &"sim_track"
@@ -166,16 +238,21 @@ func _run_one_race(laps: int, kart_count: int, race_number: int, difficulty: AID
 	config.player_kart = MEDIUM_KART
 	config.player_slot = -1
 	config.ai_difficulty = difficulty
+	config.items_enabled = items_enabled
 	config.seed = race_number # vary each race's AI rolls instead of repeating race 1
 	var manager: RaceManager = RACE_SCENE.instantiate() as RaceManager
 	manager.configure(config)
 	get_tree().root.add_child(manager)
+	_current_position_tracker = manager.get_node("PositionTracker") as PositionTracker
 	_register_shortcut_tracking(manager)
 	for kart: KartController in manager.get_karts():
 		var kart_name: String = String(kart.name)
 		_kart_names_by_id[kart.get_instance_id()] = kart_name
 		_respawns[kart_name] = 0
 		_wall_head_on_counts[kart_name] = 0
+		var physics: KartPhysics = kart.get_node("KartPhysics") as KartPhysics
+		physics.wall_head_on.connect(_on_wall_head_on.bind(kart))
+	var rank_eight_name: String = String(manager.get_karts().back().name) if kart_count >= DEFAULT_KARTS else ""
 
 	var max_ticks: int = roundi(
 		(float(laps) * MAX_SECONDS_PER_LAP + FLOW_MARGIN_SECONDS)
@@ -193,6 +270,8 @@ func _run_one_race(laps: int, kart_count: int, race_number: int, difficulty: AID
 	for entry: RaceResults.Entry in manager.get_results():
 		finish_order.append(entry.kart_name)
 		times[entry.kart_name] = entry.total_time_seconds
+	var rank_eight_finish: int = finish_order.find(rank_eight_name) + 1 if not rank_eight_name.is_empty() else 0
+	var rank_eight_gain: float = float(kart_count - rank_eight_finish) if rank_eight_finish > 0 else 0.0
 	var output: Dictionary = {
 		"race": race_number,
 		"finish_order": finish_order,
@@ -203,6 +282,10 @@ func _run_one_race(laps: int, kart_count: int, race_number: int, difficulty: AID
 		"drifts_started": _drift_started_count,
 		"tier3_releases": _tier3_release_count,
 		"shortcut_takes": _shortcut_take_count,
+		"items_used": _items_used.duplicate(),
+		"item_hits": _item_hits.duplicate(),
+		"rank_one_hits": _rank_one_hits,
+		"rank_eight_gain": rank_eight_gain,
 	}
 	manager.free()
 	return output
@@ -229,6 +312,10 @@ func _reset_metrics() -> void:
 	_drift_started_count = 0
 	_tier3_release_count = 0
 	_shortcut_take_count = 0
+	_items_used.clear()
+	_item_hits.clear()
+	_rank_one_hits = 0
+	_current_position_tracker = null
 
 
 func _on_kart_respawned(kart: Node) -> void:
@@ -237,14 +324,25 @@ func _on_kart_respawned(kart: Node) -> void:
 		_respawns[kart_name] = int(_respawns.get(kart_name, 0)) + 1
 
 
-func _on_kart_hit(kart: Node, hit_type: int) -> void:
-	if hit_type != HitReactor.HitType.BUMP:
-		return
+func _on_wall_head_on(kart: KartController) -> void:
 	var kart_name: String = String(_kart_names_by_id.get(kart.get_instance_id(), ""))
 	if kart_name.is_empty():
 		return
 	_wall_head_on_counts[kart_name] = int(_wall_head_on_counts.get(kart_name, 0)) + 1
 	_wall_head_on_count += 1
+
+
+func _on_item_used(_kart: Node, item_id: StringName) -> void:
+	var key: String = String(item_id)
+	_items_used[key] = int(_items_used.get(key, 0)) + 1
+
+
+func _on_item_hit(_source_kart: Node, target_kart: Node, item_id: StringName) -> void:
+	var key: String = String(item_id)
+	_item_hits[key] = int(_item_hits.get(key, 0)) + 1
+	if _current_position_tracker != null and target_kart is KartController:
+		if _current_position_tracker.get_position(target_kart as KartController) == 1:
+			_rank_one_hits += 1
 
 
 func _on_drift_started(_kart: Node, _direction: int) -> void:

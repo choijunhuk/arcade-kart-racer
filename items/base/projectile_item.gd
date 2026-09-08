@@ -72,6 +72,11 @@ func is_projectile() -> bool:
 	return true
 
 
+## Returns current reflected travel direction for AI threat sensing.
+func get_travel_direction() -> Vector3:
+	return direction
+
+
 func _kart_from_collider(collider: Object) -> KartController:
 	if collider is KartController:
 		return collider as KartController

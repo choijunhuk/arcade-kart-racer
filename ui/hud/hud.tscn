@@ -61,3 +61,71 @@ horizontal_alignment = 1
 
 [node name="DriftMeter" parent="." instance=ExtResource("2_drift")]
 
+[node name="ItemPanel" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -188.0
+offset_top = 24.0
+offset_right = -24.0
+offset_bottom = 154.0
+grow_horizontal = 0
+
+[node name="Background" type="ColorRect" parent="ItemPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.03, 0.06, 0.1, 0.78)
+
+[node name="Icon" type="TextureRect" parent="ItemPanel"]
+layout_mode = 0
+offset_left = 50.0
+offset_top = 8.0
+offset_right = 114.0
+offset_bottom = 72.0
+expand_mode = 1
+stretch_mode = 5
+pivot_offset = Vector2(32, 32)
+
+[node name="ItemName" type="Label" parent="ItemPanel"]
+layout_mode = 0
+offset_top = 78.0
+offset_right = 164.0
+offset_bottom = 104.0
+text = "EMPTY"
+horizontal_alignment = 1
+
+[node name="RouletteLabel" type="Label" parent="ItemPanel"]
+layout_mode = 0
+offset_top = 104.0
+offset_right = 164.0
+offset_bottom = 128.0
+theme_override_colors/font_color = Color(1, 0.82, 0.2, 1)
+horizontal_alignment = 1
+
+[node name="ThreatWarning" type="Label" parent="."]
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 24.0
+offset_bottom = 78.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0.55, 0.8, 1, 1)
+theme_override_font_sizes/font_size = 32
+text = "STORM BEACON INCOMING"
+horizontal_alignment = 1
+
+[node name="ShieldTimer" type="TextureProgressBar" parent="."]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -204.0
+offset_top = 8.0
+offset_right = -8.0
+offset_bottom = 170.0
+grow_horizontal = 0
+value = 100.0
+fill_mode = 4

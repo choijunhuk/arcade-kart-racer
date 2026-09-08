@@ -108,6 +108,13 @@ func clear_pending_boost_spec() -> void:
 	_pending_boost_spec = null
 
 
+## Cancels hop/hold immediately without granting a mini-turbo reward.
+func cancel() -> void:
+	if _state == DriftState.HOP or _state == DriftState.HOLD:
+		_pending_boost_spec = null
+		_end_without_reward()
+
+
 ## Returns normalized charge toward the final configured tier.
 func get_charge_ratio() -> float:
 	if _tuning == null or _tuning.mini_turbo_tiers.is_empty():
