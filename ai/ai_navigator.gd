@@ -44,13 +44,18 @@ var _active_shortcut: TrackShortcut
 var _shortcut_decision_made_for: TrackShortcut
 var _shortcut_decision: bool = false
 var _last_curvature_ahead: float = 0.0
+var _item_slot: ItemSlot
 
 
-func _init(racing_line: RacingLine, base_lane_offset: float, item_boxes: Array[Node3D], shortcuts: Array[TrackShortcut]) -> void:
+func _init(
+	racing_line: RacingLine, base_lane_offset: float, item_boxes: Array[Node3D],
+	shortcuts: Array[TrackShortcut], item_slot: ItemSlot = null,
+) -> void:
 	_racing_line = racing_line
 	_base_lane_offset = base_lane_offset
 	_item_boxes = item_boxes
 	_shortcuts = shortcuts
+	_item_slot = item_slot
 
 
 ## Clamp-and-scale look-ahead distance from current speed (spec §13.3).
@@ -64,6 +69,11 @@ static func decide_shortcut(take_prob: float, kart_speed: float, required_speed:
 	if kart_speed < required_speed:
 		return false
 	return rng.randf() < take_prob
+
+
+## Pure item-box seek gate: only empty slots on gentle track seek boxes.
+static func should_seek_item(has_item: bool, curvature_ahead: float, box_count: int) -> bool:
+	return not has_item and absf(curvature_ahead) <= ITEM_SEEK_CURVATURE_MAX and box_count > 0
 
 
 ## Returns the curvature-ahead estimate from the most recent `compute()` call
@@ -145,7 +155,8 @@ func _sample_shortcut_ahead(kart_pos: Vector3) -> Vector3:
 
 
 func _compute_item_seek_bias(kart_pos: Vector3, offset: float, curvature_ahead: float) -> float:
-	if absf(curvature_ahead) > ITEM_SEEK_CURVATURE_MAX or _item_boxes.is_empty():
+	var occupied: bool = _item_slot != null and (_item_slot.has_item() or _item_slot.roulette_active)
+	if not should_seek_item(occupied, curvature_ahead, _item_boxes.size()):
 		return 0.0
 	var nearest: Node3D = null
 	var nearest_dist: float = ITEM_SEEK_RANGE
@@ -158,6 +169,5 @@ func _compute_item_seek_bias(kart_pos: Vector3, offset: float, curvature_ahead: 
 			nearest = box
 	if nearest == null:
 		return 0.0
-	# TODO(phase-7): gate this on ItemSlot.has_item() being false once ItemSlot exists.
 	var right: Vector3 = _racing_line.right_at(offset)
 	return clampf((nearest.global_position - kart_pos).dot(right), -1.0, 1.0)

@@ -1,0 +1,19 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://items/instances/nitro_can/nitro_can.gd" id="1_script"]
+
+[sub_resource type="StandardMaterial3D" id="Material"]
+albedo_color = Color(0.08, 0.8, 1, 1)
+metallic = 0.4
+
+[sub_resource type="CylinderMesh" id="Mesh"]
+material = SubResource("Material")
+top_radius = 0.38
+bottom_radius = 0.38
+height = 1.1
+
+[node name="NitroCan" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="Mesh" type="MeshInstance3D" parent="."]
+mesh = SubResource("Mesh")

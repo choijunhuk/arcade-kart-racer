@@ -1,0 +1,23 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://effects/impact_effect.gd" id="1_script"]
+
+[sub_resource type="StandardMaterial3D" id="Material"]
+transparency = 1
+albedo_color = Color(1, 0.82, 0.2, 0.72)
+emission_enabled = true
+emission = Color(1, 0.2, 0.03, 1)
+emission_energy_multiplier = 2.0
+
+[sub_resource type="SphereMesh" id="Mesh"]
+material = SubResource("Material")
+radius = 0.55
+height = 1.1
+radial_segments = 8
+rings = 4
+
+[node name="ImpactEffect" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="Burst" type="MeshInstance3D" parent="."]
+mesh = SubResource("Mesh")

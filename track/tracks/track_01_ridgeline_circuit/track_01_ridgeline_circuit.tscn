@@ -182,8 +182,8 @@ terrain = ExtResource("8_dirt")
 [node name="KillZones" type="Node3D" parent="."]
 
 [node name="FallPlane" parent="KillZones" instance=ExtResource("9_kill")]
-position = Vector3(-340, -6, 0)
-scale = Vector3(760, 1, 90)
+position = Vector3(-340, -105.5, 0)
+scale = Vector3(760, 200, 90)
 
 [node name="MovingObstacles" type="Node3D" parent="."]
 

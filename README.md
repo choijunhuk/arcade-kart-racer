@@ -5,17 +5,21 @@ Mario Kart에서 *시스템과 플레이 감각*만 영감을 받은 **완전 �
 
 ## 이 레포의 현재 상태
 
-**Phase 6 — AI 레이서 완료.**
+**Phase 7 — 아이템 시스템 완료.**
 
 현재 메인 씬은 "Press Enter / Start to race" 플레이스홀더 메뉴다. 시작하면
 Track01 Ridgeline Circuit, 3랩, 8카트, medium 카트의 실제 레이스가 열리며
 3-2-1-GO/스타트 부스트, 랩·순위·리스폰·카트 충돌, FINISHING 타임아웃,
 결과/재시작/메뉴, 일시정지, 임시 HUD(순위/랩/WRONG WAY/FINAL LAP/FINISH/
-기존 드리프트 미터)가 연결된다. 상대 카트 7대는 이제 `ai/`의
+기존 드리프트 미터)가 연결된다. 상대 카트 7대는 `ai/`의
 Sensors→Navigator→Driver→ItemBrain 파이프라인으로 레이싱라인을 이해하고
-코너·추월·회피·지름길·드리프트를 스스로 판단하는 실제 AI다(난이도는
-`RaceConfig.ai_difficulty`, 기본 normal). 아이템 효과는 여전히 Phase 7
-범위이며 `AIItemBrain`은 규칙 골격만 갖춰 항상 사용하지 않는다.
+코너·추월·회피·지름길·드리프트·아이템 사용을 스스로 판단하는 실제 AI다
+(난이도는 `RaceConfig.ai_difficulty`, 기본 normal). 트랙의 아이템박스를
+통과하면 순위 기반 룰렛(`items/item_table.gd`)으로 7종 아이템 중 하나가
+결정되고, `items/item_manager.gd`가 풀링된 아이템 인스턴스의 생성·틱·회수를
+전담한다(발사체/유도/트랩/부스트/실드/범위/리더 견제 7개 카테고리 —
+`ARCHITECTURE.md`의 Items pipeline 참고). 아이템 on/off는
+`RaceConfig.items_enabled`/`tools/run_sim.sh --items on|off`로 전환한다.
 
 - [`KART_RACING_DEV_PROMPT.md`](KART_RACING_DEV_PROMPT.md) — 개발 프롬프트 전체 (아키텍처, 물리, 드리프트, 아이템, AI, Phase 0~15, DoD, 작업 규칙)
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — 실제 경로와 시스템 경계
@@ -42,13 +46,15 @@ Enter/A로 이동·선택한다. 샌드박스 전용: `R` 리셋, `T` 트랙 순
 (평지→언덕→헤어핀→Track01), `4` 헤어핀 트랙 바로
 선택, `5` Track01(Ridgeline Circuit) 바로 선택, `1`/`2`/`3`
 light/medium/heavy 전환, `B` 충돌용 더미 카트 3대 생성, `A` 현재 트랙에
-normal 난이도 AI 카트 7대(`AiKart1`..`AiKart7`) 생성 — 트랙을 바꾸면
-AIController가 들고 있던 이전 트랙의 RacingLine/지름길 참조가 무효화되므로
+normal 난이도 AI 카트 7대(`AiKart1`..`AiKart7`) 생성, `I` 플레이어 카트에
+7종 아이템을 순환 지급(룰렛 없이 즉시) — 트랙을 바꾸면 AIController가
+들고 있던 이전 트랙의 RacingLine/지름길/아이템박스 참조가 무효화되므로
 자동으로 정리된다. F3으로 terrain/slipstream/hit/invulnerable/air_time,
 drift_state/drift_charge/drift_tier/boost/trick_armed,
 lap/next_checkpoint/progress/wrong_way에 더해 AI 카트 1의
 ai_target_speed/ai_rubber_band/ai_lane_offset(§13.7 고무줄 배율이 "보이지
-않는 치트"가 되지 않도록 항상 노출)을 본다.
+않는 치트"가 되지 않도록 항상 노출)과 `slot_item`/`roulette`/
+`active_projectiles`/`shield`를 본다.
 
 ## 검증
 
@@ -75,18 +81,28 @@ HOME=$PWD/.tmp-home tools/run_sim.sh --races 3 --difficulty hard
 
 # 다른 트랙/랩수/카트수 조합, 빠른 반복용
 HOME=$PWD/.tmp-home tools/run_sim.sh --laps 1 --karts 4 --races 1 --track test_hairpin
+
+# §12.4 아이템 밸런스 게이트: 20레이스, normal, 8카트, 3랩
+HOME=$PWD/.tmp-home tools/run_sim.sh --races 20 --difficulty normal --karts 8 --laps 3
+
+# 아이템 없이 비교(레이스 흐름/AI 판단만 검증)
+HOME=$PWD/.tmp-home tools/run_sim.sh --races 3 --items off
 ```
 
 인자: `--races N`(기본 1), `--difficulty easy|normal|hard`(기본 normal,
 모든 카트에 동일 적용), `--laps N`(기본 3), `--karts N`(기본 8, 최대 8),
 `--track track_01|test_hairpin|test_loop|test_loop_hills`(기본 track_01,
-모르는 이름은 track_01로 대체). 카트 전원이 AI이며(`RaceConfig.player_slot
-= -1`) 사람 플레이어는 없다. 한 카트라도 미완주, 리스폰 2회 초과, 또는
-전체 벽 정면충돌이 `3 * laps`를 넘으면 exit 1. 매 레이스마다 `--races`
+모르는 이름은 track_01로 대체), `--items on|off`(기본 on). 카트 전원이
+AI이며(`RaceConfig.player_slot = -1`) 사람 플레이어는 없다. 한 카트라도
+미완주, 리스폰 2회 초과, 또는 전체 벽 정면충돌이 `3 * laps`를 넘으면
+exit 1; `--races 20 --difficulty normal`(기본 카트/랩 수) 조합은 추가로
+아이템 밸런스 게이트(레이스당 평균 랭크1위 피격 ≤3, 랭크8위 카트의 평균
+랭크 상승 ≥1.5)도 통과해야 한다. 매 레이스마다 `--races`
 반복 시 `RaceConfig.seed`를 레이스 번호로 바꿔 동일 레이스를 반복하지
 않는다. 출력 JSON의 `races[].{drifts_started,tier3_releases,
-shortcut_takes,wall_head_on_count,respawns,times}`와 `summary.
-mean_lap_time_seconds`(완주자 전원의 `총시간/laps` 평균)를 확인한다;
+shortcut_takes,wall_head_on_count,respawns,times,items_used,item_hits,
+rank_one_hits,rank_eight_gain}`와 `summary.mean_lap_time_seconds`(완주자
+전원의 `총시간/laps` 평균)를 확인한다;
 `run_sim.sh`는 마지막 줄에 `summary: ...`로도 따로 찍는다.
 
 `HOME=$PWD/.tmp-home`은 제한된 샌드박스에서만 필요하다. 일반 로컬

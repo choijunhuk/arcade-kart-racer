@@ -8,6 +8,8 @@ class ImpulseResult extends RefCounted:
 	var delta_velocity_a: Vector3 = Vector3.ZERO
 	var delta_velocity_b: Vector3 = Vector3.ZERO
 
+const SHIELD_CONTACT_PUSH_SPEED: float = 1.5
+
 
 @export var tuning: PhysicsTuning = preload("res://data/tuning/physics_default.tres")
 
@@ -99,7 +101,15 @@ func _resolve_pair(kart_a: KartController, kart_b: KartController) -> void:
 		result.delta_velocity_b -= rear_push_b * (kart_a.get_mass() / maxf(kart_b.get_mass(), 0.001))
 	kart_a.apply_impulse_arcade(result.delta_velocity_a, yaw_a)
 	kart_b.apply_impulse_arcade(result.delta_velocity_b, yaw_b)
+	_apply_shield_contact_push(kart_a, kart_b, normal)
 	_apply_separation(kart_a, kart_b, normal)
+
+
+func _apply_shield_contact_push(kart_a: KartController, kart_b: KartController, normal: Vector3) -> void:
+	if kart_a.has_shield():
+		kart_b.apply_impulse_arcade(normal * SHIELD_CONTACT_PUSH_SPEED, 0.0)
+	if kart_b.has_shield():
+		kart_a.apply_impulse_arcade(-normal * SHIELD_CONTACT_PUSH_SPEED, 0.0)
 
 
 func _apply_separation(kart_a: KartController, kart_b: KartController, normal: Vector3) -> void:

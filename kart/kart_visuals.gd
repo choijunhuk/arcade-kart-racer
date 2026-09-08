@@ -6,11 +6,13 @@ extends Node3D
 ## physics state (spec §17, coding rule 6: `_process` is presentation only).
 
 const WHEEL_RADIUS: float = 0.28
+const HIT_FLASH_SEGMENT_SECONDS: float = 0.1
+const HIT_FLASH_SEGMENTS: int = 4
 
 @export var feel_tuning: FeelTuning = preload("res://data/tuning/feel_default.tres")
 
 @onready var _controller: KartController = get_parent() as KartController
-@onready var _body_mesh: Node3D = $Body
+@onready var _body_mesh: MeshInstance3D = $Body
 @onready var _wheel_fl: Node3D = $WheelFL
 @onready var _wheel_fr: Node3D = $WheelFR
 @onready var _wheel_rl: Node3D = $WheelRL
@@ -24,13 +26,29 @@ var _base_local_y: float = 0.0
 var _previous_speed: float = 0.0
 var _drift_yaw: float = 0.0
 var _trick_spin: float = 0.0
+var _body_material: StandardMaterial3D
+var _body_albedo: Color = Color.WHITE
+var _flash_segments_remaining: int = 0
+var _flash_segment_remaining: float = 0.0
 
 
 func _ready() -> void:
 	_base_local_y = position.y
+	var source_material: Material = _body_mesh.get_active_material(0)
+	if source_material is StandardMaterial3D:
+		_body_material = source_material.duplicate() as StandardMaterial3D
+		_body_albedo = _body_material.albedo_color
+		_body_mesh.material_override = _body_material
+	if not EventBus.kart_hit.is_connected(_on_kart_hit):
+		EventBus.kart_hit.connect(_on_kart_hit)
 	# Note: KartController's @onready fields are not initialized yet here
 	# (children ready before their parent), so _previous_speed starts at 0
 	# and self-corrects on the first _process() call.
+
+
+func _exit_tree() -> void:
+	if EventBus.kart_hit.is_connected(_on_kart_hit):
+		EventBus.kart_hit.disconnect(_on_kart_hit)
 
 
 func _process(delta: float) -> void:
@@ -41,6 +59,7 @@ func _process(delta: float) -> void:
 	_update_wheels(delta, lateral_estimate)
 	_update_suspension_bob(delta)
 	_update_hit_visual(delta)
+	_update_hit_flash(delta)
 	_update_trick_visual(delta)
 	_previous_speed = _controller.get_speed()
 
@@ -117,3 +136,22 @@ func _update_trick_visual(delta: float) -> void:
 	else:
 		_trick_spin = lerpf(_trick_spin, 0.0, clampf(feel_tuning.feedback_lerp_speed * delta, 0.0, 1.0))
 	rotation.y = _trick_spin
+
+
+func _on_kart_hit(kart: Node, _hit_type: int) -> void:
+	if kart != _controller:
+		return
+	_flash_segments_remaining = HIT_FLASH_SEGMENTS
+	_flash_segment_remaining = HIT_FLASH_SEGMENT_SECONDS
+
+
+func _update_hit_flash(delta: float) -> void:
+	if _body_material == null or _flash_segments_remaining <= 0:
+		return
+	_flash_segment_remaining -= delta
+	if _flash_segment_remaining <= 0.0:
+		_flash_segments_remaining -= 1
+		_flash_segment_remaining += HIT_FLASH_SEGMENT_SECONDS
+	_body_material.albedo_color = Color.WHITE if _flash_segments_remaining % 2 == 0 else _body_albedo
+	if _flash_segments_remaining <= 0:
+		_body_material.albedo_color = _body_albedo

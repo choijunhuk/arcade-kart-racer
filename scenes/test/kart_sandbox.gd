@@ -8,6 +8,7 @@ const RESET_KEY: Key = KEY_R
 const TRACK_KEY: Key = KEY_T
 const DUMMY_KEY: Key = KEY_B
 const AI_KEY: Key = KEY_A
+const ITEM_KEY: Key = KEY_I
 const DUMMY_COUNT: int = 3
 const DUMMY_START_DISTANCE: float = 4.0
 const DUMMY_SPACING: float = 3.0
@@ -27,6 +28,16 @@ const KART_DATA: Array[KartData] = [
 	preload("res://data/karts/medium.tres"),
 	preload("res://data/karts/heavy.tres"),
 ]
+const SANDBOX_ITEMS: Array[ItemData] = [
+	preload("res://data/items/rocket_dart.tres"),
+	preload("res://data/items/hunter_drone.tres"),
+	preload("res://data/items/spike_mine.tres"),
+	preload("res://data/items/nitro_can.tres"),
+	preload("res://data/items/aegis_bubble.tres"),
+	preload("res://data/items/pulse_blast.tres"),
+	preload("res://data/items/storm_beacon.tres"),
+]
+const SANDBOX_ITEM_SEED: int = 707
 
 @onready var _kart: KartController = $Kart
 @onready var _camera: RaceCamera = $RaceCamera
@@ -34,6 +45,7 @@ const KART_DATA: Array[KartData] = [
 @onready var _respawn_system: RespawnSystem = $RespawnSystem
 @onready var _lap_tracker: LapTracker = $LapTracker
 @onready var _position_tracker: PositionTracker = $PositionTracker
+@onready var _item_manager: ItemManager = $ItemManager
 @onready var _lap_label: Label = $HUD/LapLabel
 
 const WATCH_NAMES: Array[StringName] = [
@@ -42,6 +54,7 @@ const WATCH_NAMES: Array[StringName] = [
 	&"drift_state", &"drift_charge", &"drift_tier", &"boost", &"trick_armed",
 	&"lap", &"next_checkpoint", &"progress", &"wrong_way",
 	&"ai_target_speed", &"ai_rubber_band", &"ai_lane_offset",
+	&"slot_item", &"roulette", &"active_projectiles", &"shield",
 ]
 const SLIDER_NAMES: Array[StringName] = [
 	&"max_speed", &"acceleration", &"base_turn_rate", &"grip", &"drag", &"brake_force", &"gravity", &"hover_height",
@@ -54,6 +67,7 @@ var _dummy_karts: Array[KartController] = []
 var _ai_karts: Array[KartController] = []
 var _ai_controllers: Array[AIController] = []
 var _ai_context: AIRaceContext
+var _sandbox_item_index: int = 0
 
 
 func _ready() -> void:
@@ -64,6 +78,8 @@ func _ready() -> void:
 	_configure_respawn_for_kart(_kart)
 	_register_track_kill_zones()
 	_setup_progress_for_track()
+	_item_manager.setup(_position_tracker, _track.get_racing_line(), _collision_resolver, SANDBOX_ITEM_SEED)
+	_item_manager.register_kart(_kart)
 	_register_kart_progress(_kart)
 	_register_track_item_boxes()
 	_reset_to_grid()
@@ -98,6 +114,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				_spawn_dummy_karts()
 			AI_KEY:
 				_spawn_ai_karts()
+			ITEM_KEY:
+				_give_next_sandbox_item()
 			KEY_1:
 				_swap_kart_data(0)
 			KEY_2:
@@ -134,6 +152,7 @@ func _select_track(index: int) -> void:
 	move_child(_track, 0)
 	_register_track_kill_zones()
 	_setup_progress_for_track()
+	_item_manager.setup(_position_tracker, _track.get_racing_line(), _collision_resolver, SANDBOX_ITEM_SEED + _track_index)
 	_register_kart_progress(_kart)
 	for dummy: KartController in _dummy_karts:
 		_register_kart_progress(dummy)
@@ -168,6 +187,7 @@ func _spawn_dummy_karts() -> void:
 			dummy.global_position += right * DUMMY_LATERAL_OFFSET
 		_dummy_karts.append(dummy)
 		_collision_resolver.register_kart(dummy)
+		_item_manager.register_kart(dummy)
 		_register_kart_progress(dummy)
 		_configure_respawn_for_kart(dummy)
 
@@ -176,6 +196,7 @@ func _clear_dummy_karts() -> void:
 	for dummy: KartController in _dummy_karts:
 		_collision_resolver.unregister_kart(dummy)
 		_respawn_system.unregister_kart(dummy)
+		_item_manager.unregister_kart(dummy)
 		remove_child(dummy)
 		dummy.queue_free()
 	_dummy_karts.clear()
@@ -189,6 +210,7 @@ func _spawn_ai_karts() -> void:
 	_ai_context.racing_line = _track.get_racing_line()
 	_ai_context.track = _track
 	_ai_context.position_tracker = _position_tracker
+	_ai_context.item_manager = _item_manager
 	_ai_context.player_kart = _kart
 	var grid: Array[Transform3D] = _track.get_start_grid()
 	var race_rng: RandomNumberGenerator = RandomNumberGenerator.new()
@@ -208,6 +230,7 @@ func _spawn_ai_karts() -> void:
 		_ai_karts.append(ai_kart)
 		_ai_controllers.append(controller)
 		_collision_resolver.register_kart(ai_kart)
+		_item_manager.register_kart(ai_kart)
 		_register_kart_progress(ai_kart)
 		_configure_respawn_for_kart(ai_kart)
 
@@ -216,6 +239,7 @@ func _clear_ai_karts() -> void:
 	for ai_kart: KartController in _ai_karts:
 		_collision_resolver.unregister_kart(ai_kart)
 		_respawn_system.unregister_kart(ai_kart)
+		_item_manager.unregister_kart(ai_kart)
 		remove_child(ai_kart)
 		ai_kart.queue_free()
 	_ai_karts.clear()
@@ -258,18 +282,20 @@ func _register_kart_progress(kart: KartController) -> void:
 	_position_tracker.register_kart(kart)
 
 
-## Item effects are Phase 7 scope; this phase only relays the pickup signal.
+## Connects every track pickup to the race-local item manager.
 func _register_track_item_boxes() -> void:
 	var container: Node = _track.get_node_or_null("ItemBoxes")
 	if container == null:
 		return
 	for child: Node in container.get_children():
-		if child is ItemBox and not (child as ItemBox).collected.is_connected(_on_item_box_collected):
-			(child as ItemBox).collected.connect(_on_item_box_collected)
+		if child is ItemBox:
+			_item_manager.register_item_box(child as ItemBox)
 
 
-func _on_item_box_collected(_body: Node3D) -> void:
-	print("item box collected")
+func _give_next_sandbox_item() -> void:
+	_kart.item_slot.clear_item()
+	_item_manager.give_item(_kart, SANDBOX_ITEMS[_sandbox_item_index])
+	_sandbox_item_index = (_sandbox_item_index + 1) % SANDBOX_ITEMS.size()
 
 
 func _register_debug_overlay() -> void:
@@ -297,6 +323,10 @@ func _register_debug_overlay() -> void:
 	DebugOverlay.watch(&"ai_target_speed", func() -> String: return "%.1f" % _ai_controllers[0].get_target_speed() if not _ai_controllers.is_empty() else "-")
 	DebugOverlay.watch(&"ai_rubber_band", func() -> String: return "%.3f" % _ai_controllers[0].get_rubber_band_mult() if not _ai_controllers.is_empty() else "-")
 	DebugOverlay.watch(&"ai_lane_offset", func() -> String: return "%.2f" % _ai_controllers[0].get_lane_offset() if not _ai_controllers.is_empty() else "-")
+	DebugOverlay.watch(&"slot_item", func() -> StringName: return _kart.item_slot.get_item_id())
+	DebugOverlay.watch(&"roulette", func() -> bool: return _kart.item_slot.roulette_active)
+	DebugOverlay.watch(&"active_projectiles", func() -> int: return _item_manager.get_active_projectile_count())
+	DebugOverlay.watch(&"shield", func() -> String: return "%.2f" % _kart.get_shield_remaining())
 
 	DebugOverlay.add_slider(&"max_speed", 5.0, 60.0,
 		func() -> float: return _kart.kart_data.max_speed,

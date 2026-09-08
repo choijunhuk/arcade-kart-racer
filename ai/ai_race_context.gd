@@ -11,6 +11,8 @@ var racing_line: RacingLine
 var track: TrackRoot
 ## Progress/ranking source for rubber banding and the AIItemBrain rank rule.
 var position_tracker: PositionTracker
+## Race-local item registry used by sensors and the real slot view.
+var item_manager: ItemManager
 ## Null when there is no human participant (spec §13.7: gap is 0 without one).
 var player_kart: KartController
 ## `(KartController) -> void`; forwards to RespawnSystem.request_respawn().

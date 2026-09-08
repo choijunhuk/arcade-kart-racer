@@ -19,6 +19,8 @@ const PROBE_SHAPE_SIZE: Vector3 = Vector3(0.8, 0.6, 0.6)
 const PROBE_HEIGHT: float = 0.5
 ## World (layer 1) | kart_body (layer 2) — spec §13.2's "레이어 마스크 1|2".
 const CAST_MASK: int = 0b11
+const PROJECTILE_SENSE_RANGE: float = 14.0
+const PROJECTILE_APPROACH_DOT: float = 0.35
 
 enum Side { LEFT = -1, CENTER = 0, RIGHT = 1 }
 
@@ -30,8 +32,7 @@ class SensorReport extends RefCounted:
 	var obstacle_distance: Dictionary[int, float] = {}
 	var rear_kart_distance: float = INF
 	var rear_kart_relative_speed: float = 0.0
-	## TODO(phase-7): populate from `ItemManager.active_projectiles`; the
-	## autoload does not exist yet, so this always reports no threat.
+	## Populated from `ItemManager.active_projectiles` (spec §13.5/§26).
 	var incoming_projectile: bool = false
 
 	func side_clear(side: int) -> bool:
@@ -41,11 +42,13 @@ class SensorReport extends RefCounted:
 var _owner_kart: KartController
 var _forward_casts: Dictionary[int, ShapeCast3D] = {}
 var _rear_cast: ShapeCast3D
+var _item_manager: ItemManager
 
 
 ## Builds the four probes as children and excludes `kart` from every cast.
-func setup(kart: KartController) -> void:
+func setup(kart: KartController, item_manager: ItemManager = null) -> void:
 	_owner_kart = kart
+	_item_manager = item_manager
 	_forward_casts[Side.LEFT] = _make_cast(Vector3(-LANE_PROBE_OFFSET, PROBE_HEIGHT, 0.0), Vector3(0.0, 0.0, -FORWARD_RANGE))
 	_forward_casts[Side.CENTER] = _make_cast(Vector3(0.0, PROBE_HEIGHT, 0.0), Vector3(0.0, 0.0, -FORWARD_RANGE))
 	_forward_casts[Side.RIGHT] = _make_cast(Vector3(LANE_PROBE_OFFSET, PROBE_HEIGHT, 0.0), Vector3(0.0, 0.0, -FORWARD_RANGE))
@@ -88,13 +91,31 @@ func _scan_rear(cast: ShapeCast3D, report: SensorReport) -> void:
 				report.rear_kart_relative_speed = (collider as KartController).get_speed() - _owner_kart.get_speed()
 
 
-## TODO(phase-7): read `ItemManager.active_projectiles` once items exist. The
-## autoload is not registered yet, so this is a structural stub only.
-func _sense_projectile() -> bool:
-	if not is_inside_tree():
+## Returns whether a projectile lies ahead, in range, and moves toward owner.
+static func projectile_is_approaching(
+	owner_position: Vector3, owner_forward: Vector3, projectile_position: Vector3,
+	projectile_direction: Vector3, sense_range: float,
+) -> bool:
+	var owner_to_projectile: Vector3 = projectile_position - owner_position
+	if owner_to_projectile.length() > sense_range or owner_to_projectile.dot(owner_forward) <= 0.0:
 		return false
-	var manager: Node = get_tree().root.get_node_or_null("ItemManager")
-	return manager != null and manager.has_method("get_active_projectiles")
+	var projectile_to_owner: Vector3 = -owner_to_projectile.normalized()
+	return projectile_direction.normalized().dot(projectile_to_owner) >= PROJECTILE_APPROACH_DOT
+
+
+## Reads the injected race-local active projectile registry once per AI tick.
+func _sense_projectile() -> bool:
+	if _item_manager == null or _owner_kart == null:
+		return false
+	for projectile: ItemBase in _item_manager.get_active_projectiles():
+		if projectile.owner_kart == _owner_kart or not is_instance_valid(projectile):
+			continue
+		if projectile_is_approaching(
+			_owner_kart.global_position, _owner_kart.get_forward(), projectile.global_position,
+			projectile.get_travel_direction(), PROJECTILE_SENSE_RANGE,
+		):
+			return true
+	return false
 
 
 func _make_cast(local_position: Vector3, target: Vector3) -> ShapeCast3D:

@@ -1,4 +1,4 @@
-[gd_scene load_steps=24 format=3]
+[gd_scene load_steps=25 format=3]
 
 [ext_resource type="Script" path="res://kart/kart_controller.gd" id="1_controller"]
 [ext_resource type="Script" path="res://kart/kart_physics.gd" id="2_physics"]
@@ -10,6 +10,7 @@
 [ext_resource type="Script" path="res://kart/boost_controller.gd" id="8_boost"]
 [ext_resource type="PackedScene" path="res://effects/drift_effects.tscn" id="9_drift_fx"]
 [ext_resource type="PackedScene" path="res://effects/boost_effects.tscn" id="10_boost_fx"]
+[ext_resource type="Script" path="res://kart/item_slot.gd" id="11_item_slot"]
 
 [sub_resource type="BoxShape3D" id="Shape_body"]
 size = Vector3(1.6, 0.6, 2.2)
@@ -122,6 +123,9 @@ script = ExtResource("7_drift")
 
 [node name="BoostController" type="Node" parent="."]
 script = ExtResource("8_boost")
+
+[node name="ItemSlot" type="Node" parent="."]
+script = ExtResource("11_item_slot")
 
 [node name="DriftEffects" parent="." instance=ExtResource("9_drift_fx")]
 
