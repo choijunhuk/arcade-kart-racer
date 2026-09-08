@@ -32,8 +32,7 @@ class SensorReport extends RefCounted:
 	var obstacle_distance: Dictionary[int, float] = {}
 	var rear_kart_distance: float = INF
 	var rear_kart_relative_speed: float = 0.0
-	## TODO(phase-7): populate from `ItemManager.active_projectiles`; the
-	## autoload does not exist yet, so this always reports no threat.
+	## Populated from `ItemManager.active_projectiles` (spec §13.5/§26).
 	var incoming_projectile: bool = false
 
 	func side_clear(side: int) -> bool:
