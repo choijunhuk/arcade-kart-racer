@@ -1,15 +1,16 @@
 class_name ItemSlotView
 extends RefCounted
 
-## Read-only view of a kart's item slot handed to `AIItemBrain`. This is the
-## null implementation: it always reports "no item", so Phase 6 AI can never
-## actually try to use an item that does not exist yet. Phase 7's real
-## `ItemSlot` should expose the same shape so `AIItemBrain` needs no changes.
-## TODO(phase-7): replace call sites with a real ItemSlot-backed view.
+## Read-only value API consumed by AIItemBrain. The base remains a safe empty
+## view; Phase 7 binds one persistent view to each concrete ItemSlot node.
 
 func has_item() -> bool:
 	return false
 
 
-func get_category() -> StringName:
+func get_category() -> ItemData.ItemCategory:
+	return ItemData.ItemCategory.PROJECTILE
+
+
+func get_item_id() -> StringName:
 	return &""
