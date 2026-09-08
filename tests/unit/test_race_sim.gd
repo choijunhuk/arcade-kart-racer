@@ -65,7 +65,7 @@ func test_race_fails_when_any_kart_never_finishes() -> void:
 	var script: GDScript = _load_sim_script()
 	if script == null:
 		return
-	var race_output: Dictionary = {"times": {"Kart1": 60.0, "Kart2": -1.0}, "respawns": {"Kart1": 0, "Kart2": 0}, "wall_head_on_count": 0}
+	var race_output: Dictionary = {"times": {"Kart1": 60.0, "Kart2": -1.0}, "respawns": {"Kart1": 0, "Kart2": 0}, "wall_head_on_counts": {"Kart1": 0, "Kart2": 0}, "wall_head_on_count": 0}
 	assert_true(bool(script.call("_race_failed", race_output, 3)))
 
 
@@ -73,7 +73,7 @@ func test_race_fails_when_a_kart_respawns_more_than_twice() -> void:
 	var script: GDScript = _load_sim_script()
 	if script == null:
 		return
-	var race_output: Dictionary = {"times": {"Kart1": 60.0}, "respawns": {"Kart1": 3}, "wall_head_on_count": 0}
+	var race_output: Dictionary = {"times": {"Kart1": 60.0}, "respawns": {"Kart1": 3}, "wall_head_on_counts": {"Kart1": 0}, "wall_head_on_count": 0}
 	assert_true(bool(script.call("_race_failed", race_output, 3)))
 
 
@@ -81,7 +81,7 @@ func test_race_fails_when_wall_head_ons_exceed_the_per_lap_budget() -> void:
 	var script: GDScript = _load_sim_script()
 	if script == null:
 		return
-	var race_output: Dictionary = {"times": {"Kart1": 60.0}, "respawns": {"Kart1": 0}, "wall_head_on_count": 10}
+	var race_output: Dictionary = {"times": {"Kart1": 60.0}, "respawns": {"Kart1": 0}, "wall_head_on_counts": {"Kart1": 10}, "wall_head_on_count": 10}
 	assert_true(bool(script.call("_race_failed", race_output, 3)))
 
 
@@ -89,7 +89,7 @@ func test_race_passes_within_every_budget() -> void:
 	var script: GDScript = _load_sim_script()
 	if script == null:
 		return
-	var race_output: Dictionary = {"times": {"Kart1": 60.0, "Kart2": 65.0}, "respawns": {"Kart1": 1, "Kart2": 2}, "wall_head_on_count": 6}
+	var race_output: Dictionary = {"times": {"Kart1": 60.0, "Kart2": 65.0}, "respawns": {"Kart1": 1, "Kart2": 2}, "wall_head_on_counts": {"Kart1": 3, "Kart2": 3}, "wall_head_on_count": 6}
 	assert_false(bool(script.call("_race_failed", race_output, 3)))
 
 

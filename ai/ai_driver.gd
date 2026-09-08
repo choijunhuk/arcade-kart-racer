@@ -136,6 +136,15 @@ func compute_frame(
 			_reverse_remaining = 0.0
 			_speed_ema = 999.0
 			return frame
+		KartState.HIT:
+			# A hit reaction is a brief, involuntary loss of control (spec
+			# §13.4); stuck detection must not accumulate while it plays out,
+			# or a string of hits could fire a reverse/respawn the AI never
+			# actually earned by being wedged against geometry.
+			_stuck_elapsed = 0.0
+			_reverse_remaining = 0.0
+			_speed_ema = 999.0
+			return frame
 		KartState.FROZEN:
 			return _compute_start_frame(context)
 		KartState.FINISHED:
@@ -179,7 +188,9 @@ func _compute_target_speed(kart: KartController, profile: AIDifficultyProfile, n
 	var corner_speed: float = compute_corner_speed(profile.max_lateral_accel, nav.curvature_ahead, max_speed, profile.speed_confidence)
 	var gap: float = _rubber_band_gap(kart, context)
 	_rubber_band_mult = compute_rubber_band_mult(gap, profile.rubber_band_strength, MAX_RUBBER_BAND)
-	_last_target_speed = corner_speed * _rubber_band_mult
+	# The rubber-band catch-up multiplier may never push the AI's target past
+	# its own kart's spec max speed (spec §13.6).
+	_last_target_speed = minf(corner_speed * _rubber_band_mult, max_speed)
 	return _last_target_speed
 
 

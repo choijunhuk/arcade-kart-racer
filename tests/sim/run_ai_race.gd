@@ -36,6 +36,7 @@ const MAX_HEAD_ON_PER_LAP: float = 3.0
 
 var _kart_names_by_id: Dictionary[int, String] = {}
 var _respawns: Dictionary[String, int] = {}
+var _wall_head_on_counts: Dictionary[String, int] = {}
 var _wall_head_on_count: int = 0
 var _drift_started_count: int = 0
 var _tier3_release_count: int = 0
@@ -122,14 +123,17 @@ static func has_unfinished(times: Dictionary) -> bool:
 
 
 ## Spec §13.8 DoD: every kart must finish, no kart may respawn more than
-## twice, and total wall head-ons must stay within budget for the lap count.
+## twice, and no kart's wall head-ons may exceed the per-lap budget.
 static func _race_failed(race_output: Dictionary, laps: int) -> bool:
 	if has_unfinished(race_output["times"] as Dictionary):
 		return true
 	for count: Variant in (race_output["respawns"] as Dictionary).values():
 		if int(count) > MAX_RESPAWNS_PER_KART:
 			return true
-	return float(race_output["wall_head_on_count"]) > MAX_HEAD_ON_PER_LAP * float(laps)
+	for count: Variant in (race_output["wall_head_on_counts"] as Dictionary).values():
+		if float(count) > MAX_HEAD_ON_PER_LAP * float(laps):
+			return true
+	return false
 
 
 ## Mean per-lap finish time across every finisher in every race (spec §13.8:
@@ -171,6 +175,7 @@ func _run_one_race(laps: int, kart_count: int, race_number: int, difficulty: AID
 		var kart_name: String = String(kart.name)
 		_kart_names_by_id[kart.get_instance_id()] = kart_name
 		_respawns[kart_name] = 0
+		_wall_head_on_counts[kart_name] = 0
 
 	var max_ticks: int = roundi(
 		(float(laps) * MAX_SECONDS_PER_LAP + FLOW_MARGIN_SECONDS)
@@ -193,6 +198,7 @@ func _run_one_race(laps: int, kart_count: int, race_number: int, difficulty: AID
 		"finish_order": finish_order,
 		"times": times,
 		"respawns": _respawns.duplicate(),
+		"wall_head_on_counts": _wall_head_on_counts.duplicate(),
 		"wall_head_on_count": _wall_head_on_count,
 		"drifts_started": _drift_started_count,
 		"tier3_releases": _tier3_release_count,
@@ -218,6 +224,7 @@ func _register_shortcut_tracking(manager: RaceManager) -> void:
 func _reset_metrics() -> void:
 	_kart_names_by_id.clear()
 	_respawns.clear()
+	_wall_head_on_counts.clear()
 	_wall_head_on_count = 0
 	_drift_started_count = 0
 	_tier3_release_count = 0
@@ -231,8 +238,13 @@ func _on_kart_respawned(kart: Node) -> void:
 
 
 func _on_kart_hit(kart: Node, hit_type: int) -> void:
-	if _kart_names_by_id.has(kart.get_instance_id()) and hit_type == HitReactor.HitType.BUMP:
-		_wall_head_on_count += 1
+	if hit_type != HitReactor.HitType.BUMP:
+		return
+	var kart_name: String = String(_kart_names_by_id.get(kart.get_instance_id(), ""))
+	if kart_name.is_empty():
+		return
+	_wall_head_on_counts[kart_name] = int(_wall_head_on_counts.get(kart_name, 0)) + 1
+	_wall_head_on_count += 1
 
 
 func _on_drift_started(_kart: Node, _direction: int) -> void:
