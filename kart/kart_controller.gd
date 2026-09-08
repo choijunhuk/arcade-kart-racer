@@ -191,6 +191,10 @@ func launch(local_velocity: Vector3) -> void:
 	_physics.launch(local_velocity)
 	_ungrounded_ticks = tuning.airborne_grace_ticks + 1
 	_set_state(KartState.AIRBORNE)
+	EventBus.kart_launched.emit(self)
+## Publishes a contact resolved by the race-owned collision system.
+func notify_contact() -> void:
+	EventBus.kart_contacted.emit(self)
 ## Requests a boost from a track or future item source.
 func request_boost(spec: BoostSpecData, source: StringName) -> void:
 	boost_controller.request(spec, source)
@@ -318,4 +322,3 @@ func _on_wall_head_on() -> void:
 	_hit_reactor.apply(HitReactor.HitType.BUMP, self, false, 1.0, false)
 func _on_landed(vertical_speed: float) -> void:
 	_last_landing_speed = vertical_speed
-	EventBus.kart_landed.emit(self, vertical_speed)

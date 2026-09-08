@@ -1,4 +1,4 @@
-[gd_scene load_steps=17 format=3]
+[gd_scene load_steps=18 format=3]
 
 [ext_resource type="Script" path="res://race/race_manager.gd" id="1_manager"]
 [ext_resource type="Script" path="res://race/lap_tracker.gd" id="2_laps"]
@@ -16,6 +16,8 @@
 [ext_resource type="Script" path="res://effects/hit_stop.gd" id="14_hit_stop"]
 [ext_resource type="Script" path="res://effects/particle_budget_controller.gd" id="15_particle_budget"]
 [ext_resource type="PackedScene" path="res://effects/speed_lines.tscn" id="16_speed_lines"]
+
+[ext_resource type="Script" path="res://audio/race_audio.gd" id="17_audio"]
 
 [node name="RaceScene" type="Node3D"]
 script = ExtResource("1_manager")
@@ -62,3 +64,6 @@ current = true
 [node name="PauseMenu" parent="." instance=ExtResource("10_pause")]
 
 [node name="ResultsScreen" parent="." instance=ExtResource("11_results_screen")]
+
+[node name="RaceAudio" type="Node" parent="."]
+script = ExtResource("17_audio")

@@ -152,6 +152,8 @@ func integrate(
 	_apply_landing_loss(ground, landing_vertical_speed)
 	if landing_vertical_speed > 0.0:
 		landed.emit(landing_vertical_speed)
+		if is_inside_tree():
+			EventBus.kart_landed.emit(_body, landing_vertical_speed)
 	_was_grounded = ground.grounded
 	var forward: Vector3 = -_body.global_transform.basis.z
 	var right: Vector3 = _body.global_transform.basis.x
@@ -303,6 +305,8 @@ func _resolve_wall_collisions(dt: float, incoming_velocity: Vector3) -> void:
 		var travel_dir: Vector3 = incoming_velocity.normalized() if incoming_velocity.length() > 0.01 else -_body.global_transform.basis.z
 		var incidence_degrees: float = rad_to_deg(asin(clampf(absf(travel_dir.dot(normal)), 0.0, 1.0)))
 		var response: WallResponse = compute_wall_response(incidence_degrees, _tuning)
+		if is_inside_tree():
+			EventBus.wall_impacted.emit(_body)
 		speed *= response.speed_mult
 		lateral *= response.speed_mult
 		if response.bounce_mult > 0.0:
@@ -387,7 +391,8 @@ func hop(vertical_impulse: float) -> void:
 	_vertical_speed = maxf(_vertical_speed, vertical_impulse)
 	_ground_ignore_ticks = maxi(_ground_ignore_ticks, _tuning.airborne_grace_ticks + 1)
 	grounded = false
-
+	if is_inside_tree():
+		EventBus.kart_hopped.emit(_body)
 
 ## Replaces local motion with a launch vector where -Z is forward and +Y is up.
 func launch(local_velocity: Vector3) -> void:

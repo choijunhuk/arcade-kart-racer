@@ -52,6 +52,7 @@ func _ready() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed(&"ui_cancel") and not _is_remapping():
+		UiAudio.play_back()
 		_close()
 		get_viewport().set_input_as_handled()
 
@@ -89,6 +90,7 @@ func _build_remap_rows() -> void:
 func _connect_controls() -> void:
 	_section_picker.item_selected.connect(_on_section_selected)
 	_back_button.pressed.connect(_close)
+	_connect_toggle($Panel/VBox/Tabs/Audio/FinalLapPitchToggle, &"audio", &"final_lap_pitch")
 	_connect_slider($Panel/VBox/Tabs/Audio/MasterSlider, &"audio", &"master")
 	_connect_slider($Panel/VBox/Tabs/Audio/MusicSlider, &"audio", &"music")
 	_connect_slider($Panel/VBox/Tabs/Audio/SfxSlider, &"audio", &"sfx")
@@ -119,6 +121,7 @@ func _connect_toggle(toggle: CheckButton, section: StringName, key: StringName) 
 
 func _sync_values() -> void:
 	_syncing = true
+	_set_toggle($Panel/VBox/Tabs/Audio/FinalLapPitchToggle, &"audio", &"final_lap_pitch", true)
 	_set_slider($Panel/VBox/Tabs/Audio/MasterSlider, &"audio", &"master", 1.0)
 	_set_slider($Panel/VBox/Tabs/Audio/MusicSlider, &"audio", &"music", 1.0)
 	_set_slider($Panel/VBox/Tabs/Audio/SfxSlider, &"audio", &"sfx", 1.0)

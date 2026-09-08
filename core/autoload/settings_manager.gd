@@ -50,7 +50,7 @@ func _ready() -> void:
 ## Returns a fresh complete settings dictionary grouped by ConfigFile section.
 func default_settings() -> Dictionary:
 	return {
-		"audio": {"master": 1.0, "music": 1.0, "sfx": 1.0, "engine": 1.0},
+		"audio": {"master": 1.0, "music": 1.0, "sfx": 1.0, "engine": 1.0, "final_lap_pitch": true},
 		"video": {
 			"resolution": Vector2i(1600, 900),
 			"fullscreen": false,

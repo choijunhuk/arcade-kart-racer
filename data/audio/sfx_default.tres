@@ -1,0 +1,176 @@
+[gd_resource type="Resource" script_class="SfxLibrary" load_steps=43 format=3]
+
+[ext_resource type="Script" path="res://data/schemas/sfx_library.gd" id="1"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/engine.wav" id="2"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/drift_squeal.wav" id="3"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/drift_tier_1.wav" id="4"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/drift_tier_2.wav" id="5"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/drift_tier_3.wav" id="6"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/boost.wav" id="7"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/impact_wall.wav" id="8"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/impact_kart.wav" id="9"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/hit_spin.wav" id="10"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/hit_tumble.wav" id="11"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/hit_squash.wav" id="12"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/item_pickup.wav" id="13"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/roulette_tick.wav" id="14"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/roulette_stop.wav" id="15"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/jump.wav" id="16"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/landing.wav" id="17"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/countdown.wav" id="18"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/go.wav" id="19"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/lap.wav" id="20"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/final_lap.wav" id="21"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/finish.wav" id="22"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/position_up.wav" id="23"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/position_down.wav" id="24"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/menu_move.wav" id="25"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/menu_accept.wav" id="26"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/menu_back.wav" id="27"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/threat_warning.wav" id="28"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/rocket_dart_fire.wav" id="29"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/rocket_dart_hit.wav" id="30"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/hunter_drone_fire.wav" id="31"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/hunter_drone_hit.wav" id="32"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/spike_mine_fire.wav" id="33"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/spike_mine_hit.wav" id="34"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/nitro_can_fire.wav" id="35"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/nitro_can_hit.wav" id="36"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/aegis_bubble_fire.wav" id="37"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/aegis_bubble_hit.wav" id="38"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/pulse_blast_fire.wav" id="39"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/pulse_blast_hit.wav" id="40"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/storm_beacon_fire.wav" id="41"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/storm_beacon_hit.wav" id="42"]
+
+[resource]
+script = ExtResource("1")
+streams = Dictionary[StringName, AudioStream]({
+&"engine": ExtResource("2"),
+&"drift_squeal": ExtResource("3"),
+&"drift_tier_1": ExtResource("4"),
+&"drift_tier_2": ExtResource("5"),
+&"drift_tier_3": ExtResource("6"),
+&"boost": ExtResource("7"),
+&"impact_wall": ExtResource("8"),
+&"impact_kart": ExtResource("9"),
+&"hit_spin": ExtResource("10"),
+&"hit_tumble": ExtResource("11"),
+&"hit_squash": ExtResource("12"),
+&"item_pickup": ExtResource("13"),
+&"roulette_tick": ExtResource("14"),
+&"roulette_stop": ExtResource("15"),
+&"jump": ExtResource("16"),
+&"landing": ExtResource("17"),
+&"countdown": ExtResource("18"),
+&"go": ExtResource("19"),
+&"lap": ExtResource("20"),
+&"final_lap": ExtResource("21"),
+&"finish": ExtResource("22"),
+&"position_up": ExtResource("23"),
+&"position_down": ExtResource("24"),
+&"menu_move": ExtResource("25"),
+&"menu_accept": ExtResource("26"),
+&"menu_back": ExtResource("27"),
+&"threat_warning": ExtResource("28"),
+&"rocket_dart_fire": ExtResource("29"),
+&"rocket_dart_hit": ExtResource("30"),
+&"hunter_drone_fire": ExtResource("31"),
+&"hunter_drone_hit": ExtResource("32"),
+&"spike_mine_fire": ExtResource("33"),
+&"spike_mine_hit": ExtResource("34"),
+&"nitro_can_fire": ExtResource("35"),
+&"nitro_can_hit": ExtResource("36"),
+&"aegis_bubble_fire": ExtResource("37"),
+&"aegis_bubble_hit": ExtResource("38"),
+&"pulse_blast_fire": ExtResource("39"),
+&"pulse_blast_hit": ExtResource("40"),
+&"storm_beacon_fire": ExtResource("41"),
+&"storm_beacon_hit": ExtResource("42")
+})
+volume_db = Dictionary[StringName, float]({
+&"engine": -12.0,
+&"drift_squeal": -6.0,
+&"drift_tier_1": -6.0,
+&"drift_tier_2": -6.0,
+&"drift_tier_3": -6.0,
+&"boost": -6.0,
+&"impact_wall": -6.0,
+&"impact_kart": -6.0,
+&"hit_spin": -6.0,
+&"hit_tumble": -6.0,
+&"hit_squash": -6.0,
+&"item_pickup": -6.0,
+&"roulette_tick": -6.0,
+&"roulette_stop": -6.0,
+&"jump": -6.0,
+&"landing": -6.0,
+&"countdown": -6.0,
+&"go": -6.0,
+&"lap": -6.0,
+&"final_lap": -6.0,
+&"finish": -6.0,
+&"position_up": -6.0,
+&"position_down": -6.0,
+&"menu_move": -6.0,
+&"menu_accept": -6.0,
+&"menu_back": -6.0,
+&"threat_warning": -6.0,
+&"rocket_dart_fire": -6.0,
+&"rocket_dart_hit": -6.0,
+&"hunter_drone_fire": -6.0,
+&"hunter_drone_hit": -6.0,
+&"spike_mine_fire": -6.0,
+&"spike_mine_hit": -6.0,
+&"nitro_can_fire": -6.0,
+&"nitro_can_hit": -6.0,
+&"aegis_bubble_fire": -6.0,
+&"aegis_bubble_hit": -6.0,
+&"pulse_blast_fire": -6.0,
+&"pulse_blast_hit": -6.0,
+&"storm_beacon_fire": -6.0,
+&"storm_beacon_hit": -6.0
+})
+pitch_variance = Dictionary[StringName, float]({
+&"engine": 0.0,
+&"drift_squeal": 0.0,
+&"drift_tier_1": 0.0,
+&"drift_tier_2": 0.0,
+&"drift_tier_3": 0.0,
+&"boost": 0.0,
+&"impact_wall": 0.025,
+&"impact_kart": 0.025,
+&"hit_spin": 0.0,
+&"hit_tumble": 0.0,
+&"hit_squash": 0.0,
+&"item_pickup": 0.0,
+&"roulette_tick": 0.0,
+&"roulette_stop": 0.0,
+&"jump": 0.0,
+&"landing": 0.0,
+&"countdown": 0.0,
+&"go": 0.0,
+&"lap": 0.0,
+&"final_lap": 0.0,
+&"finish": 0.0,
+&"position_up": 0.0,
+&"position_down": 0.0,
+&"menu_move": 0.0,
+&"menu_accept": 0.0,
+&"menu_back": 0.0,
+&"threat_warning": 0.0,
+&"rocket_dart_fire": 0.0,
+&"rocket_dart_hit": 0.0,
+&"hunter_drone_fire": 0.0,
+&"hunter_drone_hit": 0.0,
+&"spike_mine_fire": 0.0,
+&"spike_mine_hit": 0.0,
+&"nitro_can_fire": 0.0,
+&"nitro_can_hit": 0.0,
+&"aegis_bubble_fire": 0.0,
+&"aegis_bubble_hit": 0.0,
+&"pulse_blast_fire": 0.0,
+&"pulse_blast_hit": 0.0,
+&"storm_beacon_fire": 0.0,
+&"storm_beacon_hit": 0.0
+})

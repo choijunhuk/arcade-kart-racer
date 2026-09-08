@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="SfxLibrary" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://data/schemas/sfx_library.gd" id="1"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/menu.wav" id="2"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/race.wav" id="3"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/results.wav" id="4"]
+
+[resource]
+script = ExtResource("1")
+streams = Dictionary[StringName, AudioStream]({
+&"menu": ExtResource("2"),
+&"race": ExtResource("3"),
+&"results": ExtResource("4")
+})
+volume_db = Dictionary[StringName, float]({
+&"menu": -6.0,
+&"race": -6.0,
+&"results": -6.0
+})
+pitch_variance = Dictionary[StringName, float]({
+&"menu": 0.0,
+&"race": 0.0,
+&"results": 0.0
+})

@@ -26,6 +26,7 @@ const LEGAL_TRANSITIONS: Dictionary = {
 
 @export var tuning: RaceTuning = preload("res://data/tuning/race_default.tres")
 
+@onready var _audio: RaceAudio = $RaceAudio
 @onready var _lap_tracker: LapTracker = $LapTracker
 @onready var _position_tracker: PositionTracker = $PositionTracker
 @onready var _respawn_system: RespawnSystem = $RespawnSystem
@@ -142,6 +143,7 @@ func _begin_loading(is_restart: bool) -> void:
 	_spawn_karts()
 	_register_track_elements()
 	_race_results.setup(_config.track.id, _karts, _player_kart)
+	_audio.configure(_player_kart, _config.laps)
 	_countdown.setup(tuning, _karts)
 	var observed_kart: KartController = _player_kart if _player_kart != null else _karts[0]
 	_camera.set_target(observed_kart)
@@ -206,6 +208,7 @@ func _spawn_karts() -> void:
 		var driver: DriverData = _driver_for_slot(slot, is_player)
 		kart.kart_data = RaceConfigBuilder.apply_driver_mods(_config.player_kart, driver)
 		kart.set_driver_data(driver)
+		(kart.get_node("KartAudio") as KartAudio).set_player_audio(is_player)
 		_karts_root.add_child(kart)
 		kart.global_transform = grid[slot]
 		kart.reset_motion_arcade()

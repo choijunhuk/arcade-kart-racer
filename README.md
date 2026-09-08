@@ -5,7 +5,7 @@ Mario Kart에서 *시스템과 플레이 감각*만 영감을 받은 **완전 �
 
 ## 이 레포의 현재 상태
 
-**Phase 9 — UI 구현 완료 (자동 검증 완료, 패드 수동 플레이 판정 대기).**
+**Phase 10 — 오디오 구현 완료 (headless 자동 검증, 실제 청음은 수동 확인).**
 
 현재 메인 씬은 Play / Time Trial(Phase 12) / Settings / Quit 메뉴로 시작한다.
 Play는 Single Race → 드라이버 8종 → 카트 3종 → Ridgeline Circuit → AI
@@ -41,6 +41,35 @@ key/button/axis 리맵은 즉시 적용되고 `settings.cfg`에 저장된다.
 - [`KART_RACING_DEV_PROMPT.md`](KART_RACING_DEV_PROMPT.md) — 개발 프롬프트 전체 (아키텍처, 물리, 드리프트, 아이템, AI, Phase 0~15, DoD, 작업 규칙)
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — 실제 경로와 시스템 경계
 - [`DEVLOG.md`](DEVLOG.md) — Phase별 구현 및 검증 기록
+
+## 오디오 (Phase 10)
+
+Master / Music / SFX / Engine 볼륨은 설정 화면에서 즉시 적용되며 0은 버스를
+완전히 mute한다. 엔진 RPM·드리프트 스퀼·3단계 차임·충돌·피격·부스트·점프·착지·
+7종 아이템 발사/명중·획득/룰렛·카운트다운·순위·랩/완주·위협·메뉴 효과음이 연결됐다.
+메뉴/레이스/결과 BGM은 크로스페이드하며, 최종 랩 +3% 피치는 Audio 설정에서
+끌 수 있다. Pause는 Music을 사용자 볼륨에서 추가로 -8 dB 낮춘다.
+
+총 플레이어는 **3D 16개 + 2D 8개**이며 엔진/스퀼과 BGM 2채널도 이 예산에
+포함된다. 플레이어 카트는 거리 감쇠가 없는 2D 엔진을 사용한다. Engine 저역
+필터는 플레이어의 오프로드 상태를 기준으로 공용 Engine 버스 전체에 적용된다.
+
+SFX 41개 + BGM 3곡은 외부 다운로드 없는 원본 CC0 합성 플레이스홀더다.
+모노 22.05 kHz / PCM16 WAV 총 2,570,360 bytes이며 재생성 명령은 다음과 같다.
+
+```sh
+HOME="$PWD/.tmp-home" godot --headless --path . --script tools/gen_placeholder_audio.gd
+HOME="$PWD/.tmp-home" godot --headless --path . --import
+```
+
+생성기는 `assets/audio/placeholder/*.wav`, 루프 설정을 가진 `*.wav.import`,
+`data/audio/{sfx_default,bgm_default}.tres`를 갱신한다. WAV·import·새 GDScript의
+uid를 함께 커밋한다. WAV 라이선스는 `assets/audio/placeholder/LICENSE.md`.
+실제 에셋 교체와 청음 기반 믹싱은 **TODO(phase-13)** 이다.
+
+Headless에서는 장치 재생을 호출하지 않고 같은 풀·수명·크로스페이드 상태를
+진행한다. 테스트는 `AudioManager.sfx_played`/`bgm_changed` 호출 관찰과 버스
+설정으로 검증하므로 실제 스피커 출력이나 음질 검증을 대신하지 않는다.
 
 ## 실행
 

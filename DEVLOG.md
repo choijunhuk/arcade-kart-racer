@@ -1,5 +1,155 @@
 # Development Log
 
+## Phase 10 보고 — 오디오
+
+### 구현된 기능
+
+- Master → Music/SFX/Engine 버스, Engine 저역 필터, 선형 볼륨→dB와 정확한
+  0 mute, 기존 네 슬라이더 즉시 적용을 완성했다. Audio 설정에는 최종 랩
+  BGM +3% 피치 옵션을 추가했다. Pause는 Music에만 -8 dB를 더하고
+  재개 시 사용자 볼륨을 그대로 복구한다.
+- `play_sfx(id, position := null, priority := 0, pitch := 1.0)`,
+  `play_bgm(id, crossfade := 1.0)`, `stop_bgm`, `set_bgm_pitch_scale`을 제공한다.
+  SfxLibrary는 typed id→stream, 기본 dB/피치 편차를 저장하며 미등록 id는
+  라이브러리당 한 번만 warning을 낸다.
+- 전체 풀은 **AudioStreamPlayer3D 16개 + AudioStreamPlayer 8개**다.
+  카트 엔진/스퀼과 전용 BGM 2채널도 이 안에 포함되며 카트당 최대 3개다.
+  비어 있는 슬롯을 먼저 쓰고, 같은/낮은 우선순위 중 가장 낮고 오래된
+  단발음을 교체한다. 루프는 동급 루프를 빼앗지 않아 재획득 경쟁을 막는다.
+- `KartAudio`는 카트의 기존 비율 API와 로컬 신호만 구독한다. 플레이어
+  엔진은 감쇠 없는 2D이며 나머지는 3D다. 속도 피치 0.7→2.1, 부스트
+  +0.3, 횡속도 기반 스퀼, 3단계 차임, 부스트, 벽/카트 충돌, spin/tumble/
+  squash, jump/landing, 아이템 pickup/roulette를 연결했다.
+- `RaceAudio`는 countdown_tick의 3/2/1과 race_started의 GO를 각각 한 번
+  재생한다. 플레이어 랩/최종 랩/완주/순위/위협과 7종 item fire/hit을
+  연결한다. BGM은 실제 menu→COUNTDOWN/race→RESULTS 순서로 전환한다.
+- `UiAudio`는 메뉴 아래의 기존/동적 버튼 focus/pressed를 한 번씩 구독한다.
+  초기 하위 트리 탐색과 child_entered_tree가 겹칠 때 중복 연결하지 않으며,
+  Back 버튼·키보드 취소는 menu_back을 한 번만 재생한다.
+- 생성기로 **SFX 41개 + BGM 3곡**, 모노 22.05 kHz / PCM16 WAV를 생성했다.
+  BGM은 각각 108/144/120 BPM의 8마디 아르페지오다. 총 WAV 크기는
+  **2,570,360 bytes**이며 WAV/import/uid와 CC0 LICENSE를 함께 커밋했다.
+
+### 생성/수정된 파일
+
+- 생성: `default_bus_layout.tres`, `audio/{audio_voice,sfx_pool,bgm_crossfade,
+  race_audio}.gd`, `kart/kart_audio.gd`, `ui/components/ui_audio.gd`,
+  `data/schemas/sfx_library.gd`, `data/audio/{sfx_default,bgm_default}.tres`,
+  `tools/gen_placeholder_audio.gd`, `assets/audio/placeholder/`의 WAV 44개,
+  import 44개, `LICENSE.md`, 새 스크립트 uid.
+- 수정: `core/autoload/{audio_manager,settings_manager}.gd`, `kart/kart.tscn`,
+  `kart/{kart_controller,kart_physics,hit_reactor,item_slot}.gd`,
+  `race/race.tscn`, `race/{race_manager,kart_collision_resolver}.gd`,
+  `scenes/test/kart_sandbox.gd`, 메뉴 공통/메인/일시정지/설정 및 결과 화면.
+- 테스트: `tests/unit/test_phase10_{contract,audio}.gd`,
+  `tests/integration/test_phase10_audio.gd`와 uid.
+- 문서: `ARCHITECTURE.md` 오디오 경계/버스/풀/신호표, README 생성 명령과
+  headless 검증 한계, 이 보고서. `project.godot`는 변경하지 않았다.
+
+### 핵심 설계 결정과 이유
+
+- 카트마다 별도 플레이어를 추가하는 대신 공용 풀에서 소유권을 빌린다.
+  엔진/스퀼/BGM까지 실제 노드 총량 24개를 지키며 매 재생에 노드/lease를
+  할당하지 않는다. 스틸 후 owner/id 확인으로 이전 카트의 갱신을 막는다.
+- Phase 8 엔진 비율은 이미 boost를 포함한다. 이를 보간 전 분리한 뒤
+  +0.3을 한 번만 더하여 속도 최댓값 2.1, boost 최댓값 2.4를 지켰다.
+- Engine 필터는 공용 버스에 있으므로 플레이어의 오프로드 상태가 모든
+  엔진을 함께 필터링한다. all-AI 레이스는 필터 off다. 카트별 독립 필터를
+  위해 버스를 계속 늘리지 않았다.
+- BGM은 두 개의 예약된 풀 슬롯과 `step(delta)` gain 보간을 사용한다.
+  중간 반전은 현재 gain에서 시작하고, 세 번째 트랙 요청은 작은 쪽 슬롯을
+  교체한다. 새 BGM은 play 전에 무음으로 시작해 첫 오디오 블록의 튐을 막는다.
+- Headless에서는 `.play()` 장치 호출만 생략한다. Dummy audio가 즉시 종료 시
+  WAV playback을 보유하는 것을 확인했으며, 동일한 stream/lease/수명/피치/
+  gain 경로와 `sfx_played`/`bgm_changed` spy로 재생 결정을 검증한다.
+- 기존 AudioManager/설정 경로를 재사용했고, 새 dependency나 물리 튜닝은 없다.
+  단독 구현·자체 검토이며 독립 서브에이전트 리뷰는 수행하지 않았다.
+
+### 실행 방법
+
+메인 씬을 Godot 에디터에서 실행한다. 오디오 생성은 런타임 작업이 아니다.
+재생성 후에는 다음 두 명령을 차례로 실행하고 WAV/import/uid를 함께 추적한다.
+
+```sh
+HOME="$PWD/.tmp-home" godot --headless --path . --script tools/gen_placeholder_audio.gd
+HOME="$PWD/.tmp-home" godot --headless --path . --import
+```
+
+### 테스트 방법 및 결과
+
+- 시작 기준: **353/353 tests**, 1,857 assertions. 새 계약 테스트가 실제로
+  누락 리소스/BGM API에서 실패하는 것을 먼저 확인했다.
+- `HOME="$PWD/.tmp-home" tools/run_tests.sh`: **69 scripts, 383/383 tests,
+  3,475 assertions**, exit 0. **새 테스트 30개**. 이전 테스트 모두 통과.
+- `godot --headless --path . --import` 및 `--quit`: 각각 exit 0,
+  **GDScript parse/compile/runtime script errors 0**. 생성 uid/import 추적 완료.
+- `tools/validate_tracks.sh`: test_loop, test_loop_hills, test_hairpin,
+  track_01 **4/4 PASSED**, exit 0.
+- `tools/run_sim.sh --races 1 --karts 8 --laps 1`: **exit 0, success:true**,
+  8/8 완주, 평균 랩 65.7167초, respawn 0, wall head-on 0, 오디오 오류 0.
+- 8카트 실제 씬에서 120 physics tick 동안 매 tick 음성 포화 요청을 넣어
+  3D ≤16, 2D ≤8, 카트당 ≤3, 플레이어 엔진 2D, AI 엔진 3D,
+  레이스 해제 시 world voice 정리와 push_error 0을 검증했다.
+- 볼륨 0의 네 버스 mute/unmute, dB mapping, missing id warn once,
+  import된 WAV PCM16/루프, 단조/클램프 피치, priority steal/drop/loop 경쟁,
+  tick 수명/일시정지, crossfade 중간/반전/종료/동일 id 요청을 검증했다.
+- 실제 RaceManager countdown 3회 + GO 1회, pause/resume의 GO 중복 없음,
+  menu→race→results→restart, 실제 drift charge→tier 1 차임, offroad 필터/
+  squeal gain, 룰렛, 7종 fire/hit, player-only rank, lap/pitch 옵션과
+  설정 슬라이더 즉시 적용을 검증했다.
+- 생성기를 다시 실행한 뒤 WAV·라이브러리·import의 git diff가 없어 재현성을
+  확인했다. `git diff --check` 통과, 프로젝트 `.gd` 400줄 초과 0개
+  (vendored addons 제외), project.godot/TLS 변경 없음.
+
+### 현재 문제점 / 알려진 버그
+
+- 실제 스피커 청음, 루프 이음새의 체감, 최종 음량 균형과 8카트의 주관적
+  오디오 끊김은 headless로 검증하지 않았다. 아래 플레이 지시로 확인해야 한다.
+- 시작 기준부터 macOS `get_system_ca_certificates` Keychain 진단과 테스트/
+  시뮬 종료 시 Dummy renderer의 shader RID 4개 누수 진단이 있었다.
+  최종 결과에도 같은 환경/렌더 진단이 남지만 스크립트/오디오 오류는 없다.
+  `[network]`/TLS 우회 설정은 추가하지 않았다.
+
+### TODO / PLACEHOLDER 목록
+
+- **TODO(phase-13):** CC0 합성 SFX 41개/BGM 3곡을 최종 에셋으로 교체하고
+  실제 청음으로 엔진/스퀼/아이템/음악 믹스와 루프 경계를 조정한다.
+- 생성 코드의 `PLACEHOLDER`가 이 교체 지점이다. Phase 10 기능용 미구현
+  TODO는 없다. 기존 Phase 11 아이템 밸런스 하드닝 등 다른 Phase 과제는 유지한다.
+
+### 플레이 지시
+
+> 1. 메인 씬 F5. 방향키/패드로 메뉴를 이동하고 선택/뒤로 가기 효과음과
+>    메뉴 BGM을 확인한다. Single Race로 진입해 race BGM crossfade,
+>    3번 beep + GO를 확인한다.
+> 2. W 가속으로 엔진 피치 상승, Space 드리프트로 스퀼과 세 단계 차임,
+>    드리프트 해제로 부스트 +0.3 피치를 느껴본다. 오프로드에 들어갔다
+>    나와 엔진 음색이 먹먹해졌다 복귀하는지 확인한다.
+> 3. 벽/카트 충돌, 점프대/착지, 아이템박스와 E 사용을 시험한다. 룰렛
+>    tick/stop, 아이템별 발사·명중·피격 소리와 위협 경고를 확인한다.
+> 4. ESC로 일시정지해 음악 -8 dB, 재개 시 원래 음량 복원을 확인한다.
+>    Settings에서 Master/Music/SFX/Engine을 각각 0으로 낮춰 해당 버스의
+>    완전 무음을 확인하고 복구한다. Master 0은 모든 소리를 꺼야 한다.
+> 5. 최종 랩의 음악 +3% 피치를 켜고 끄며 비교한다. 완주 stinger와 결과
+>    BGM, 재시작 후 기본 pitch 복귀를 확인한다. 8대가 모이는 출발/드리프트
+>    구간에서 엔진 끊김·거친 loop seam·과도한 효과음 여부를 기록한다.
+
+### 커밋 상태
+
+- `743f018` — Phase 10 설계/초기 계약 테스트.
+- `d1c7a78` — CC0 생성 오디오, 라이브러리, bus layout, WAV/import/uid.
+- `c9d94a2` — 런타임 오디오, 설정/씬/신호 연결, 단위/통합 테스트.
+- 마지막 문서 커밋은 `.git/index.lock: Operation not permitted`로 실패했다.
+  사용자 지시에 따라 권한 우회 없이 `ARCHITECTURE.md`, `DEVLOG.md`,
+  `README.md` 수정과 `assets/audio/.gitkeep`, `audio/placeholder/.gitkeep`
+  삭제를 미커밋 상태로 남겼다. 코드·에셋·테스트·uid/import는 이미 커밋됐다.
+  모든 커밋은 `git commit -m`을 사용했고 push/브랜치 전환/서브에이전트는 없다.
+
+### 다음 Phase 계획 / 사용자에게 필요한 결정
+
+Phase 11 Vertical Slice 하드닝. 이번 작업은 Phase 10에서 끝내며 다음 Phase는
+시작하지 않는다. 오디오 에셋과 청음 기반 믹스 교체는 Phase 13 범위다.
+
 ## Phase 9 보고 — UI
 
 ### 구현된 기능
