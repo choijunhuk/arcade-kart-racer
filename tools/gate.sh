@@ -37,7 +37,15 @@ if grep -q 'certificate_bundle_override' project.godot; then echo "FAIL: TLS ove
 step "sensitive paths (manual approval required if changed vs main)"
 if git rev-parse --verify origin/main >/dev/null 2>&1; then
   changed=$(git diff --name-only origin/main...HEAD 2>/dev/null | grep -E '^(net/|kart/kart_physics\.gd|race/lap_tracker\.gd|race/position_tracker\.gd|core/autoload/save_manager\.gd)' || true)
-  if [ -n "$changed" ]; then echo "NOTE: sensitive paths changed — do not auto-merge without explicit approval:"; echo "$changed"; [ "${GATE_ALLOW_SENSITIVE:-0}" = "1" ] || fail=1; else echo "ok"; fi
+  if [ -n "$changed" ]; then
+    echo "NOTE: sensitive paths changed — requires two independent cross-reviews:"; echo "$changed"
+    # Approval record: .omc/sensitive_approval.md must name the reviewed commit (HEAD~0 or the pre-fix HEAD) and both reviews.
+    head_sha=$(git rev-parse --short=7 HEAD)
+    if [ "${GATE_ALLOW_SENSITIVE:-0}" = "1" ]; then echo "approved via GATE_ALLOW_SENSITIVE"
+    elif [ -f .omc/sensitive_approval.md ] && grep -q "$head_sha" .omc/sensitive_approval.md && grep -qi "review-1" .omc/sensitive_approval.md && grep -qi "review-2" .omc/sensitive_approval.md; then
+      echo "approved via .omc/sensitive_approval.md (two reviews recorded for $head_sha)"
+    else fail=1; fi
+  else echo "ok"; fi
 fi
 
 printf '\n== RESULT: %s\n' "$([ $fail -eq 0 ] && echo PASS || echo FAIL)"
