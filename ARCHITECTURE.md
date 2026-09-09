@@ -416,6 +416,47 @@ local player's terrain and affects the shared Engine bus. Headless skips device
   frame are retained for spike diagnosis. Headless cannot establish GPU timing,
   native focus/fullscreen delivery, PNG appearance or subjective driving/audio feel.
 
-Current exact gate outcomes and blocked native checks are recorded in DEVLOG's
-Phase 12 report. No push, tag, Phase 13 implementation or independent delegated
-review is part of this delivery.
+Historical Phase 12 outcomes remain in DEVLOG. Current Phase 13 outcomes follow
+below and in its new report; no push, tag or delegated review is performed.
+
+## Phase 13 assets and presentation
+
+`KartMeshBuilder` caches one original bevelled ArrayMesh per catalogue id; body
+accessories remain children of the animated Body, rims of wheel pivots, and the
+helmet of Driver. Physics shapes and player/AI input contracts are unchanged.
+`TrackBuilder` v2 emits one UV-mapped connected visual ribbon while retaining
+proven chord collision boxes. `RoadRibbon` retains the banked/chasm collision
+surface of content tracks and adds UVs. `TrackArt` owns procedural noise, skies,
+edge/curb/checker geometry and MultiMesh scenery; installation is deferred on the
+track receiver so freed test fixtures cannot leave dangling static callbacks.
+Small scenery batches use distance visibility; far kart accessories use the
+existing cached particle registration loop. QualityTier maps the three particle
+settings to render-scale caps, MSAA, shadows, fog and glow. Track art also applies
+quality on new scene creation. No new dependencies or network/TLS project settings.
+
+The transition overlay requests scenes with ResourceLoader threaded loading,
+polls once per frame and gets only a completed resource. LoadingProgress enforces
+monotonic progress and terminal failure/success. Resource loading does not make
+scene instantiation asynchronous; PostLoadProbe separately reports 120 real frame
+intervals after replacement. Native shader/renderer hitch acceptance is separate
+from dummy-renderer timing.
+
+API references used: [ResourceLoader](https://docs.godotengine.org/en/latest/classes/class_resourceloader.html),
+[SurfaceTool](https://docs.godotengine.org/en/latest/classes/class_surfacetool.html),
+[MultiMesh](https://docs.godotengine.org/en/latest/classes/class_multimesh.html).
+The current retention policy is `docs/phase13_asset_ledger.md`.
+
+## Build and export
+
+`export_presets.cfg` defines Windows x86_64, macOS Universal (unsigned), and Linux
+x86_64. `tools/build.sh` preflights matching installed export templates, exits 2
+with an offline TPZ extraction command when missing, and otherwise invokes three
+headless release exports. No template is downloaded. `build/` is ignored.
+Procedural PNG icons and previews live in assets; source generators are retained
+for reproducibility. The native preview tool renders through a SubViewport;
+headless explicitly generates schematic maps and labels that fallback in output.
+
+Phase 13 additionally buries the hills ramp leading top edge below the floor by
+lowering the ramp/ledge/jump assembly together 0.2m. The same seeded 8-kart race
+changes from 4,387 wall contacts with DNFs to eight contacts and all finishers.
+GhostRecording version 3 rejects earlier content recordings after this change.

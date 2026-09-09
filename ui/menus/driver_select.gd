@@ -47,10 +47,12 @@ func _create_driver_card(driver: DriverData) -> Button:
 	content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, CARD_CONTENT_MARGIN)
 	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(content)
-	var portrait: ColorRect = ColorRect.new()
+	var portrait: TextureRect = TextureRect.new()
 	portrait.name = "Portrait"
 	portrait.custom_minimum_size.y = PORTRAIT_HEIGHT
-	portrait.color = driver.driver_color
+	portrait.texture = load("res://assets/art/%s.png" % driver.id) as Texture2D
+	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	content.add_child(portrait)
 	var name_label: Label = Label.new()

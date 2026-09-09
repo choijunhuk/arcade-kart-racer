@@ -297,8 +297,10 @@ func _apply_video() -> void:
 	var video: Dictionary = _settings.get("video", {})
 	if is_inside_tree():
 		get_tree().root.scaling_3d_scale = clampf(
-			float(video.get("render_scale", 1.0)), MIN_RENDER_SCALE, MAX_RENDER_SCALE,
+			minf(float(video.get("render_scale", 1.0)), float(QualityTier.settings(int(video.get("particle_quality", 2)))["render_scale"])), MIN_RENDER_SCALE, MAX_RENDER_SCALE,
 		)
+		get_tree().root.msaa_3d = int(QualityTier.settings(int(video.get("particle_quality", 2)))["msaa"]) as Viewport.MSAA
+		QualityTier.apply_scene(get_tree().root, int(video.get("particle_quality", 2)))
 	if DisplayServer.get_name() == "headless":
 		return
 	var fullscreen: bool = bool(video.get("fullscreen", false))

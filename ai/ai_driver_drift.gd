@@ -37,8 +37,10 @@ func update(frame: InputFrame, kart: KartController, profile: AIDifficultyProfil
 			_try_enter(frame, kart, profile, nav.signed_curvature_ahead)
 
 
+## Match DriftController hop eligibility before replacing navigation steering.
+## A rejected low-speed hop must not steer a recovering kart back into a wall.
 func _try_enter(frame: InputFrame, kart: KartController, profile: AIDifficultyProfile, curvature: float) -> void:
-	if absf(curvature) < profile.drift_curvature_threshold or kart.get_speed() < 1.0:
+	if absf(curvature) < profile.drift_curvature_threshold or kart.get_speed() <= kart.tuning.drift_min_speed:
 		return
 	if _rng.randf() > lerpf(MIN_ATTEMPT_CHANCE, 1.0, profile.drift_skill):
 		return

@@ -24,6 +24,7 @@ var _burst_material: StandardMaterial3D
 
 
 func _ready() -> void:
+	_particles.material_override = ParticleArt.material(true)
 	_burst_material = (_burst.get_active_material(0) as StandardMaterial3D).duplicate() as StandardMaterial3D
 	_burst.material_override = _burst_material
 

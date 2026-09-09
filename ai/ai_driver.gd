@@ -167,8 +167,9 @@ func compute_frame(
 		frame.throttle = 1.0
 	else:
 		_drive_throttle_brake(frame, kart, target_speed, dt, profile)
-	_drift_planner.update(frame, kart, profile, nav, dt)
-	_apply_head_on_brake(frame, kart, sensors)
+	# Emergency recovery keeps the navigator steering and releases drift.
+	if not _apply_head_on_brake(frame, kart, sensors):
+		_drift_planner.update(frame, kart, profile, nav, dt)
 	_apply_trick(frame, kart, profile)
 	return frame
 
@@ -226,10 +227,12 @@ func _drive_throttle_brake(frame: InputFrame, kart: KartController, target_speed
 ## Only overrides throttle/brake for a genuine near-collision, and only while
 ## still carrying real speed — once slow, the stuck/reverse handling above
 ## takes over instead of this pinning the kart into reverse forever.
-func _apply_head_on_brake(frame: InputFrame, kart: KartController, sensors: AISensors.SensorReport) -> void:
+func _apply_head_on_brake(frame: InputFrame, kart: KartController, sensors: AISensors.SensorReport) -> bool:
 	if kart.get_speed() > STUCK_SPEED_THRESHOLD and sensors.obstacle_distance.get(AISensors.Side.CENTER, INF) <= HEAD_ON_BRAKE_DISTANCE:
 		frame.throttle = 0.0
 		frame.brake = 1.0
+		return true
+	return false
 
 
 func _apply_trick(frame: InputFrame, kart: KartController, profile: AIDifficultyProfile) -> void:

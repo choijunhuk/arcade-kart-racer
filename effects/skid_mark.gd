@@ -6,6 +6,9 @@ extends MeshInstance3D
 @export var tuning: FeelTuning = preload("res://data/tuning/feel_default.tres")
 
 const SKID_COLOR: Color = Color(0.04, 0.04, 0.04, 1.0)
+const FADE_SECONDS: float = 3.0
+var _idle_seconds: float = 0.0
+
 const TANGENT_EPSILON: float = 0.0001
 
 var _kart: KartController
@@ -22,9 +25,16 @@ func _ready() -> void:
 	material_override = _make_material()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if _kart == null or _kart.get_drift_state() != DriftController.DriftState.HOLD:
+		_idle_seconds += delta
+		transparency = clampf(_idle_seconds / FADE_SECONDS, 0.0, 1.0)
 		return
+	if _idle_seconds > 0.0:
+		_buffer.configure(tuning.skid_mark_max_segments)
+		_array_mesh.clear_surfaces()
+	_idle_seconds = 0.0
+	transparency = 0.0
 	var local_point: Vector3 = to_local(_kart.global_position - Vector3.UP * tuning.skid_mark_ground_offset)
 	var points: Array[Vector3] = _buffer.get_points()
 	if not points.is_empty() and points.back().distance_to(local_point) < tuning.skid_mark_min_spacing:

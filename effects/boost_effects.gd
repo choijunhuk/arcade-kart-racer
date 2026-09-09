@@ -9,6 +9,7 @@ var _lod_enabled: bool = true
 
 
 func _ready() -> void:
+	_exhaust.material_override = ParticleArt.material(true)
 	var controller: BoostController = _kart.get_node("BoostController") as BoostController
 	controller.boost_started.connect(_on_boost_started)
 	controller.boost_ended.connect(_on_boost_ended)

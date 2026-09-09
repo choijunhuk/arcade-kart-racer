@@ -2256,3 +2256,151 @@ Phase 1에서 `KartController`, `KartPhysics`, `KartVisuals`, 플레이어 입�
 - `tools/run_soak.sh`: harmless engine-exit diagnostics (dummy renderer RID leak, macOS certificate lookup) are filtered before the error scan.
 - Windowed sweep (M3 Max): drive snapshots on 4 tracks OK; perf probe 8 karts mean 59.9 fps (vsync-capped) worst 35.1 ms, 12 karts mean 60.0 fps worst 32.7 ms; race scene HUD complete.
 - Polish (Phase 13): minimap renders Track 01 as a nearly flat line — check projection aspect/fit; consider padding + min height.
+
+
+## Phase 13 보고 — 폴리시·최적화·에셋 교체 (2026-09-09)
+
+### 구현된 기능
+
+- 여섯 카트 실루엣·헬멧·림, 연결된 UV 도로 비주얼, 테마 하늘·지형·
+  MultiMesh 장식, 파티클·실드·아이템/패드 아트 및 PNG UI 아이콘.
+- 품질별 렌더 설정과 거리 LOD, threaded loading 진행/실패 처리,
+  post-load frame telemetry, 최소 종횡비를 보장하는 미니맵.
+- Windows/macOS/Linux export preset와 오프라인 template 사전 검사.
+- 저속 AI 드리프트 시도가 벽 탈출 조향을 덮어쓰는 조건 불일치 수정.
+
+### 생성/수정된 파일
+
+- 기존 구현 `ab5f87f`: `assets/art/`, `kart/kart_mesh_builder.gd`,
+  `tools/track_art.gd`, `tools/track_builder.gd`, `effects/`,
+  `ui/components/`, `ui/menus/`, `export_presets.cfg`, `tools/build.sh` 등.
+- 마무리: `ai/ai_driver.gd`, `ai/ai_driver_drift.gd`, `tests/unit/test_ai_driver.gd`,
+  `tests/sim/run_ai_race.gd`(임시 wall profiling 제거),
+  `docs/phase13_asset_ledger.md`, `README.md`, `CHANGELOG.md`, `DEVLOG.md`.
+- `ARCHITECTURE.md`의 Assets/Build 설명은 기존 Phase 13 구현에 이미 존재한다.
+
+### 핵심 설계 결정과 이유
+
+AI 실패 원인: `AIDriftPlanner._try_enter()`는 1m/s부터 드리프트를 시도하며
+조향 방향을 강제했지만, `DriftController._try_begin_hop()`는 실제
+`drift_min_speed`(기본 6m/s) 이하에서 hop을 거절한다. 따라서 저속 벽 회복
+중에는 실행되지 않을 hop이 정상적인 navigator 조향만 반대로 바꿨다.
+AI도 같은 설정의 `<= drift_min_speed` 경계를 사용하도록 수정했다.
+추가로 긴급 제동은 드리프트 계획보다 우선한다. 가까운 벽을 감지해
+제동하면서도 HOLD를 유지하면 드리프트 카운터스티어 제한이 탈출을 막는다.
+긴급 제동 프레임은 기본 drift=false와 원래 navigator 조향을 보존하여
+잠금을 해제한다. 일반 코너에서의 HOLD/카운터스티어 규칙은 유지한다.
+프로필이나 충돌 예산을 완화하지 않았고 물리 코드는 바꾸지 않았다.
+
+계측 근거: `.omc/phase13-logs/finish-20-diagnostic.log`의 연속 실행 seed 5,
+AiKart1, S자 코너 첫 정점 접근(offset 약 293–296m, 위치 약
+`(-294.7, 0.95, -11.8)`). tick 95211에서 HOLD/5.30m/s,
+center sensor 3.66m; tick 95219에는 center 2.85m로 비상 제동한다.
+HOLD 종료 후 tick 95289(speed 0.925m/s, steer +1)에서
+95291(speed 1.380m/s, steer -1)로 바뀌며 벽에 재접촉한다.
+seed 19는 동쪽 마지막 코너(offset 약 1475–1479m,
+위치 `(11.7, 0.95, -7.3)`)에서 tick 427260에 center 2.72m,
+속도 12.25m/s로 긴급 제동하지만 HOLD/steer -0.315를 계속 유지했다.
+속도가 1m/s 아래로 떨어져도 잠금이 남아 tick 427298부터 반복 접촉했다.
+첫 번째 진입 임계값 수정만으로 seed 5/7은 0회가 되었지만 seed 19는
+10회로 남았으므로, 이 별도의 제동/드리프트 우선순위 오류까지 수정했다.
+이는 폴 그리드 자체의 변형이나 완주 후 충돌이 아니다. 단독 seed 5는
+AiKart1 충돌 0으로 통과했으므로 단독 실행을 연속 실행의 대체 증거로
+사용하지 않았다. 반복 실행 상태/충돌 순서의 차이까지 완전한 결정성은
+주장하지 않으며, 수정은 재현된 제어 조건 불일치에 한정한다.
+
+Track01은 시각 도로를 연결하되 검증된 box chord 충돌을 유지한다.
+기존 hills ramp 수정은 ramp/ledge/trigger를 함께 0.2m 낮춰 앞 모서리를
+묻고, 지형 변경에 맞춰 ghost format을 3으로 올렸다. 원본 절차적 아트는
+CC0이며 오디오·폰트·음성·진동 등의 잔존 처리는 asset ledger에 명시했다.
+
+### 실행 방법
+
+```sh
+HOME="$PWD/.tmp-home" tools/run_sim.sh --races 20 --track track_01 --difficulty normal --karts 8 --laps 3
+HOME="$PWD/.tmp-home" tools/gate.sh
+HOME="$PWD/.tmp-home" tools/validate_tracks.sh
+HOME="$PWD/.tmp-home" tools/build.sh
+```
+
+빌드 사전 검사: 이 머신에는 Godot 4.7 matching export templates가 없어
+`tools/build.sh`는 exit 2와 공식 TPZ의 로컬 설치 명령을 출력했다.
+다운로드·플랫폼 export·실행 성공은 주장하지 않는다.
+
+### 테스트 방법 및 결과 (run_tests / run_sim / validate_tracks 실제 출력 요약)
+
+- AI 회귀 테스트: 진입 조건 수정 전 20/21(저속 조향 보존 실패),
+  긴급 제동 수정 전 21/22(HOLD 해제/회피 조향 실패), 최종 수정 후 22/22.
+  로그: `finish-ai-red.log`, `finish-emergency-red.log`, `finish-ai-green.log`.
+- `tools/gate.sh`: exit 0, RESULT PASS. 최종 수정 후 전체 GUT 474/474,
+  import/parse, tracks, sim smoke, 400줄 제한, project.godot 위생,
+  sensitive paths 모두 통과 (`finish-gate-final.log`).
+- `tools/validate_tracks.sh`: 7/7 PASSED (`finish-tracks.log`).
+- `git diff origin/main --`으로 네 민감 경로의 작업 트리까지 확인: 변경 없음.
+- `sh -n`으로 build/gate/sim/tests/track wrapper 문법 확인; `git diff --check` 통과.
+- 첫 수정 20회: exit 1, seed 5/7/19 AiKart1 충돌 0/0/10,
+  모든 320대 완주, balance delta 0.55 (`finish-20-entry-only.log`).
+- 수정 전 20회: exit 1, AiKart1 seed 5/7/19 정면충돌 18/10/10,
+  balance gate는 통과.
+- 최종 20회 (`finish-20-final.log`): exit 0, success=true,
+  strict balance=true/pass=true. 본경기 160/160 + 대조군 160/160 완주,
+  모든 카트 리스폰 0. 본경기 카트당 정면충돌 최대 4회/3랩(예산 9회),
+  대조군 최대 0회. AiKart1 seed 5/7/19는 18/10/10 → 0/0/0회.
+  해당 세 seed는 최종적으로 여덟 카트 모두 정면충돌 0회다.
+  lap1 rank-8 gain delta=0.90(최소 0.40), 선두 평균 피격=1.20(최대 3.0),
+  평균 랩타임=63.1091초, 평균 1–8위 격차=5.7567초.
+- 브리프의 headless 마무리 검증은 통과했다. Phase 13 전체 DoD의
+  native/manual 미검증 항목은 아래 목록대로 남아 있다.
+- 성능은 기존 `.omc/phase13-logs/` 측정값이며 GPU 결과가 아니다:
+
+| 12대 / low / headless / 10초 | Before | After | Complete |
+|---|---:|---:|---:|
+| 평균 FPS | 144.90 | 144.92 | 144.89 |
+| 최악 frame ms | 10.58 | 10.44 | 12.94 |
+| 33ms 초과 frame | 0 | 0 | 0 |
+| 노드 수 (최악 frame) | 2031 | 1995 | 1996 |
+| physics ms (최악 frame) | 2.412 | 2.244 | 3.443 |
+| process ms (최악 frame) | 1.179 | 1.110 | 1.292 |
+
+각 열은 `perf-headless-before.log`, `perf-headless-after.log`,
+`perf-complete.log`이다. draw calls는 모두 0, 파티클 수는 60이다.
+노드 감소는 확인되지만 작은 FPS 차이를 성능 향상으로 일반화하지 않는다.
+마지막 측정의 최악 frame은 오히려 증가했다. 실제 저사양 GPU 12대 60fps
+및 native loading hitch 합격 증거는 아직 없다.
+
+### 현재 문제점 / 알려진 버그
+
+- 창 모드 도구는 이 작업에서 금지되어 실행하지 않았다.
+- headless 로그의 macOS CA 조회 오류와 dummy shader RID 종료 진단은
+  원문에 보존했다. `project.godot`에 network/TLS 우회를 추가하지 않았다.
+- 성능 DoD 및 3플랫폼 실행 DoD는 아래 수동 항목 때문에 미완료다.
+
+### TODO / PLACEHOLDER 목록
+
+`docs/phase13_asset_ledger.md`가 모든 기존 placeholder 분류의 현재 처리를
+기록한다. 미설명 분류는 없지만 명시적 유지 항목은 최종 교체 완료가 아니다.
+
+수동 acceptance gaps:
+1. matching templates 설치 후 Windows/macOS/Linux export 및 각 OS에서 실행.
+   macOS preset은 unsigned이며 서명/배포 검증은 하지 않았다.
+2. 실제 저사양 GPU에서 1600×900 low, 12대 카트 60fps와 로딩 직후 hitch.
+3. native 창에서 카트·트랙·미니맵·UI·파티클·실드·LOD·품질 변경 확인 및 운전.
+4. native SubViewport 트랙 preview 생성/검수. 현재 네 PNG는 schematic fallback.
+5. 41개 합성 SFX와 BGM 3곡 청음/믹스. 녹음 음성과 최종 외부 오디오 없음.
+6. 물리 게임패드 입력 및 진동. 진동 구현은 비활성 stub으로 명시 유지.
+7. 실제 창의 focus/fullscreen/resize 흐름과 로딩 표시 확인.
+8. 기본 Godot 폰트 유지, locale 사양 없는 전체 번역은 미구현.
+   선택 사항인 cinematic/spectator camera도 현재 race camera로 유지.
+
+### 다음 Phase 계획
+
+Phase 14 분할 화면은 시작하지 않는다. 먼저 Phase 13 native/manual DoD를
+검증하고 별도 승인된 범위에서 진행한다. push/merge/tag는 수행하지 않는다.
+
+### 사용자에게 필요한 결정 (있다면)
+
+새 구현 결정 없음. Phase 13 전체 DoD 승인에는 위 native/manual 검증이 필요하다.
+
+### Phase 13 main-thread windowed check (M3 Max, 2026-09-09)
+- Track 01 drive snapshot: textured road, painted edges/curbs, guardrail posts, trees, new kart silhouette, translucent item boxes — OK. Sky tint reads greenish on the day theme; revisit ProceduralSkyMaterial colors in a later polish pass.
+- perf_probe 12 karts / quality 0: mean 99.1 fps, 4 frames > 33 ms, `post_load_100ms_pass=false` (a post-load hitch above 100 ms remains — known gap, track in Phase 14 perf item).

@@ -48,11 +48,12 @@ theme_override_font_sizes/font_size = 36
 text = "SELECT TRACK"
 horizontal_alignment = 1
 
-[node name="Preview" type="ColorRect" parent="Panel/VBox"]
+[node name="Preview" type="TextureRect" parent="Panel/VBox"]
 custom_minimum_size = Vector2(0, 80)
 layout_mode = 2
 mouse_filter = 2
-color = Color(0.08, 0.24, 0.31, 1)
+expand_mode = 1
+stretch_mode = 5
 
 [node name="TrackList" type="VBoxContainer" parent="Panel/VBox"]
 layout_mode = 2

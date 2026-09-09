@@ -203,3 +203,60 @@ func test_ai_hold_limits_only_opposite_steer_for_either_locked_direction() -> vo
 		planner._update_hold(frame, kart, HARD_DIFFICULTY, 0.06, 1.0 / 30.0)
 		assert_lt(absf(frame.steer), kart.tuning.drift_min_steer, "use the kart's configured threshold in either direction")
 		assert_lt(frame.steer * float(direction), 0.0)
+
+
+func test_rejected_low_speed_drift_does_not_override_recovery_steering() -> void:
+	var kart: KartController = KART_SCENE.instantiate() as KartController
+	add_child_autofree(kart)
+	var physics: KartPhysics = kart.get_node("KartPhysics") as KartPhysics
+	var profile: AIDifficultyProfile = NORMAL_DIFFICULTY.duplicate(true) as AIDifficultyProfile
+	profile.drift_skill = 1.0
+	var planner: AIDriftPlanner = AIDriftPlanner.new(RandomNumberGenerator.new())
+	for speed: float in [1.4, kart.tuning.drift_min_speed]:
+		physics.speed = speed
+		var frame: InputFrame = InputFrame.zero()
+		frame.steer = 1.0
+		planner._try_enter(frame, kart, profile, -0.18)
+		assert_eq(frame.steer, 1.0, "a hop rejected by kart physics must preserve wall recovery steering")
+		assert_false(frame.drift_pressed)
+	physics.speed = kart.tuning.drift_min_speed + 0.1
+	var eligible: InputFrame = InputFrame.zero()
+	planner._try_enter(eligible, kart, profile, -0.18)
+	assert_true(eligible.drift_pressed, "eligible corners still initiate drift")
+	assert_lt(eligible.steer, 0.0)
+
+
+func test_imminent_wall_releases_drift_for_full_recovery_steering() -> void:
+	var kart: KartController = KART_SCENE.instantiate() as KartController
+	add_child_autofree(kart)
+	var physics: KartPhysics = kart.get_node("KartPhysics") as KartPhysics
+	physics.speed = 12.0
+	var hop: InputFrame = InputFrame.zero()
+	hop.steer = 1.0
+	hop.drift = true
+	hop.drift_pressed = true
+	kart.drift_controller.step(hop, 12.0, true, 0.0, 1.0, false, 1.0 / 60.0)
+	hop.drift_pressed = false
+	kart.drift_controller.step(hop, 12.0, true, 0.0, 1.0, false, kart.tuning.drift_hop_duration)
+	assert_eq(kart.get_drift_state(), DriftController.DriftState.HOLD)
+	var driver: AIDriver = AIDriver.new(RandomNumberGenerator.new())
+	driver._drift_planner._locked_direction = 1
+	var profile: AIDifficultyProfile = NORMAL_DIFFICULTY.duplicate(true) as AIDifficultyProfile
+	profile.drift_skill = 1.0
+	var nav: AINavigator.NavResult = AINavigator.NavResult.new()
+	nav.target_point = Vector3(10.0, 0.0, -1.0)
+	nav.curvature_ahead = 0.06
+	nav.signed_curvature_ahead = 0.06
+	var sensors: AISensors.SensorReport = AISensors.SensorReport.new()
+	for distance: float in [4.0, 2.7]:
+		sensors.obstacle_distance[AISensors.Side.CENTER] = distance
+		var frame: InputFrame = driver.compute_frame(kart, profile, nav, sensors, null, 1.0 / 30.0)
+		if distance > AIDriver.HEAD_ON_BRAKE_DISTANCE:
+			assert_true(frame.drift, "ordinary curved walls must not cancel drift")
+			assert_gt(frame.steer, -kart.tuning.drift_min_steer)
+		else:
+			assert_eq(frame.brake, 1.0)
+			assert_eq(frame.throttle, 0.0)
+			assert_false(frame.drift, "emergency braking must release the drift lock")
+			assert_false(frame.drift_pressed)
+			assert_lt(frame.steer, -kart.tuning.drift_min_steer, "wall recovery needs full navigator steering")

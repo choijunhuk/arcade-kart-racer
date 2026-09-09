@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://data/schemas/item_data.gd" id="1_item"]
 [ext_resource type="Script" path="res://data/schemas/ai_item_use_profile.gd" id="2_ai"]
-[ext_resource type="Texture2D" path="res://assets/placeholder/items/pulse_blast.svg" id="3_icon"]
+[ext_resource type="Texture2D" path="res://assets/art/pulse_blast.png" id="3_icon"]
 [ext_resource type="PackedScene" path="res://items/instances/pulse_blast/pulse_blast.tscn" id="4_scene"]
 
 [sub_resource type="Resource" id="AI_profile"]

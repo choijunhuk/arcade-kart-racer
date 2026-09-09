@@ -13,6 +13,10 @@ var _lod_enabled: bool = true
 
 
 func _ready() -> void:
+	for particles: GPUParticles3D in _sparks:
+		particles.material_override = ParticleArt.material(true)
+	for particles: GPUParticles3D in _smoke:
+		particles.material_override = ParticleArt.material()
 	var controller: DriftController = _kart.get_node("DriftController") as DriftController
 	controller.drift_started.connect(_on_drift_started)
 	controller.drift_tier_changed.connect(_on_tier_changed)

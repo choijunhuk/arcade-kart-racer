@@ -3,7 +3,8 @@ extends RefCounted
 
 ## Versioned best-lap input stream. Progress is timing metadata, never a pose replay.
 
-const VERSION: int = 2
+## Phase 13 changes hills geometry; reject recordings from older content.
+const VERSION: int = 3
 const TICK_RATE: int = 60
 const MAX_TICKS: int = TICK_RATE * 600
 const DEFAULT_DIRECTORY: String = "user://ghosts"

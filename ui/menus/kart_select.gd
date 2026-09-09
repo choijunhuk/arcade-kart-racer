@@ -51,9 +51,11 @@ func _create_kart_card(kart: KartData) -> Button:
 	content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, CARD_CONTENT_MARGIN)
 	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(content)
-	var preview: ColorRect = ColorRect.new()
+	var preview: TextureRect = TextureRect.new()
 	preview.custom_minimum_size.y = PREVIEW_HEIGHT
-	preview.color = kart.body_color
+	preview.texture = load("res://assets/art/%s.png" % kart.id) as Texture2D
+	preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	content.add_child(preview)
 	var name_label: Label = Label.new()

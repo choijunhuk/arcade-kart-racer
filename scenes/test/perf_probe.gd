@@ -31,6 +31,8 @@ var _worst_frame_monitors: Dictionary = {}
 func _ready() -> void:
 	GameState.automation_mode = true
 	_parse_arguments(OS.get_cmdline_user_args())
+	SettingsManager.set_setting(&"video", &"particle_quality", 0)
+	SettingsManager.set_setting(&"video", &"resolution", Vector2i(1600, 900))
 	_race = RACE_SCENE.instantiate() as RaceManager
 	_race.configure(build_config(_kart_count))
 	add_child(_race)
@@ -87,6 +89,10 @@ func _finish() -> void:
 	var mean_fps: float = float(_measured_frames) / maxf(_measured_real, 0.001)
 	var result: Dictionary = {
 		"karts": _kart_count,
+		"quality": 0,
+		"resolution": "1600x900",
+		"gpu_measurement": DisplayServer.get_name() != "headless",
+		"post_load_100ms_pass": _worst_frame_seconds <= 0.1,
 		"warmup_seconds": WARMUP_SECONDS,
 		"frames_over_33ms": _over_budget_frames,
 		"worst_frame_monitors": _worst_frame_monitors,

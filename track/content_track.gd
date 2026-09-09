@@ -40,7 +40,7 @@ var wall_material: StandardMaterial3D
 func _ready() -> void:
 	line = get_racing_line()
 	geometry = $Geometry
-	road_material = material(road_color)
+	road_material = TrackArt.surface(road_color.lightened(0.25))
 	wall_material = material(wall_color, wall_emission)
 	_build_line()
 	_build_road()
@@ -105,7 +105,7 @@ func terrain_patch(node_name: String, offset: float, size: Vector3, terrain: Ter
 	var zone: OffroadZone = place(OFFROAD_SCENE, "OffroadZones", node_name, offset, lateral) as OffroadZone
 	zone.terrain = terrain
 	zone.scale = size
-	(zone.get_node("Surface") as MeshInstance3D).material_override = material(terrain.particle_color)
+	(zone.get_node("Surface") as MeshInstance3D).material_override = TrackArt.surface(terrain.particle_color, true)
 	return zone
 
 
