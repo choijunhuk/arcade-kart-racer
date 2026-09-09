@@ -13,6 +13,7 @@ var _buffers: Array[NetInputBuffer] = []
 var _start_ticks: Array[int] = []
 var _source: InputProvider
 var _input_tick: int = 0
+var _input_history: Array[Dictionary] = []
 var _local: int = 0
 var _local_grid_slot: int = 0
 var _render_queue: Array[RaceSnapshot] = []
@@ -60,6 +61,14 @@ func begin() -> void:
 
 ## Accepts only the sender's roster slot, with finite, bounded input fields.
 func receive_input(sender: int, data: Dictionary) -> void:
+	var frames: Variant = data.get("frames", [data])
+	if not frames is Array or frames.is_empty() or frames.size() > NetTuning.INPUT_BATCH_TICKS:
+		return
+	for frame: Variant in frames:
+		if frame is Dictionary:
+			_receive_input_frame(sender, frame)
+
+func _receive_input_frame(sender: int, data: Dictionary) -> void:
 	for key: String in ["tick", "throttle", "brake", "steer"]:
 		if not (data.get(key) is int or data.get(key) is float):
 			return
@@ -114,7 +123,11 @@ func _client_step() -> void:
 	if bool(_karts[_local].get("_finished")):
 		return
 	var frame: InputFrame = _next_input()
-	session.send(&"_receive_input", NetSession.SERVER_ID, [frame.to_dict()], false)
+	_input_history.append(frame.to_dict())
+	if _input_history.size() > NetTuning.INPUT_BATCH_TICKS:
+		_input_history.pop_front()
+	# Keep transport history through respawns/hits, independently of prediction replay.
+	session.send(&"_receive_input", NetSession.SERVER_ID, [{"frames": _input_history.duplicate(true)}], false)
 	if NetPrediction.requires_server_pose(_karts[_local].get_state()):
 		_update_countdown()
 		return

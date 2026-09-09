@@ -502,11 +502,15 @@ network/TLS setting is added. The selected design is the Phase 15 brief and spec
 - Client input ticks are per-peer monotonically increasing sequences. First
   received input establishes that peer's server consumption origin; two server
   ticks later consumption starts at input tick 1, then advances once per tick.
-  Duplicate/stale/out-of-window/nonfinite inputs are rejected. Missing frames
-  repeat held levels and clear item/drift edges. Acknowledgement advances even
-  through misses because the server has decided those ticks. History is 240 ticks.
+  Duplicate/already-applied/out-of-window/nonfinite inputs are rejected. A newer
+  input arriving after its scheduled tick can still replace repeated controls;
+  consumption selects the newest due input without waiting on holes. Missing
+  frames repeat held levels and clear item/drift edges. Acknowledgement advances
+  even through misses because the server has decided those ticks. History is 240 ticks.
 - Channel 0: reliable lobby, loading, clock probes, events and results. Channel 1:
-  unreliable-ordered input dictionaries. Channel 2: unreliable-ordered packed
+  unreliable-ordered batches containing the last three input dictionaries,
+  retained independently of prediction history through hits/respawns.
+  Channel 2: unreliable-ordered packed
   snapshots every three server ticks. All RPC receivers have explicit authority
   annotations. Network payloads never select file paths or instantiate objects.
 - A client disables autonomous kart processing and creates no AI controllers.
@@ -534,6 +538,12 @@ network/TLS setting is added. The selected design is the Phase 15 brief and spec
   views have no item scripts, Areas, or collision shapes. Seeded ItemManager remains
   server-only. HitStop sees `GameState.is_networked`; online pauses cannot stop
   the shared race. SplitScreen/RaceAudio/KartAudio bind just the local player.
+- Server RespawnSystem registrations for network humans also measure horizontal
+  body travel: throttle against a wall can raise scalar drivetrain speed without
+  moving the kart. This keeps the existing stuck timer effective under contact;
+  repeated HIT states do not reset that timer for these server-owned humans.
+  Client replicas cannot initiate recovery. The network test runner prints each
+  kart's progress and input age every five seconds during RACING.
 - Main menu Online enters `online_lobby.tscn`, reusing LocalLobby's panel builder
   and theme. Host/Join use IP and port 24565, driver/kart selectors, ready, host
   Start and Back. A lobby departure removes its row; departure during a race

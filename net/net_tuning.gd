@@ -6,6 +6,7 @@ const MAX_PLAYERS: int = 4
 const TICK_RATE: int = 60
 const STEP: float = 1.0 / TICK_RATE
 const INPUT_DELAY: int = 2
+const INPUT_BATCH_TICKS: int = 3
 const SNAPSHOT_INTERVAL: int = 3
 const HISTORY_TICKS: int = 240
 const INTERPOLATION_SECONDS: float = 0.1

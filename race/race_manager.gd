@@ -224,7 +224,7 @@ func _spawn_karts() -> void:
 		_position_tracker.register_kart(kart)
 		_collision_resolver.register_kart(kart)
 		_item_manager.register_kart(kart)
-		_respawn_system.register_kart(kart, _get_respawn_transform)
+		_respawn_system.register_kart(kart, _get_respawn_transform, GameState.is_networked and is_player and not network_replica)
 	_ai_context.player_kart = _player_kart
 func _player_name(player_index: int) -> String:
 	return "PlayerKart" if _config.human_count() == 1 else "PlayerKart%d" % (player_index + 1)

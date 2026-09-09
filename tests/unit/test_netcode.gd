@@ -90,6 +90,7 @@ func test_buffer_gap_repeats_levels_and_clears_edges() -> void:
 
 func test_buffer_rejects_late_and_far_future_inputs() -> void:
 	var buffer: NetInputBuffer = NetInputBuffer.new()
+	buffer.insert(_frame(5))
 	buffer.consume(5)
 	assert_false(buffer.insert(_frame(4)))
 	assert_false(buffer.insert(_frame(NetTuning.HISTORY_TICKS + 6)))

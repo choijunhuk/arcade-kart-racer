@@ -6,6 +6,7 @@ const TIMEOUT_SECONDS: float = 240.0
 const SHUTDOWN_SECONDS: float = 1.0
 const MEAN_LIMIT: float = 0.5
 const START_RETRY_SECONDS: float = 1.0
+const PROGRESS_SECONDS: float = 5.0
 var session: NetSession
 var _started_at: float = 0.0
 var _reported: bool = false
@@ -14,6 +15,7 @@ var _exit_code: int = 0
 var _clock_reported: bool = false
 var _recent_events: Array[Dictionary] = []
 var _next_start_retry: float = 0.0
+var _next_progress: float = 0.0
 const STATE_NAMES: Array[String] = ["LOADING", "COUNTDOWN", "RACING", "FINISHING", "RESULTS", "PAUSED"]
 
 ## Installs the command-line headless test on the persistent GameState owner.
@@ -21,6 +23,7 @@ func configure(owner_session: NetSession) -> void:
 	session = owner_session
 	_started_at = NetSession.now()
 	_next_start_retry = _started_at + START_RETRY_SECONDS
+	_next_progress = _started_at + PROGRESS_SECONDS
 	session.test_report_received.connect(_report_received)
 	session.event_received.connect(_event_received)
 	session.disconnected.connect(_disconnected)
@@ -54,6 +57,9 @@ func _physics_process(_delta: float) -> void:
 		session.close()
 		get_tree().quit(1)
 		return
+	if multiplayer.is_server() and session.race != null and session.race.manager.get_state() == RaceState.RACING and now >= _next_progress:
+		_log_progress()
+		_next_progress = now + PROGRESS_SECONDS
 	if session.race == null or _reported or session.race.manager.get_state() != RaceState.RESULTS:
 		return
 	_reported = true
@@ -124,3 +130,31 @@ func _disconnected(message: String) -> void:
 	if _exit_at < 0.0:
 		push_error("NET_TEST disconnected: " + message)
 		get_tree().quit(1)
+
+func _log_progress() -> void:
+	var race: NetRace = session.race
+	var manager: RaceManager = race.manager
+	var laps: LapTracker = manager.get_node("LapTracker") as LapTracker
+	var positions: PositionTracker = manager.get_node("PositionTracker") as PositionTracker
+	var buffers: Array = race.get("_buffers")
+	var starts: Array = race.get("_start_ticks")
+	var rows: Array[Dictionary] = []
+	var karts: Array[KartController] = manager.get_karts()
+	for index: int in range(karts.size()):
+		var kart: KartController = karts[index]
+		var buffer: NetInputBuffer = buffers[index]
+		var human: bool = index < session.players.size()
+		var target: int = race.tick - int(starts[index]) + 1
+		rows.append({"name": String(kart.name), "lap": laps.get_lap(kart),
+			"checkpoint": laps.get_next_checkpoint_index(kart), "progress": positions.get_progress(kart),
+			"speed": kart.get_speed(), "state": kart.get_state(),
+			"last_input_tick": buffer.last_received_tick if human else -1,
+			"input_age_ticks": maxi(0, target - buffer.last_received_tick) if human else -1,
+			"last_processed_tick": buffer.last_processed_tick if human else -1,
+			"last_applied_input_tick": buffer.last_input_tick if human else -1,
+			"throttle": kart.get_throttle_input(), "brake": kart.get_brake_input(),
+			"position": [kart.global_position.x, kart.global_position.y, kart.global_position.z]})
+	for row: Dictionary in rows:
+		print("NET_PROGRESS tick=%d kart=%s lap=%d cp=%d progress=%.3f speed=%.3f state=%d last_input_tick=%d input_age=%d details=%s" % [
+			race.tick, row["name"], row["lap"], row["checkpoint"], row["progress"], row["speed"], row["state"],
+			row["last_input_tick"], row["input_age_ticks"], JSON.stringify(row)])
