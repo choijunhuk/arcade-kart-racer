@@ -12,7 +12,7 @@ extends CanvasLayer
 
 var _manager: RaceManager
 var _pause_on_focus_loss: bool = true
-var _player_device_ids: PackedInt32Array = PackedInt32Array([PlayerSlot.KEYBOARD_DEVICE_ID])
+var _player_device_ids: PackedInt32Array = PackedInt32Array([PlayerInputProvider.DEVICE_ANY])
 var _pause_owner_device_id: int = PlayerSlot.KEYBOARD_DEVICE_ID
 
 
@@ -35,10 +35,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _manager == null or not event.is_action_pressed(&"pause"):
 		return
 	var device_id: int = _event_device_id(event)
-	if not _player_device_ids.has(device_id):
+	if not _player_device_ids.has(PlayerInputProvider.DEVICE_ANY) and not _player_device_ids.has(device_id):
 		return
 	if _manager.get_state() == RaceState.PAUSED:
-		if device_id != _pause_owner_device_id:
+		if _pause_owner_device_id != PlayerInputProvider.DEVICE_ANY and device_id != _pause_owner_device_id:
 			return
 		_manager.resume_race()
 	else:
@@ -52,7 +52,7 @@ func _input(event: InputEvent) -> void:
 		return
 	if not (event is InputEventKey or event is InputEventJoypadButton or event is InputEventJoypadMotion):
 		return # Mouse support remains shared while device navigation stays owned.
-	if _event_device_id(event) == _pause_owner_device_id:
+	if _pause_owner_device_id == PlayerInputProvider.DEVICE_ANY or _event_device_id(event) == _pause_owner_device_id:
 		return
 	for action: StringName in [&"ui_accept", &"ui_cancel", &"ui_left", &"ui_right", &"ui_up", &"ui_down", &"pause"]:
 		if event.is_action(action):
@@ -64,7 +64,7 @@ func _input(event: InputEvent) -> void:
 ## overlay is first shown.
 func bind(
 	manager: RaceManager, pause_on_focus_loss: bool = true,
-	player_device_ids: PackedInt32Array = PackedInt32Array([PlayerSlot.KEYBOARD_DEVICE_ID]),
+	player_device_ids: PackedInt32Array = PackedInt32Array([PlayerInputProvider.DEVICE_ANY]),
 ) -> void:
 	_manager = manager
 	_pause_on_focus_loss = pause_on_focus_loss

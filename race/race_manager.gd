@@ -131,16 +131,14 @@ static func can_transition(from_state: int, to_state: int) -> bool:
 	var allowed: Array = LEGAL_TRANSITIONS.get(from_state, []) as Array
 	return allowed.has(to_state)
 
-## Returns whether FINISHING may close because everyone finished or time expired.
+## Waits for all humans before applying the AI finish margin.
 static func finishing_complete(
 	finished_count: int, kart_count: int, elapsed: float, timeout: float,
 	finished_human_count: int = 1, human_count: int = 1,
 ) -> bool:
 	if finished_count >= kart_count:
 		return true
-	if human_count > 0 and finished_human_count <= 0:
-		return false
-	return elapsed >= timeout
+	return finished_human_count >= human_count and elapsed >= timeout
 
 func _begin_loading(is_restart: bool) -> void:
 	if is_restart:
@@ -308,12 +306,16 @@ func _advance_countdown(delta: float) -> void:
 		_transition_to(RaceState.RACING)
 
 func _advance_finishing(delta: float) -> void:
+	var finished_humans: int = RaceCompletion.count(_lap_tracker, _player_karts)
+	if finished_humans < _player_karts.size():
+		_finishing_elapsed = 0.0
+		return
 	_finishing_elapsed += delta
 	if _results_delay_remaining < 0.0:
 		if not finishing_complete(
 			RaceCompletion.count(_lap_tracker, _karts), _karts.size(),
 			_finishing_elapsed, tuning.finish_timeout_seconds,
-			RaceCompletion.count(_lap_tracker, _player_karts), _player_karts.size(),
+			finished_humans, _player_karts.size(),
 		):
 			return
 		_results_delay_remaining = tuning.results_delay_seconds

@@ -1,7 +1,7 @@
 class_name SaveManagerService
 extends Node
 
-const CURRENT_VERSION: int = 1
+const CURRENT_VERSION: int = 2
 const DEFAULT_SAVE_PATH: String = "user://save.json"
 const BACKUP_SUFFIX: String = ".bak"
 const PLAYER_PROFILE_COUNT: int = 4
@@ -13,7 +13,7 @@ func _init(custom_save_path: String = DEFAULT_SAVE_PATH) -> void:
 	save_path = custom_save_path
 
 
-## Returns a fresh save payload with every key required by version 1.
+## Returns a fresh save payload with every key required by the current version.
 func default_data() -> Dictionary:
 	return {
 		"version": CURRENT_VERSION,
@@ -46,7 +46,7 @@ func load_data() -> Dictionary:
 
 ## Writes versioned data and preserves the last valid primary as a backup.
 func save_data(data: Dictionary) -> Error:
-	var normalized: Dictionary = _merge_with_defaults(data)
+	var normalized: Dictionary = _migrate(data)
 	normalized["version"] = CURRENT_VERSION
 	var previous: Dictionary = _read_valid_data(save_path)
 	if not previous.is_empty():
@@ -83,8 +83,8 @@ func record_player_race_result(
 	profiles[profile_key] = profile
 	data["player_profiles"] = profiles
 	if profile_index == 0:
-		data["best_laps"] = best_laps.duplicate()
-		data["best_positions"] = best_positions.duplicate()
+		(data["best_laps"] as Dictionary).merge(best_laps, true)
+		(data["best_positions"] as Dictionary).merge(best_positions, true)
 	return save_data(data)
 
 
@@ -195,6 +195,8 @@ func _migrate(data: Dictionary) -> Dictionary:
 		match version:
 			0:
 				migrated = _migrate_v0_to_v1(migrated)
+			1:
+				migrated = _migrate_v1_to_v2(migrated)
 			_:
 				push_error("No save migration registered for version %d" % version)
 				return default_data()
@@ -205,6 +207,22 @@ func _migrate(data: Dictionary) -> Dictionary:
 func _migrate_v0_to_v1(data: Dictionary) -> Dictionary:
 	var migrated: Dictionary = _merge_with_defaults(data)
 	migrated["version"] = 1
+	return migrated
+
+
+func _migrate_v1_to_v2(data: Dictionary) -> Dictionary:
+	var migrated: Dictionary = _merge_with_defaults(data)
+	var profiles: Dictionary = migrated["player_profiles"]
+	var primary: Dictionary = profiles.get("P1", {"best_laps": {}, "best_positions": {}})
+	for section: String in ["best_laps", "best_positions"]:
+		var legacy: Dictionary = migrated[section]
+		var records: Dictionary = primary.get(section, {})
+		for track: Variant in legacy:
+			records[track] = mini(int(records.get(track, legacy[track])), int(legacy[track]))
+		primary[section] = records
+		legacy.merge(records, true)
+	profiles["P1"] = primary
+	migrated["version"] = 2
 	return migrated
 
 

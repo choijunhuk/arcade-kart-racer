@@ -2,7 +2,7 @@ class_name PlayerInputProvider
 extends InputProvider
 
 const DEVICE_KEYBOARD: int = -1
-const DEVICE_ANY: int = DEVICE_KEYBOARD
+const DEVICE_ANY: int = -2
 const INPUT_MIN: float = 0.0
 const INPUT_MAX: float = 1.0
 const BUTTON_THRESHOLD: float = 0.5
@@ -63,6 +63,11 @@ func get_frame() -> InputFrame:
 func _get_strength(action: StringName) -> float:
 	if _strength_override.is_valid():
 		return clampf(float(_strength_override.call(action, device_id)), INPUT_MIN, INPUT_MAX)
+	if device_id == DEVICE_ANY:
+		var strongest: float = Input.get_action_strength(action)
+		for connected_device_id: int in Input.get_connected_joypads():
+			strongest = maxf(strongest, _get_joypad_strength(action, connected_device_id))
+		return strongest
 	if device_id == DEVICE_KEYBOARD:
 		return _get_keyboard_strength(action)
 	return _get_joypad_strength(action)
@@ -77,15 +82,7 @@ func _get_keyboard_strength(action: StringName) -> float:
 			return INPUT_MAX
 		if key_event.keycode > 0 and Input.is_key_pressed(key_event.keycode):
 			return INPUT_MAX
-	var aggregate: float = Input.get_action_strength(action)
-	return aggregate if aggregate > _get_connected_joypad_strength(action) else INPUT_MIN
-
-
-func _get_connected_joypad_strength(action: StringName) -> float:
-	var strongest: float = INPUT_MIN
-	for connected_device_id: int in Input.get_connected_joypads():
-		strongest = maxf(strongest, _get_joypad_strength(action, connected_device_id))
-	return strongest
+	return INPUT_MIN
 
 
 func _get_joypad_strength(action: StringName, joypad_device_id: int = device_id) -> float:

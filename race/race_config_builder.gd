@@ -34,7 +34,7 @@ static func build(
 	config.player_slot = 0
 	config.items_enabled = true
 	var player: PlayerSlot = PlayerSlot.new()
-	player.device_id = PlayerSlot.KEYBOARD_DEVICE_ID
+	player.device_id = PlayerInputProvider.DEVICE_ANY
 	player.driver_id = driver.id
 	player.kart_id = kart.id
 	player.grid_slot = 0
@@ -103,7 +103,7 @@ static func _normalize_players(config: RaceConfig) -> void:
 		config.players.resize(mini(config.players.size(), 1))
 	if config.players.is_empty() and config.player_slot >= 0:
 		var legacy: PlayerSlot = PlayerSlot.new()
-		legacy.device_id = PlayerSlot.KEYBOARD_DEVICE_ID
+		legacy.device_id = PlayerInputProvider.DEVICE_ANY
 		legacy.driver_id = config.player_driver.id if config.player_driver != null else &"aurora_vale"
 		legacy.kart_id = config.player_kart.id
 		legacy.grid_slot = config.player_slot

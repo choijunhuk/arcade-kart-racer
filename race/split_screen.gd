@@ -20,13 +20,13 @@ const QUAD_RENDER_SCALE: float = 0.70
 
 var _views: Array[PlayerView] = []
 var _normalized_rects: Array[Rect2] = []
-var _render_scale: float = 1.0
 
 
 func _ready() -> void:
 	set_process_input(false)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	resized.connect(_resize_views)
+	SettingsManager.settings_changed.connect(_on_settings_changed)
 
 
 ## Rebuilds player viewports around one shared world and independent presentation.
@@ -42,9 +42,6 @@ func configure(
 		return
 	visible = true
 	_normalized_rects = layout_rects(players.size())
-	_render_scale = render_scale_for_players(
-		players.size(), float(SettingsManager.get_setting(&"video", &"render_scale", 1.0)),
-	)
 	var minimap_all: bool = bool(SettingsManager.get_setting(&"accessibility", &"multiplayer_minimap_all", false))
 	for index: int in range(players.size()):
 		var view: PlayerView = _create_view(shared_world, index)
@@ -56,6 +53,7 @@ func configure(
 		view.hud.set_minimap_visible(index == 0 or minimap_all)
 		view.speed_lines.set_target(players[index])
 		_views.append(view)
+	_on_settings_changed(&"video")
 	_resize_views()
 
 
@@ -129,7 +127,6 @@ func _create_view(shared_world: World3D, index: int) -> PlayerView:
 	view.viewport.name = "Viewport"
 	view.viewport.world_3d = shared_world
 	view.viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	view.viewport.scaling_3d_scale = _render_scale
 	view.container.add_child(view.viewport)
 	view.camera = CAMERA_SCENE.instantiate() as RaceCamera
 	view.camera.name = "RaceCamera"
@@ -151,3 +148,12 @@ func _resize_views() -> void:
 		var view: PlayerView = _views[index]
 		view.container.position = rect.position * output
 		view.container.size = rect.size * output
+
+
+func _on_settings_changed(section: StringName) -> void:
+	if section != &"video":
+		return
+	var root: Window = get_tree().root
+	for view: PlayerView in _views:
+		view.viewport.scaling_3d_scale = render_scale_for_players(_views.size(), root.scaling_3d_scale)
+		view.viewport.msaa_3d = root.msaa_3d

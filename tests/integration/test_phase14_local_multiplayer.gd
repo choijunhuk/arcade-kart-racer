@@ -175,3 +175,42 @@ func _wait_for_state(race: RaceManager, state: int, max_ticks: int) -> void:
 
 func _on_scene_requested(scene_path: String) -> void:
 	_last_scene_path = scene_path
+
+
+func test_split_viewports_apply_quality_caps_and_live_video_changes() -> void:
+	var old_scale: float = float(SettingsManager.get_setting(&"video", &"render_scale", 1.0))
+	var old_quality: int = int(SettingsManager.get_setting(&"video", &"particle_quality", 2))
+	SettingsManager.set_setting(&"video", &"render_scale", 1.0)
+	SettingsManager.set_setting(&"video", &"particle_quality", 0)
+	var race: RaceManager = RACE_SCENE.instantiate() as RaceManager
+	race.configure(_config(), _provider)
+	add_child_autofree(race)
+	var split: SplitScreen = race.get_node("SplitScreen") as SplitScreen
+	for container: Node in split.get_children():
+		var viewport: SubViewport = container.get_node("Viewport") as SubViewport
+		assert_almost_eq(viewport.scaling_3d_scale, 0.65 * 0.85, 0.001)
+		assert_eq(viewport.msaa_3d, Viewport.MSAA_DISABLED)
+	SettingsManager.set_setting(&"video", &"particle_quality", 2)
+	SettingsManager.set_setting(&"video", &"render_scale", 0.8)
+	for container: Node in split.get_children():
+		var viewport: SubViewport = container.get_node("Viewport") as SubViewport
+		assert_almost_eq(viewport.scaling_3d_scale, 0.8 * 0.85, 0.001)
+		assert_eq(viewport.msaa_3d, Viewport.MSAA_4X)
+	SettingsManager.set_setting(&"video", &"render_scale", old_scale)
+	SettingsManager.set_setting(&"video", &"particle_quality", old_quality)
+
+
+func test_single_player_joypad_can_pause_the_race() -> void:
+	var config: RaceConfig = _config()
+	config.race_mode = RaceConfig.RaceMode.SINGLE_RACE
+	config.players.clear()
+	var race: RaceManager = RACE_SCENE.instantiate() as RaceManager
+	race.configure(config, _provider)
+	add_child_autofree(race)
+	var event: InputEventAction = InputEventAction.new()
+	event.device = 7
+	event.action = &"pause"
+	event.pressed = true
+	(race.get_node("PauseMenu") as PauseMenu)._unhandled_input(event)
+	assert_eq(race.get_state(), RaceState.PAUSED)
+	race.resume_race()

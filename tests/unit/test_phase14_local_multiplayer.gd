@@ -113,10 +113,12 @@ func test_lobby_starts_only_with_two_or_more_ready_players() -> void:
 	assert_true(bool(lobby.call("can_start")))
 
 
-func test_finishing_timeout_starts_with_first_human_and_closes_at_margin() -> void:
+func test_finishing_timeout_waits_for_all_humans_then_closes_at_margin() -> void:
 	var manager_script: GDScript = load("res://race/race_manager.gd") as GDScript
 	assert_false(bool(manager_script.call("finishing_complete", 3, 8, 14.9, 15.0, 1, 2)))
-	assert_true(bool(manager_script.call("finishing_complete", 3, 8, 15.0, 15.0, 1, 2)))
+	assert_false(bool(manager_script.call("finishing_complete", 3, 8, 30.0, 15.0, 1, 2)))
+	assert_false(bool(manager_script.call("finishing_complete", 3, 8, 14.9, 15.0, 2, 2)))
+	assert_true(bool(manager_script.call("finishing_complete", 3, 8, 15.0, 15.0, 2, 2)))
 	assert_true(bool(manager_script.call("finishing_complete", 8, 8, 0.0, 15.0, 2, 2)))
 
 
@@ -206,3 +208,125 @@ func _remove_save() -> void:
 	for path: String in [SAVE_PATH, SAVE_PATH + ".bak"]:
 		if FileAccess.file_exists(path):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+func test_legacy_records_migrate_to_p1_and_survive_first_result() -> void:
+	var save: SaveManagerService = SaveManagerService.new(SAVE_PATH)
+	autofree(save)
+	for version: int in [0, 1]:
+		var file: FileAccess = FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+		file.store_string(JSON.stringify({
+			"version": version, "best_laps": {"test_loop": 9000, "track_02": 12000},
+			"best_positions": {"test_loop": 2, "track_02": 1},
+		}))
+		file.close()
+		var loaded: Dictionary = save.load_data()
+		assert_eq(int(loaded["version"]), SaveManagerService.CURRENT_VERSION)
+		assert_eq(loaded["player_profiles"]["P1"]["best_laps"], loaded["best_laps"])
+		assert_eq(loaded["player_profiles"]["P1"]["best_positions"], loaded["best_positions"])
+		assert_eq(save.record_player_race_result(0, &"test_loop", 8000, 1), OK)
+		assert_eq(save.get_best_lap_ms(&"track_02"), 12000)
+		assert_eq(save.get_player_best_lap_ms(0, &"track_02"), 12000)
+		assert_eq(save.get_player_best_lap_ms(0, &"test_loop"), 8000)
+		assert_eq(int(save.load_data()["best_positions"].get("track_02", -1)), 1)
+
+
+func test_slower_lap_after_legacy_migration_is_not_a_new_record() -> void:
+	var file: FileAccess = FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	file.store_string(JSON.stringify({"version": 1, "best_laps": {"test_loop": 9000}}))
+	file.close()
+	var save: SaveManagerService = SaveManagerService.new(SAVE_PATH)
+	add_child_autofree(save)
+	var results: RaceResults = RaceResults.new()
+	add_child_autofree(results)
+	var player: KartController = KartController.new()
+	autofree(player)
+	results.setup(&"test_loop", [player], player, save)
+	EventBus.lap_completed.emit(player, 1, 10.0)
+	var entries: Array[RaceResults.Entry] = results.finalize([player], {player.get_instance_id(): 10.0})
+	assert_false(entries[0].is_new_record)
+	assert_eq(save.get_player_best_lap_ms(0, &"test_loop"), 9000)
+
+
+func test_single_player_configs_accept_simulated_joypad_throttle() -> void:
+	var built: RaceConfig = RaceConfigBuilder.build(
+		preload("res://data/drivers/aurora_vale.tres"), preload("res://data/karts/medium.tres"),
+		preload("res://data/tracks/track_01.tres"), preload("res://data/ai/normal.tres"),
+	)
+	var legacy: RaceConfig = RaceConfig.new()
+	RaceConfigBuilder.normalize(legacy)
+	var event: InputEventJoypadButton = InputEventJoypadButton.new()
+	event.device = 0
+	event.button_index = JOY_BUTTON_A
+	event.pressed = true
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+	for config: RaceConfig in [built, legacy]:
+		assert_ne(config.players[0].device_id, PlayerInputProvider.DEVICE_KEYBOARD)
+		var provider: PlayerInputProvider = PlayerInputProvider.new(config.players[0].device_id)
+		assert_gt(provider.get_frame().throttle, 0.5)
+	var keyboard: PlayerInputProvider = PlayerInputProvider.new(PlayerInputProvider.DEVICE_KEYBOARD)
+	assert_eq(keyboard.get_frame().throttle, 0.0)
+	event = event.duplicate() as InputEventJoypadButton
+	event.pressed = false
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+
+
+func test_finishing_timer_does_not_accumulate_while_second_human_races() -> void:
+	var manager: RaceManager = RaceManager.new()
+	autofree(manager)
+	var tracker: LapTracker = LapTracker.new()
+	autofree(tracker)
+	var first: KartController = KartController.new()
+	var second: KartController = KartController.new()
+	var ai: KartController = KartController.new()
+	for kart: KartController in [first, second, ai]:
+		autofree(kart)
+		tracker.register_kart(kart)
+	manager._lap_tracker = tracker
+	manager._karts = [first, second, ai]
+	manager._player_karts = [first, second]
+	manager.tuning = manager.tuning.duplicate() as RaceTuning
+	manager.tuning.finish_timeout_seconds = 15.0
+	manager.tuning.results_delay_seconds = 10.0
+	tracker._records[first.get_instance_id()].finished = true
+	manager._advance_finishing(30.0)
+	assert_eq(manager._finishing_elapsed, 0.0)
+	assert_lt(manager._results_delay_remaining, 0.0)
+	tracker._records[second.get_instance_id()].finished = true
+	manager._advance_finishing(14.0)
+	assert_lt(manager._results_delay_remaining, 0.0)
+	manager._advance_finishing(1.0)
+	assert_gt(manager._results_delay_remaining, 0.0)
+
+
+func test_migration_merges_existing_profile_using_best_records() -> void:
+	var file: FileAccess = FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	file.store_string(JSON.stringify({
+		"version": 1, "best_laps": {"test_loop": 9000}, "best_positions": {"test_loop": 1},
+		"player_profiles": {
+			"P1": {"best_laps": {"test_loop": 8000, "track_02": 12000}, "best_positions": {"test_loop": 2}},
+			"P2": {"best_laps": {"test_loop": 7000}, "best_positions": {}},
+		},
+	}))
+	file.close()
+	var save: SaveManagerService = SaveManagerService.new(SAVE_PATH)
+	autofree(save)
+	var data: Dictionary = save.load_data()
+	assert_eq(int(data["best_laps"]["test_loop"]), 8000)
+	assert_eq(int(data["best_laps"]["track_02"]), 12000)
+	assert_eq(int(data["player_profiles"]["P1"]["best_positions"]["test_loop"]), 1)
+	assert_eq(save.get_player_best_lap_ms(1, &"test_loop"), 7000)
+
+
+func test_p1_mirror_merge_preserves_top_level_only_tracks() -> void:
+	var save: SaveManagerService = SaveManagerService.new(SAVE_PATH)
+	autofree(save)
+	var data: Dictionary = save.default_data()
+	data["best_laps"] = {"track_02": 12000}
+	data["best_positions"] = {"track_02": 2}
+	assert_eq(save.save_data(data), OK)
+	assert_eq(save.record_player_race_result(0, &"test_loop", 9000, 1), OK)
+	assert_eq(save.get_best_lap_ms(&"track_02"), 12000)
+	assert_eq(int(save.load_data()["best_positions"].get("track_02", -1)), 2)
