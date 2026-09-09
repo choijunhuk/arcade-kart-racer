@@ -10,7 +10,7 @@ const THEMES: Array[Color] = [Color(0.18, 0.42, 0.18), Color(0.06, 0.12, 0.25), 
 
 ## Makes tiled noise with optional bump normals, using an original fixed seed.
 static func surface(color: Color, bump: bool = false) -> StandardMaterial3D:
-	var material: StandardMaterial3D = KartMeshBuilder.material(color)
+	var material: StandardMaterial3D = PrimitiveArt.material(color)
 	var noise: FastNoiseLite = FastNoiseLite.new()
 	noise.seed = 13013
 	noise.frequency = 0.15
@@ -100,8 +100,8 @@ static func _markings(root: Node3D, track: Node3D, line: RacingLine) -> void:
 	var red: SurfaceTool = SurfaceTool.new()
 	white.begin(Mesh.PRIMITIVE_TRIANGLES)
 	red.begin(Mesh.PRIMITIVE_TRIANGLES)
-	white.set_material(KartMeshBuilder.material(Color(0.9, 0.95, 1), true))
-	red.set_material(KartMeshBuilder.material(Color(0.9, 0.12, 0.06)))
+	white.set_material(PrimitiveArt.material(Color(0.9, 0.95, 1), true))
+	red.set_material(PrimitiveArt.material(Color(0.9, 0.12, 0.06)))
 	var count: int = ceili(line.length() / 4.0)
 	for index: int in range(count):
 		var a: float = line.length() * float(index) / float(count)
@@ -137,7 +137,7 @@ static func _strip(surface_tool: SurfaceTool, root: Node3D, track: Node3D, line:
 static func _posts(root: Node3D, line: RacingLine) -> void:
 	var shape: BoxMesh = BoxMesh.new()
 	shape.size = Vector3(0.15, 1.4, 0.15)
-	shape.material = KartMeshBuilder.material(Color(0.5, 0.55, 0.6))
+	shape.material = PrimitiveArt.material(Color(0.5, 0.55, 0.6))
 	var count: int = ceili(line.length() / 8.0)
 	var mesh: MultiMesh = MultiMesh.new()
 	mesh.transform_format = MultiMesh.TRANSFORM_3D

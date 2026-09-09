@@ -19,7 +19,7 @@ var _hidden: bool = false
 
 func _ready() -> void:
 	body_entered.connect(_on_body_entered)
-	var paint: StandardMaterial3D = KartMeshBuilder.material(Color(0.15, 0.8, 1.0, 0.3), true)
+	var paint: StandardMaterial3D = PrimitiveArt.material(Color(0.15, 0.8, 1.0, 0.3), true)
 	paint.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_mesh.material_override = paint
 	var icon: Label3D = Label3D.new()

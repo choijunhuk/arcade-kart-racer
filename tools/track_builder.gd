@@ -21,7 +21,7 @@ static func build_road_segments(
 	var steps: int = maxi(1, int(ceil(length / segment_length)))
 	var surface: SurfaceTool = SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	surface.set_material(TrackArt.surface(material.albedo_color.lightened(0.25)))
+	surface.set_material(TrackArt.surface(material.albedo_color))
 	for index: int in range(steps):
 		var a: float = length * float(index) / float(steps)
 		var b: float = length * float(index + 1) / float(steps)

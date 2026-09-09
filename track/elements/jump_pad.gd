@@ -12,7 +12,7 @@ func _ready() -> void:
 		surface.add_vertex(vertex)
 	surface.generate_normals()
 	($LaunchArrow as MeshInstance3D).mesh = surface.commit()
-	($LaunchArrow as MeshInstance3D).material_override = KartMeshBuilder.material(Color(1, 0.4, 0.05), true)
+	($LaunchArrow as MeshInstance3D).material_override = PrimitiveArt.material(Color(1, 0.4, 0.05), true)
 
 
 func _on_body_entered(body: Node3D) -> void:

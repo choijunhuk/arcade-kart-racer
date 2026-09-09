@@ -72,3 +72,64 @@ func test_hills_ramp_leading_top_edge_is_buried() -> void:
 	var leading_top: Vector3 = ramp.transform * Vector3(-box.size.x * 0.5, box.size.y * 0.5, 0.0)
 	assert_lte(leading_top.y, 0.0, "a protruding end cap traps low-speed AI karts")
 	track.free()
+
+func test_track_art_has_no_kart_dependencies() -> void:
+	var sources: Array[String] = []
+	_collect_track_sources("res://track", sources)
+	for file: String in DirAccess.get_files_at("res://tools"):
+		if file.begins_with("track_") and file.ends_with(".gd"):
+			sources.append("res://tools/" + file)
+	assert_gt(sources.size(), 0)
+	for path: String in sources:
+		var source: String = FileAccess.get_file_as_string(path)
+		assert_false(source.contains("KartMeshBuilder"), path)
+		assert_false(source.contains("res://kart/"), path)
+
+func _collect_track_sources(directory: String, sources: Array[String]) -> void:
+	for file: String in DirAccess.get_files_at(directory):
+		if file.ends_with(".gd"):
+			sources.append(directory.path_join(file))
+	for child: String in DirAccess.get_directories_at(directory):
+		_collect_track_sources(directory.path_join(child), sources)
+
+func test_road_builder_preserves_supplied_color() -> void:
+	var body: StaticBody3D = StaticBody3D.new()
+	add_child_autofree(body)
+	var path: Path3D = Path3D.new()
+	path.curve = Curve3D.new()
+	path.curve.add_point(Vector3.ZERO)
+	path.curve.add_point(Vector3(0, 0, 16))
+	body.add_child(path)
+	var paint: StandardMaterial3D = TrackArt.surface(Color(0.2, 0.3, 0.4).lightened(0.25))
+	TrackBuilder.build_road_segments(body, path, 14.0, 0.4, paint)
+	var visual: MeshInstance3D = body.get_child(body.get_child_count() - 1) as MeshInstance3D
+	assert_eq((visual.mesh.surface_get_material(0) as StandardMaterial3D).albedo_color, paint.albedo_color)
+
+func test_chassis_palette_preserved() -> void:
+	var data: KartData = load("res://data/karts/light.tres") as KartData
+	var paint: StandardMaterial3D = KartMeshBuilder.chassis(data).surface_get_material(0) as StandardMaterial3D
+	assert_eq(paint.albedo_color, data.body_color)
+	assert_almost_eq(paint.metallic, 0.28, 0.00001)
+	assert_almost_eq(paint.roughness, 0.38, 0.00001)
+
+func test_transition_failure_reveals_scene_and_keeps_recovery() -> void:
+	var overlay: TransitionOverlay = preload("res://ui/components/transition_overlay.tscn").instantiate() as TransitionOverlay
+	add_child_autofree(overlay)
+	overlay.visible = true
+	var fade: ColorRect = overlay.get_node("Fade") as ColorRect
+	fade.modulate.a = 1.0
+	var loading: Control = preload("res://ui/components/loading_screen.tscn").instantiate() as Control
+	overlay.add_child(loading)
+	await overlay._show_failure(loading, "Expected scene load failure")
+	assert_push_error("Expected scene load failure")
+	assert_false(overlay.is_queued_for_deletion())
+	assert_true(overlay.visible)
+	assert_almost_eq(fade.modulate.a, 0.0, 0.001)
+	assert_false(is_instance_valid(loading))
+	var panel: PanelContainer = overlay.get_node("LoadError") as PanelContainer
+	var label: Label = panel.find_children("*", "Label", true, false)[0] as Label
+	assert_eq(label.text, "Unable to load this scene.")
+	var back: Button = panel.find_children("*", "Button", true, false)[0] as Button
+	assert_eq(back.text, "Back to menu")
+	assert_true(back.pressed.is_connected(overlay._back_to_menu))
+	assert_true(back.has_focus())

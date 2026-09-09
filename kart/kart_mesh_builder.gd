@@ -3,8 +3,6 @@ extends RefCounted
 
 ## Original low-poly body meshes, shared by catalogue id; no physics shapes.
 const BEVEL: float = 0.18
-const METALLIC: float = 0.28
-const ROUGHNESS: float = 0.38
 const BODY_SIZES: Array[Vector3] = [Vector3(1.35, 0.34, 2.3), Vector3(1.6, 0.5, 2.2), Vector3(1.8, 0.65, 2.35)]
 const VARIANT_WIDTH: float = 0.91
 const VARIANT_LENGTH: float = 1.08
@@ -20,7 +18,7 @@ static func chassis(data: KartData) -> ArrayMesh:
 	var outline: Array[Vector2] = [Vector2(-1, -1 + BEVEL), Vector2(-1 + BEVEL, -1), Vector2(1 - BEVEL, -1), Vector2(1, -1 + BEVEL), Vector2(1, 1 - BEVEL), Vector2(1 - BEVEL, 1), Vector2(-1 + BEVEL, 1), Vector2(-1, 1 - BEVEL)]
 	var surface: SurfaceTool = SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	surface.set_material(material(data.body_color))
+	surface.set_material(PrimitiveArt.material(data.body_color))
 	for index: int in range(outline.size()):
 		var a: Vector2 = outline[index] * Vector2(size.x, size.z) * 0.5
 		var b: Vector2 = outline[(index + 1) % outline.size()] * Vector2(size.x, size.z) * 0.5
@@ -34,30 +32,20 @@ static func chassis(data: KartData) -> ArrayMesh:
 	_meshes[data.id] = surface.commit()
 	return _meshes[data.id]
 
-## Creates the shared visual material palette.
-static func material(color: Color, emission: bool = false) -> StandardMaterial3D:
-	var result: StandardMaterial3D = StandardMaterial3D.new()
-	result.albedo_color = color
-	result.metallic = METALLIC
-	result.roughness = ROUGHNESS
-	result.emission_enabled = emission
-	result.emission = color
-	return result
-
 ## Installs accessories under the existing animated body and wheel pivots.
 static func decorate(visuals: Node3D, data: KartData) -> void:
 	var body: MeshInstance3D = visuals.get_node("Body") as MeshInstance3D
 	body.mesh = chassis(data)
-	var accent: StandardMaterial3D = material(data.body_color.lightened(0.35), true)
-	add_box(body, Vector3(1.65, 0.12, 0.18), Vector3(0, -0.12, -1.1), material(Color(0.1, 0.12, 0.16)))
-	add_box(body, Vector3(0.15, 0.08, 1.7), Vector3(0, 0.3, 0), accent)
+	var accent: StandardMaterial3D = PrimitiveArt.material(data.body_color.lightened(0.35), true)
+	PrimitiveArt.add_box(body, Vector3(1.65, 0.12, 0.18), Vector3(0, -0.12, -1.1), PrimitiveArt.material(Color(0.1, 0.12, 0.16)))
+	PrimitiveArt.add_box(body, Vector3(0.15, 0.08, 1.7), Vector3(0, 0.3, 0), accent)
 	if data.weight_class == KartData.WeightClass.HEAVY:
-		add_box(body, Vector3(1.9, 0.12, 0.45), Vector3(0, 0.65, 0.9), accent)
-		add_box(body, Vector3(0.15, 0.5, 0.15), Vector3(0, 0.4, 0.9), accent)
+		PrimitiveArt.add_box(body, Vector3(1.9, 0.12, 0.45), Vector3(0, 0.65, 0.9), accent)
+		PrimitiveArt.add_box(body, Vector3(0.15, 0.5, 0.15), Vector3(0, 0.4, 0.9), accent)
 	elif data.weight_class == KartData.WeightClass.LIGHT:
-		add_box(body, Vector3(0.55, 0.12, 0.8), Vector3(0, 0, -1.0), accent)
+		PrimitiveArt.add_box(body, Vector3(0.55, 0.12, 0.8), Vector3(0, 0, -1.0), accent)
 	else:
-		add_box(body, Vector3(1.75, 0.18, 0.65), Vector3(0, 0.05, 0.65), accent)
+		PrimitiveArt.add_box(body, Vector3(1.75, 0.18, 0.65), Vector3(0, 0.05, 0.65), accent)
 	for wheel_name: String in ["WheelFL", "WheelFR", "WheelRL", "WheelRR"]:
 		var rim: CylinderMesh = CylinderMesh.new()
 		rim.top_radius = 0.17
@@ -80,15 +68,4 @@ static func decorate(visuals: Node3D, data: KartData) -> void:
 	head.position.y = 0.4
 	head.material_override = accent
 	driver.add_child(head)
-	add_box(driver, Vector3(0.5, 0.16, 0.15), Vector3(0, 0.43, -0.28), material(Color(0.02, 0.06, 0.12)))
-
-## Adds a visual-only accessory.
-static func add_box(parent: Node3D, size: Vector3, at: Vector3, paint: Material) -> MeshInstance3D:
-	var mesh: BoxMesh = BoxMesh.new()
-	mesh.size = size
-	var node: MeshInstance3D = MeshInstance3D.new()
-	node.mesh = mesh
-	node.position = at
-	node.material_override = paint
-	parent.add_child(node)
-	return node
+	PrimitiveArt.add_box(driver, Vector3(0.5, 0.16, 0.15), Vector3(0, 0.43, -0.28), PrimitiveArt.material(Color(0.02, 0.06, 0.12)))
