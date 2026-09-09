@@ -9,6 +9,7 @@ class Entry extends RefCounted:
 	var kart_display_name: String = ""
 	var driver_name: String = ""
 	var rank: int = 0
+	var grid_slot: int = -1
 	var total_time_seconds: float = -1.0
 	var best_lap_seconds: float = -1.0
 	var is_new_record: bool = false
@@ -18,6 +19,7 @@ class Entry extends RefCounted:
 
 var _track_id: StringName = &""
 var _registered_ids: Dictionary[int, bool] = {}
+var _grid_slots: Dictionary[int, int] = {}
 var _player_kart: KartController
 var _save_manager: SaveManagerService
 var _last_lap_total: Dictionary[int, float] = {}
@@ -36,6 +38,7 @@ func setup(
 	_player_kart = player_kart
 	_save_manager = save_manager if save_manager != null else SaveManager
 	_registered_ids.clear()
+	_grid_slots.clear()
 	_last_lap_total.clear()
 	_best_laps.clear()
 	_hit_counts.clear()
@@ -43,6 +46,7 @@ func setup(
 	_entries.clear()
 	for kart: KartController in karts:
 		_registered_ids[kart.get_instance_id()] = true
+		_grid_slots[kart.get_instance_id()] = _grid_slots.size()
 	_connect_events()
 
 
@@ -61,6 +65,7 @@ func finalize(ranking: Array[KartController], finish_times: Dictionary) -> Array
 		entry.kart_display_name = kart_data.display_name if kart_data != null else entry.kart_name
 		entry.driver_name = driver_data.display_name if driver_data != null else "Unknown Driver"
 		entry.rank = index + 1
+		entry.grid_slot = _grid_slots.get(id, -1)
 		entry.total_time_seconds = float(finish_times.get(id, -1.0))
 		entry.best_lap_seconds = float(_best_laps.get(id, -1.0))
 		var best_lap_ms: int = roundi(entry.best_lap_seconds * 1000.0)

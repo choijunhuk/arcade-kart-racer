@@ -10,7 +10,10 @@ script = ExtResource("1")
 streams = Dictionary[StringName, AudioStream]({
 &"menu": ExtResource("2"),
 &"race": ExtResource("3"),
-&"results": ExtResource("4")
+&"results": ExtResource("4"),
+&"lumen_underpass": ExtResource("3"),
+&"glacier_crown": ExtResource("3"),
+&"ochre_rift": ExtResource("3")
 })
 volume_db = Dictionary[StringName, float]({
 &"menu": -6.0,

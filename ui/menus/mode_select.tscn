@@ -54,8 +54,7 @@ text = "SINGLE RACE"
 
 [node name="GrandPrixButton" type="Button" parent="Panel/VBox"]
 layout_mode = 2
-disabled = true
-text = "GRAND PRIX  •  PHASE 12"
+text = "GRAND PRIX"
 
 [node name="BackButton" type="Button" parent="Panel/VBox"]
 layout_mode = 2

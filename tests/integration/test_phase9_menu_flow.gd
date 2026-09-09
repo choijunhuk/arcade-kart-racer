@@ -24,7 +24,7 @@ func after_each() -> void:
 		GameState.scene_change_requested.disconnect(_on_scene_change_requested)
 
 
-func test_main_menu_ui_accept_requests_mode_select_and_disables_time_trial() -> void:
+func test_main_menu_ui_accept_requests_mode_select_and_enables_time_trial() -> void:
 	var menu: Control = _instantiate_control(MAIN_MENU_PATH)
 	if menu == null:
 		return
@@ -33,14 +33,14 @@ func test_main_menu_ui_accept_requests_mode_select_and_disables_time_trial() -> 
 	var play: Button = menu.get_node("Panel/VBox/PlayButton") as Button
 	var time_trial: Button = menu.get_node("Panel/VBox/TimeTrialButton") as Button
 	assert_eq(get_viewport().gui_get_focus_owner(), play)
-	assert_true(time_trial.disabled)
+	assert_false(time_trial.disabled)
 
 	await _press_action(&"ui_accept")
 
 	assert_eq(_last_scene_path, MODE_SELECT_PATH)
 
 
-func test_mode_select_ui_accept_requests_driver_select_and_disables_grand_prix() -> void:
+func test_mode_select_ui_accept_requests_driver_select_and_enables_grand_prix() -> void:
 	var menu: Control = _instantiate_control(MODE_SELECT_PATH)
 	if menu == null:
 		return
@@ -49,7 +49,7 @@ func test_mode_select_ui_accept_requests_driver_select_and_disables_grand_prix()
 	var single_race: Button = menu.get_node("Panel/VBox/SingleRaceButton") as Button
 	var grand_prix: Button = menu.get_node("Panel/VBox/GrandPrixButton") as Button
 	assert_eq(get_viewport().gui_get_focus_owner(), single_race)
-	assert_true(grand_prix.disabled)
+	assert_false(grand_prix.disabled)
 
 	await _press_action(&"ui_accept")
 
@@ -72,19 +72,19 @@ func test_driver_grid_scans_eight_cards_and_accepts_the_focused_driver() -> void
 	assert_eq(_last_scene_path, KART_SELECT_PATH)
 
 
-func test_kart_grid_scans_three_cards_and_accepts_the_focused_kart() -> void:
+func test_kart_grid_scans_six_cards_and_accepts_the_focused_kart() -> void:
 	var menu: Control = _instantiate_control(KART_SELECT_PATH)
 	if menu == null:
 		return
 	add_child_autofree(menu)
 	await wait_process_frames(1)
 	var grid: GridContainer = menu.get_node("Panel/VBox/Scroll/Grid") as GridContainer
-	assert_eq(grid.get_child_count(), 3)
+	assert_eq(grid.get_child_count(), 6)
 	assert_eq(get_viewport().gui_get_focus_owner(), grid.get_child(0))
 
 	await _press_action(&"ui_accept")
 
-	assert_eq(GameState.selected_kart_id, &"heavy")
+	assert_eq(GameState.selected_kart_id, &"basalt_crown")
 	assert_eq(_last_scene_path, TRACK_SELECT_PATH)
 
 
@@ -95,7 +95,7 @@ func test_track_select_shows_laps_and_accepts_the_focused_track() -> void:
 	add_child_autofree(menu)
 	await wait_process_frames(1)
 	var list: VBoxContainer = menu.get_node("Panel/VBox/TrackList") as VBoxContainer
-	assert_eq(list.get_child_count(), 1)
+	assert_eq(list.get_child_count(), 4)
 	var track_button: Button = list.get_child(0) as Button
 	assert_string_contains(track_button.text, "3 LAPS")
 	assert_eq(get_viewport().gui_get_focus_owner(), track_button)
@@ -156,11 +156,11 @@ func test_gamepad_only_full_selection_flow_reaches_countdown_with_chosen_config(
 
 	assert_eq(manager.get_state(), RaceState.COUNTDOWN)
 	assert_eq(GameState.pending_race_config.player_driver.id, &"aurora_vale")
-	assert_eq(GameState.pending_race_config.player_kart.id, &"heavy")
+	assert_eq(GameState.pending_race_config.player_kart.id, &"basalt_crown")
 	assert_eq(GameState.pending_race_config.track.id, &"track_01_ridgeline_circuit")
 	assert_eq(GameState.pending_race_config.ai_difficulty.id, &"easy")
 	assert_eq(manager.get_karts()[0].get_driver_data().id, &"aurora_vale")
-	assert_eq(manager.get_karts()[0].get_kart_data().id, &"heavy")
+	assert_eq(manager.get_karts()[0].get_kart_data().id, &"basalt_crown")
 
 
 func test_ui_cancel_returns_from_mode_select_to_main_menu() -> void:

@@ -40,6 +40,8 @@ var _roulette_tween: Tween
 var _roulette_was_active: bool = false
 var _lap_base_position: Vector2 = Vector2.ZERO
 var _threat_remaining: float = 0.0
+var _time_trial: TimeTrialGhost
+var _time_label: Label
 
 
 func _ready() -> void:
@@ -76,6 +78,10 @@ func _process(delta: float) -> void:
 		if _threat_remaining <= 0.0:
 			_threat_warning.visible = false
 	_update_item_hud(delta)
+	if _time_trial != null and _time_label != null:
+		var best: String = "--" if _time_trial.best_seconds() < 0.0 else "%.3f" % _time_trial.best_seconds()
+		var ghost_delta: String = "--" if _time_trial.best == null else "%+.3f" % _time_trial.delta_seconds()
+		_time_label.text = "TIME %.3f\nBEST %s\nGHOST %s" % [_time_trial.current_seconds(), best, ghost_delta]
 
 
 ## Binds the HUD to read-only race participants and tracker APIs. `player_kart`
@@ -97,6 +103,21 @@ func bind(
 	if player_kart != null:
 		_drift_meter.set_controller(player_kart.drift_controller)
 	_minimap.bind(racing_line, karts, player_kart)
+
+
+## Displays time-trial timing independently of the standard rank/item panels.
+func bind_time_trial(trial: TimeTrialGhost) -> void:
+	_time_trial = trial
+	if _time_label == null:
+		_time_label = Label.new()
+		_time_label.name = "TimeTrialTiming"
+		_time_label.position = Vector2(35.0, 180.0)
+		_time_label.add_theme_font_size_override("font_size", 24)
+		add_child(_time_label)
+	_time_label.visible = trial != null
+	$ItemPanel.visible = trial == null
+	_position_label.visible = trial == null
+	_position_count_label.visible = trial == null
 
 
 func _exit_tree() -> void:

@@ -6,6 +6,7 @@ extends Node
 var _player: KartController
 var _total_laps: int = 1
 var _active: bool = false
+var _bgm_id: StringName = &"race"
 
 
 func _ready() -> void:
@@ -29,9 +30,10 @@ func _exit_tree() -> void:
 
 
 ## Rebinds before countdown, also resetting restart-only presentation state.
-func configure(player: KartController, total_laps: int) -> void:
+func configure(player: KartController, total_laps: int, bgm_id: StringName = &"race") -> void:
 	_player = player
 	_total_laps = maxi(1, total_laps)
+	_bgm_id = bgm_id
 	_active = false
 	AudioManager.pool.stop_sfx()
 	AudioManager.set_music_ducked(false)
@@ -54,7 +56,7 @@ func _on_state(_previous: int, current: int) -> void:
 	_active = current == RaceState.RACING or current == RaceState.FINISHING
 	match current:
 		RaceState.COUNTDOWN:
-			AudioManager.play_bgm(&"race")
+			AudioManager.play_bgm(_bgm_id)
 		RaceState.RESULTS:
 			AudioManager.set_final_lap(false)
 			AudioManager.play_bgm(&"results")

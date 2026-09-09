@@ -18,6 +18,7 @@ func default_data() -> Dictionary:
 		"version": CURRENT_VERSION,
 		"best_laps": {},
 		"best_positions": {},
+		"grand_prix_bests": {},
 		"last_selection": {"driver": "", "kart": "medium", "track": "test_loop"},
 		"unlocks": [],
 	}
@@ -75,6 +76,21 @@ func get_best_lap_ms(track_id: StringName) -> int:
 	return int(best_laps.get(String(track_id), -1))
 
 
+## Retains the player's best cup rank and highest score, separated by difficulty.
+func record_grand_prix(cup_key: StringName, position: int, points: int) -> Error:
+	if position <= 0 or points < 0:
+		return ERR_INVALID_PARAMETER
+	var data: Dictionary = load_data()
+	var bests: Dictionary = data["grand_prix_bests"]
+	var key: String = String(cup_key)
+	var previous: Dictionary = bests.get(key, {})
+	bests[key] = {
+		"position": mini(position, int(previous.get("position", position))),
+		"points": maxi(points, int(previous.get("points", 0))),
+	}
+	return save_data(data)
+
+
 ## Persists the three content identifiers used to start the latest race.
 func save_last_selection(driver_id: StringName, kart_id: StringName, track_id: StringName) -> Error:
 	var data: Dictionary = load_data()
@@ -106,7 +122,7 @@ func _read_valid_data(path: String) -> Dictionary:
 	if version < 0 or version > CURRENT_VERSION:
 		return {}
 	# Syntactically valid JSON can still violate the types consumed by menus/results.
-	for key: String in ["best_laps", "best_positions", "last_selection"]:
+	for key: String in ["best_laps", "best_positions", "last_selection", "grand_prix_bests"]:
 		if data.has(key) and not data[key] is Dictionary:
 			return {}
 	for key: String in ["best_laps", "best_positions"]:
@@ -117,6 +133,16 @@ func _read_valid_data(path: String) -> Dictionary:
 			if not is_finite(float(value)) or float(value) <= 0.0:
 				return {}
 	var selection: Dictionary = data.get("last_selection", {})
+	var gp_bests: Dictionary = data.get("grand_prix_bests", {})
+	for record: Variant in gp_bests.values():
+		if not record is Dictionary:
+			return {}
+		for key: String in ["position", "points"]:
+			var value: Variant = record.get(key)
+			if not (value is int or value is float) or not is_finite(float(value)):
+				return {}
+			if float(value) < (1.0 if key == "position" else 0.0) or float(value) != floorf(float(value)):
+				return {}
 	for value: Variant in selection.values():
 		if not value is String:
 			return {}

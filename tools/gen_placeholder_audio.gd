@@ -24,6 +24,11 @@ const ITEM_IDS: Array[StringName] = [
 	&"rocket_dart", &"hunter_drone", &"spike_mine", &"nitro_can",
 	&"aegis_bubble", &"pulse_blast", &"storm_beacon",
 ]
+const AUDIO_ALIASES: Dictionary[StringName, StringName] = {
+	&"triple_dart_fire": &"rocket_dart_fire", &"triple_dart_hit": &"rocket_dart_hit",
+	&"phantom_decoy_fire": &"spike_mine_fire", &"phantom_decoy_hit": &"spike_mine_hit",
+	&"lumen_underpass": &"race", &"glacier_crown": &"race", &"ochre_rift": &"race",
+}
 const TONES: Dictionary[StringName, float] = {
 	&"drift_tier_1": 660.0, &"drift_tier_2": 880.0, &"drift_tier_3": 1100.0,
 	&"boost": 180.0, &"impact_wall": 70.0, &"impact_kart": 100.0,
@@ -207,13 +212,18 @@ func _save_wav(id: StringName, samples: PackedFloat32Array, looped: bool) -> voi
 
 
 func _write_library(file_name: String, ids: Array[StringName]) -> void:
+	var lookup_ids: Array[StringName] = ids.duplicate()
+	for alias_id: StringName in AUDIO_ALIASES:
+		if ids.has(AUDIO_ALIASES[alias_id]):
+			lookup_ids.append(alias_id)
 	var text: String = '[gd_resource type="Resource" script_class="SfxLibrary" load_steps=%d format=3]\n\n' % (ids.size() + 2)
 	text += '[ext_resource type="Script" path="res://data/schemas/sfx_library.gd" id="1"]\n'
 	for index: int in range(ids.size()):
 		text += '[ext_resource type="AudioStream" path="%s%s.wav" id="%d"]\n' % [OUTPUT_DIR, ids[index], index + 2]
 	text += '\n[resource]\nscript = ExtResource("1")\nstreams = Dictionary[StringName, AudioStream]({\n'
-	for index: int in range(ids.size()):
-		text += '&"%s": ExtResource("%d")%s\n' % [ids[index], index + 2, ',' if index < ids.size() - 1 else '']
+	for index: int in range(lookup_ids.size()):
+		var source_id: StringName = AUDIO_ALIASES.get(lookup_ids[index], lookup_ids[index])
+		text += '&"%s": ExtResource("%d")%s\n' % [lookup_ids[index], ids.find(source_id) + 2, ',' if index < lookup_ids.size() - 1 else '']
 	text += '})\nvolume_db = Dictionary[StringName, float]({\n'
 	for index: int in range(ids.size()):
 		var gain: float = ENGINE_VOLUME_DB if ids[index] == &"engine" else DEFAULT_VOLUME_DB

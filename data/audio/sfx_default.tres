@@ -86,7 +86,11 @@ streams = Dictionary[StringName, AudioStream]({
 &"pulse_blast_fire": ExtResource("39"),
 &"pulse_blast_hit": ExtResource("40"),
 &"storm_beacon_fire": ExtResource("41"),
-&"storm_beacon_hit": ExtResource("42")
+&"storm_beacon_hit": ExtResource("42"),
+&"triple_dart_fire": ExtResource("29"),
+&"triple_dart_hit": ExtResource("30"),
+&"phantom_decoy_fire": ExtResource("33"),
+&"phantom_decoy_hit": ExtResource("34")
 })
 volume_db = Dictionary[StringName, float]({
 &"engine": -12.0,

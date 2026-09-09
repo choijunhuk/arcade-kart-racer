@@ -4,5 +4,5 @@
 
 [resource]
 script = ExtResource("1_table")
-item_ids = Array[StringName]([&"rocket_dart", &"hunter_drone", &"spike_mine", &"nitro_can", &"aegis_bubble", &"pulse_blast", &"storm_beacon"])
-rows = Array[PackedFloat32Array]([PackedFloat32Array(15, 0, 30, 0, 45, 10, 0), PackedFloat32Array(25, 5, 25, 5, 30, 10, 0), PackedFloat32Array(25, 15, 20, 15, 15, 10, 0), PackedFloat32Array(20, 20, 15, 25, 10, 10, 0), PackedFloat32Array(15, 20, 10, 30, 5, 15, 5), PackedFloat32Array(5, 20, 0, 50, 5, 10, 10), PackedFloat32Array(0, 20, 0, 55, 0, 10, 15), PackedFloat32Array(0, 15, 0, 60, 0, 10, 15)])
+item_ids = Array[StringName]([&"rocket_dart", &"hunter_drone", &"spike_mine", &"nitro_can", &"aegis_bubble", &"pulse_blast", &"storm_beacon", &"triple_dart", &"phantom_decoy"])
+rows = Array[PackedFloat32Array]([PackedFloat32Array(10, 0, 25, 0, 45, 10, 0, 0, 10), PackedFloat32Array(20, 5, 20, 5, 30, 10, 0, 5, 5), PackedFloat32Array(20, 15, 15, 15, 15, 10, 0, 5, 5), PackedFloat32Array(15, 20, 10, 25, 10, 10, 0, 5, 5), PackedFloat32Array(10, 20, 5, 30, 5, 15, 5, 5, 5), PackedFloat32Array(0, 20, 0, 50, 5, 10, 10, 5, 0), PackedFloat32Array(0, 15, 0, 55, 0, 10, 15, 5, 0), PackedFloat32Array(0, 10, 0, 60, 0, 10, 15, 5, 0)])

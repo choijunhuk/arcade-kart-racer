@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="KartData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/schemas/kart_data.gd" id="1_kart"]
+
+[resource]
+script = ExtResource("1_kart")
+id = &"basalt_crown"
+display_name = "Basalt Crown"
+weight_class = 2
+max_speed = 28.3
+acceleration = 11.6
+handling = 0.88
+drift_factor = 0.88
+drift_charge_mult = 0.85
+weight = 1.42
+traction = 0.98
+boost_power = 1.03
+offroad_resistance = 0.34
+body_color = Color(0.9, 0.15, 0.42, 1)

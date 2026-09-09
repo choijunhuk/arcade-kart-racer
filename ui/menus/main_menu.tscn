@@ -65,8 +65,7 @@ text = "PLAY"
 
 [node name="TimeTrialButton" type="Button" parent="Panel/VBox"]
 layout_mode = 2
-disabled = true
-text = "TIME TRIAL  •  PHASE 12"
+text = "TIME TRIAL"
 
 [node name="SettingsButton" type="Button" parent="Panel/VBox"]
 layout_mode = 2

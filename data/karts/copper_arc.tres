@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="KartData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/schemas/kart_data.gd" id="1_kart"]
+
+[resource]
+script = ExtResource("1_kart")
+id = &"copper_arc"
+display_name = "Copper Arc"
+weight_class = 1
+max_speed = 28.1
+acceleration = 13.6
+handling = 1.02
+drift_factor = 0.98
+drift_charge_mult = 1.0
+weight = 1.05
+traction = 1.04
+boost_power = 1.02
+offroad_resistance = 0.16
+body_color = Color(1, 0.7, 0.2, 1)

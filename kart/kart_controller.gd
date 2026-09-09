@@ -4,6 +4,7 @@ extends CharacterBody3D
 ## camera/HUD/AI. Never reads the `Input` singleton directly (spec §23);
 ## drives from whatever `InputProvider` is installed. Spec: §8, §9.3.
 signal state_changed(old_state: int, new_state: int)
+signal replay_event_received(event: Dictionary)
 const ENGINE_BOOST_PITCH_ADD: float = 0.3
 @export var kart_data: KartData = preload("res://data/karts/medium.tres")
 @export var driver_data: DriverData
@@ -173,7 +174,10 @@ func apply_impulse_arcade(delta_velocity: Vector3, yaw_nudge: float) -> void:
 ## `item_speed_factor` forward the item-hit distinction to HitReactor (spec
 ## §12.2): item hits always allow shield absorption, even a BUMP.
 func apply_hit(type: HitReactor.HitType, source: Node = null, from_item: bool = false, item_speed_factor: float = 1.0) -> bool:
-	return _hit_reactor.apply(type, source, from_item, item_speed_factor)
+	var accepted: bool = _hit_reactor.apply(type, source, from_item, item_speed_factor)
+	if accepted:
+		replay_event_received.emit({"type": "hit", "hit_type": int(type)})
+	return accepted
 ## Starts the tick-driven respawn state and suppresses driving input.
 func begin_respawn() -> void:
 	_respawning = true
@@ -188,6 +192,7 @@ func reset_motion_arcade() -> void:
 	_physics.reset_motion()
 ## Applies a local-space forward/up launch through KartPhysics ownership.
 func launch(local_velocity: Vector3) -> void:
+	replay_event_received.emit({"type": "launch", "velocity": [local_velocity.x, local_velocity.y, local_velocity.z]})
 	_physics.launch(local_velocity)
 	_ungrounded_ticks = tuning.airborne_grace_ticks + 1
 	_set_state(KartState.AIRBORNE)
@@ -197,6 +202,7 @@ func notify_contact() -> void:
 	EventBus.kart_contacted.emit(self)
 ## Requests a boost from a track or future item source.
 func request_boost(spec: BoostSpecData, source: StringName) -> void:
+	replay_event_received.emit(KartReplayState.boost_dict(spec, source))
 	boost_controller.request(spec, source)
 ## Returns drift visual state without exposing mutable controller internals.
 func get_drift_direction() -> int:

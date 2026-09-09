@@ -13,7 +13,6 @@ class GroundProbe extends RefCounted:
 	## Mean hit distance over every colliding ray; fallback when the center ray misses.
 	var average_distance: float = -1.0
 
-
 ## TerrainSensor output consumed by longitudinal and lateral integration.
 class TerrainSample extends RefCounted:
 	var speed_mult: float = 1.0
@@ -23,7 +22,6 @@ class TerrainSample extends RefCounted:
 	## Active pad/item boosts bypass offroad penalties.
 	var ignores_offroad: bool = false
 
-
 ## Immutable-per-tick drift request produced by DriftController.
 class DriftResult extends RefCounted:
 	var is_drifting: bool = false
@@ -32,7 +30,6 @@ class DriftResult extends RefCounted:
 	var grip: float = 0.0
 	var speed_retention: float = 1.0
 	var visual_angle_degrees: float = 0.0
-
 
 ## Immutable-per-tick boost request produced by BoostController.
 class BoostResult extends RefCounted:
@@ -44,13 +41,13 @@ class BoostResult extends RefCounted:
 	var remaining: float = 0.0
 	var spec: BoostSpecData
 
-
 ## Pure wall-collision response: speed retained and outward bounce fraction.
 class WallResponse extends RefCounted:
 	var speed_mult: float = 1.0
 	var bounce_mult: float = 0.0
 
 const CENTER_RAY_INDEX: int = 4
+const FLAT_NORMAL_EPSILON: float = 0.001
 
 ## Longitudinal scalar speed in the kart's forward direction (negative = reverse).
 var speed: float = 0.0
@@ -70,10 +67,10 @@ var _current_up: Vector3 = Vector3.UP
 var _was_grounded: bool = true
 var _wall_contact_active: bool = false
 var _ground_ignore_ticks: int = 0
+var _ghost_motion: KartWorldMotion
 
 signal wall_head_on()
 signal landed(vertical_speed: float)
-
 
 ## Wires the physics component to its owning body, ground rays, and data.
 func setup(body: CharacterBody3D, ground_rays: Array[RayCast3D], tuning: PhysicsTuning, kart_data: KartData) -> void:
@@ -83,7 +80,6 @@ func setup(body: CharacterBody3D, ground_rays: Array[RayCast3D], tuning: Physics
 	_kart_data = kart_data
 	_body.up_direction = Vector3.UP
 	_body.floor_snap_length = tuning.floor_snap_length
-
 
 ## Casts the 5 ground rays and returns the averaged grounded state and normal.
 ## Surfaces steeper than `max_climb_angle_degrees` are excluded from the
@@ -121,7 +117,6 @@ func probe_ground() -> GroundProbe:
 	ground_normal = probe.normal
 	return probe
 
-
 ## Integrates one physics tick: longitudinal speed, steering/yaw, lateral
 ## slip, gravity/slope, hover/up alignment, `move_and_slide()`, and wall
 ## response post-processing. Spec §9.3 step 6 / §9.4-§9.8.
@@ -155,13 +150,14 @@ func integrate(
 	var right: Vector3 = _body.global_transform.basis.x
 	_body.velocity = forward * speed + right * lateral + Vector3.UP * _vertical_speed
 	var incoming_velocity: Vector3 = _body.velocity
-	_body.move_and_slide()
+	if _ghost_motion != null:
+		_ghost_motion.move_kart(_body)
+	else:
+		_body.move_and_slide()
 	_resolve_wall_collisions(dt, incoming_velocity)
-
 
 func _effective_max_speed(terrain: TerrainSample, boost: BoostResult) -> float:
 	return _kart_data.max_speed * terrain.speed_mult * boost.speed_mult
-
 
 func _integrate_longitudinal(input: InputFrame, terrain: TerrainSample, boost: BoostResult, dt: float) -> void:
 	var max_speed: float = _effective_max_speed(terrain, boost)
@@ -178,7 +174,6 @@ func _integrate_longitudinal(input: InputFrame, terrain: TerrainSample, boost: B
 		speed = move_toward(speed, 0.0, _tuning.drag * terrain.drag_mult * dt)
 	if speed > max_speed:
 		speed = move_toward(speed, max_speed, _tuning.overspeed_decay * dt)
-
 
 ## Applies speed-based steering around the ground normal and returns the yaw
 ## delta actually applied this tick (used to derive lateral slip).
@@ -200,9 +195,11 @@ func _integrate_steering(
 		yaw_rate *= _tuning.air_steer_factor
 	var yaw_delta: float = yaw_rate * dt
 	var axis: Vector3 = ground.normal if ground.grounded else Vector3.UP
+	# Preserve established flat-ground rounding; real bank/slope normals only yaw.
+	if absf(axis.x) + absf(axis.z) > FLAT_NORMAL_EPSILON:
+		axis = Vector3.UP
 	_body.rotate(axis, yaw_delta)
 	return yaw_delta
-
 
 ## Computes locked-direction drift yaw; opposite steer may reach zero but never reverse it.
 static func compute_drift_yaw_rate(
@@ -211,18 +208,15 @@ static func compute_drift_yaw_rate(
 	var radius_term: float = tuning.drift_base_turn + steer * drift_dir * tuning.drift_steer_influence
 	return drift_dir * maxf(0.0, radius_term) * kart_data.drift_factor
 
-
 ## Returns the grip coefficient selected for this tick.
 func _effective_grip(terrain: TerrainSample, drift: DriftResult) -> float:
 	if drift.is_drifting:
 		return drift.grip
 	return _tuning.grip * _kart_data.traction * terrain.grip_mult
 
-
 ## Converts a per-second retention ratio to a frame-rate-independent tick result.
 static func apply_drift_speed_retention(value: float, retention: float, dt: float) -> float:
 	return value * pow(clampf(retention, 0.0, 1.0), dt)
-
 
 func _integrate_vertical(ground: GroundProbe, dt: float) -> void:
 	if ground.grounded:
@@ -235,7 +229,6 @@ func _integrate_vertical(ground: GroundProbe, dt: float) -> void:
 		_vertical_speed -= _tuning.gravity * dt
 		air_time += dt
 
-
 ## Adds the gravity component tangential to the slope to `speed` so uphill
 ## sections decelerate and downhill sections accelerate (spec §9.7).
 func _integrate_slope(ground: GroundProbe, dt: float) -> void:
@@ -247,13 +240,11 @@ func _integrate_slope(ground: GroundProbe, dt: float) -> void:
 	var along: float = slope_gravity.dot(forward)
 	speed += along * _tuning.gravity_along_slope * dt
 
-
 func _integrate_up_alignment(ground: GroundProbe, dt: float) -> void:
 	var target_up: Vector3 = ground.normal if ground.grounded else Vector3.UP
 	var rate: float = _tuning.up_align_speed_grounded if ground.grounded else _tuning.up_align_speed_airborne
 	_current_up = _slerp_up_vector(_current_up, target_up, clampf(rate * dt, 0.0, 1.0))
 	_body.up_direction = _current_up
-
 
 ## Spherical interpolation between two up-vector candidates that never feeds
 ## `Basis.set_axis_angle()` a degenerate axis, unlike `Vector3.slerp()` when
@@ -273,7 +264,6 @@ static func _slerp_up_vector(from: Vector3, to: Vector3, weight: float) -> Vecto
 	var relative: Vector3 = (to_unit - from_unit * cos_angle).normalized()
 	return from_unit * cos(angle) + relative * sin(angle)
 
-
 ## Reduces speed on the first tick a landing is detected, capped by
 ## `landing_speed_loss_cap` (spec §9.7).
 func _apply_landing_loss(ground: GroundProbe, vertical_speed: float) -> void:
@@ -286,11 +276,11 @@ func _apply_landing_loss(ground: GroundProbe, vertical_speed: float) -> void:
 		_tuning.landing_lateral_retention,
 	)
 
-
 func _resolve_wall_collisions(dt: float, incoming_velocity: Vector3) -> void:
 	var found_wall: bool = false
-	for index: int in _body.get_slide_collision_count():
-		var collision: KinematicCollision3D = _body.get_slide_collision(index)
+	var mover: CharacterBody3D = _ghost_motion if _ghost_motion != null else _body
+	for index: int in mover.get_slide_collision_count():
+		var collision: KinematicCollision3D = mover.get_slide_collision(index)
 		var normal: Vector3 = collision.get_normal()
 		if absf(normal.dot(Vector3.UP)) >= _tuning.wall_normal_threshold:
 			continue
@@ -311,7 +301,6 @@ func _resolve_wall_collisions(dt: float, incoming_velocity: Vector3) -> void:
 			wall_head_on.emit()
 	_wall_contact_active = found_wall
 
-
 ## Pure wall-incidence response (spec §9.8): graze below `wall_graze_angle_degrees`,
 ## head-on above `wall_head_on_angle_degrees`, linear interpolation between.
 ## Factored out of scene state so it is unit-testable on its own.
@@ -331,7 +320,6 @@ static func compute_wall_response(incidence_degrees: float, tuning: PhysicsTunin
 		response.bounce_mult = lerpf(0.0, tuning.wall_bounce, t)
 	return response
 
-
 ## Pure landing correction: large travel/heading misalignment retains only a
 ## tunable fraction of lateral velocity; aligned landings keep their slide.
 static func compute_landing_lateral(
@@ -343,7 +331,6 @@ static func compute_landing_lateral(
 		return lateral_speed
 	return lateral_speed * clampf(retention, 0.0, 1.0)
 
-
 ## Adds a world-space arcade impulse to the local scalar velocity model.
 func apply_world_delta_velocity(delta_velocity: Vector3) -> void:
 	var forward: Vector3 = -_body.global_transform.basis.z
@@ -352,18 +339,15 @@ func apply_world_delta_velocity(delta_velocity: Vector3) -> void:
 	lateral += delta_velocity.dot(right)
 	_vertical_speed += delta_velocity.y
 
-
 ## Applies a one-shot multiplier to forward and lateral motion.
 func scale_speed(factor: float) -> void:
 	speed *= factor
 	lateral *= factor
 
-
 ## Caps forward speed against a fraction of the kart's base maximum.
 func cap_speed(max_speed_factor: float) -> void:
 	var cap: float = _kart_data.max_speed * max_speed_factor
 	speed = clampf(speed, -cap, cap)
-
 
 ## Clears all local and CharacterBody velocity components for respawn.
 func reset_motion() -> void:
@@ -376,11 +360,9 @@ func reset_motion() -> void:
 	_current_up = Vector3.UP
 	_was_grounded = true
 
-
 ## Rebinds per-kart handling and mass data after sandbox swaps.
 func set_kart_data(kart_data: KartData) -> void:
 	_kart_data = kart_data
-
 
 ## Adds a small vertical drift-hop impulse without bypassing the scalar motion model.
 func hop(vertical_impulse: float) -> void:
@@ -398,3 +380,7 @@ func launch(local_velocity: Vector3) -> void:
 	_ground_ignore_ticks = _tuning.launch_ground_ignore_ticks
 	grounded = false
 	air_time = 0.0
+
+## Supplies an isolated world collider while keeping the ghost kart non-colliding.
+func set_ghost_motion(motion: KartWorldMotion) -> void:
+	_ghost_motion = motion

@@ -81,13 +81,13 @@ func test_results_screen_builds_rows_and_focuses_restart() -> void:
 	assert_eq(get_viewport().gui_get_focus_owner(), restart_button)
 
 
-func test_main_scene_boots_the_phase_nine_menu_with_disabled_time_trial() -> void:
+func test_main_scene_boots_the_phase_nine_menu_with_enabled_time_trial() -> void:
 	var main: Node = (load(MAIN_PATH) as PackedScene).instantiate()
 	autofree(main)
 	var play: Button = main.get_node("MainMenu/Panel/VBox/PlayButton") as Button
 	var time_trial: Button = main.get_node("MainMenu/Panel/VBox/TimeTrialButton") as Button
 	assert_not_null(play)
-	assert_true(time_trial.disabled)
+	assert_false(time_trial.disabled)
 	assert_not_null(main.get_node_or_null("MainMenu/Panel/VBox/SettingsButton"))
 
 

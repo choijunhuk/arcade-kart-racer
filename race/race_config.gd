@@ -2,6 +2,10 @@ class_name RaceConfig
 extends Resource
 
 ## Per-race parameters consumed by RaceManager (spec §14.2).
+enum RaceMode { SINGLE_RACE, GRAND_PRIX, TIME_TRIAL }
+
+@export var race_mode: RaceMode = RaceMode.SINGLE_RACE
+@export var gp_round: int = 0
 
 @export var track: TrackData
 @export var laps: int = 3
@@ -16,3 +20,4 @@ extends Resource
 
 ## Optional per-grid-slot roster for mixed-class simulations; empty uses player_kart.
 @export var kart_roster: Array[KartData] = []
+@export var driver_roster: Array[DriverData] = []

@@ -154,5 +154,6 @@ static func _is_position_occupied(position: Vector3, self_kart: KartController, 
 
 
 static func _oriented_transform(position: Vector3, forward: Vector3) -> Transform3D:
+	forward.y = 0.0
 	var facing: Vector3 = forward if forward.length() > 0.001 else Vector3.FORWARD
 	return Transform3D(Basis.looking_at(facing, Vector3.UP), position + Vector3.UP * 0.05)

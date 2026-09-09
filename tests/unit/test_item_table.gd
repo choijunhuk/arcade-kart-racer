@@ -35,8 +35,8 @@ func test_interpolated_weights_match_first_row_at_leading_rank() -> void:
 	var weights: PackedFloat32Array = _weights(0.0, &"")
 	if weights.is_empty():
 		return
-	assert_almost_eq(weights[0], 15.0, EPSILON)
-	assert_almost_eq(weights[2], 30.0, EPSILON)
+	assert_almost_eq(weights[0], 10.0, EPSILON)
+	assert_almost_eq(weights[2], 25.0, EPSILON)
 	assert_almost_eq(weights[4], 45.0, EPSILON)
 
 
@@ -44,7 +44,7 @@ func test_interpolated_weights_lerp_between_neighbor_rows() -> void:
 	var weights: PackedFloat32Array = _weights(0.5 / 7.0, &"")
 	if weights.is_empty():
 		return
-	assert_almost_eq(weights[0], 20.0, EPSILON)
+	assert_almost_eq(weights[0], 15.0, EPSILON)
 	assert_almost_eq(weights[1], 2.5, EPSILON)
 	assert_almost_eq(weights[4], 37.5, EPSILON)
 
@@ -54,7 +54,7 @@ func test_previous_item_weight_is_halved_after_interpolation() -> void:
 	if weights.is_empty():
 		return
 	assert_almost_eq(weights[4], 22.5, EPSILON)
-	assert_almost_eq(weights[2], 30.0, EPSILON)
+	assert_almost_eq(weights[2], 25.0, EPSILON)
 
 
 func test_pick_is_repeatable_for_the_same_seed() -> void:

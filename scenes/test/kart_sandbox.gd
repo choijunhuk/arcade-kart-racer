@@ -18,8 +18,11 @@ const TRACK_SCENES: Array[PackedScene] = [
 	preload("res://track/tracks/test_loop_hills/test_loop_hills.tscn"),
 	preload("res://track/tracks/test_hairpin/test_hairpin.tscn"),
 	preload("res://track/tracks/track_01_ridgeline_circuit/track_01_ridgeline_circuit.tscn"),
+	preload("res://track/tracks/track_02_lumen_underpass/track_02_lumen_underpass.tscn"),
+	preload("res://track/tracks/track_03_glacier_crown/track_03_glacier_crown.tscn"),
+	preload("res://track/tracks/track_04_ochre_rift/track_04_ochre_rift.tscn"),
 ]
-const TRACK_NODE_NAMES: Array[StringName] = [&"TestLoop", &"TestLoopHills", &"TestHairpin", &"Track01"]
+const TRACK_NODE_NAMES: Array[StringName] = [&"TestLoop", &"TestLoopHills", &"TestHairpin", &"Track01", &"Track02", &"Track03", &"Track04"]
 const KART_SCENE: PackedScene = preload("res://kart/kart.tscn")
 const KART_DATA: Array[KartData] = [
 	preload("res://data/karts/light.tres"),
@@ -27,6 +30,8 @@ const KART_DATA: Array[KartData] = [
 	preload("res://data/karts/heavy.tres"),
 ]
 const SANDBOX_ITEMS: Array[ItemData] = [
+	preload("res://data/items/triple_dart.tres"),
+	preload("res://data/items/phantom_decoy.tres"),
 	preload("res://data/items/rocket_dart.tres"),
 	preload("res://data/items/hunter_drone.tres"),
 	preload("res://data/items/spike_mine.tres"),

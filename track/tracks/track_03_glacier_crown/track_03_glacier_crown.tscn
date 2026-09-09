@@ -1,0 +1,62 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://track/tracks/track_03_glacier_crown/track_03_track.gd" id="1"]
+[ext_resource type="Script" path="res://track/racing_line.gd" id="2"]
+
+[sub_resource type="Environment" id="World"]
+background_mode = 1
+background_color = Color(0.36, 0.52, 0.72, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.8, 0.85, 1, 1)
+ambient_light_energy = 0.75
+fog_enabled = true
+fog_density = 0.001
+fog_light_color = Color(0.36, 0.52, 0.72, 1)
+
+[node name="Track03" type="Node3D"]
+script = ExtResource("1")
+half_width = 310.0
+half_depth = 140.0
+corner_radius = 78.0
+road_width = 18.0
+wall_height = 2.0
+road_color = Color(0.4, 0.65, 0.8, 1)
+wall_color = Color(0.65, 0.86, 1, 1)
+wall_emission = 0
+
+[node name="Geometry" type="StaticBody3D" parent="."]
+collision_layer = 1
+collision_mask = 0
+
+[node name="Environment" type="Node3D" parent="."]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="Environment"]
+environment = SubResource("World")
+
+[node name="Sun" type="DirectionalLight3D" parent="Environment"]
+rotation_degrees = Vector3(-55, -35, 0)
+light_energy = 1.1
+shadow_enabled = true
+
+[node name="RacingLine" type="Path3D" parent="."]
+script = ExtResource("2")
+
+[node name="Checkpoints" type="Node3D" parent="."]
+
+[node name="StartGrid" type="Node3D" parent="."]
+
+[node name="ItemBoxes" type="Node3D" parent="."]
+
+[node name="BoostPads" type="Node3D" parent="."]
+
+[node name="JumpPads" type="Node3D" parent="."]
+
+[node name="OffroadZones" type="Node3D" parent="."]
+
+[node name="Hazards" type="Node3D" parent="."]
+
+[node name="KillZones" type="Node3D" parent="."]
+
+[node name="MovingObstacles" type="Node3D" parent="."]
+
+[node name="Shortcuts" type="Node3D" parent="."]

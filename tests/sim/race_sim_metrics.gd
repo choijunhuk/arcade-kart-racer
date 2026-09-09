@@ -3,7 +3,7 @@ extends RefCounted
 
 const ITEM_IDS: Array[String] = [
 	"rocket_dart", "hunter_drone", "spike_mine", "nitro_can",
-	"aegis_bubble", "pulse_blast", "storm_beacon",
+	"aegis_bubble", "pulse_blast", "storm_beacon", "triple_dart", "phantom_decoy",
 ]
 const MIN_CATCH_UP_DELTA: float = 0.4
 const METRIC_EPSILON: float = 0.000001
