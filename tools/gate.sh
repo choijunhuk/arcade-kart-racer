@@ -8,6 +8,9 @@ cd "$PROJECT_ROOT"
 fail=0
 step() { printf '\n== %s\n' "$1"; }
 
+step "import (fresh checkouts need the class cache)"
+"$GODOT_BIN" --headless --path . --import >/dev/null 2>&1; echo "ok"
+
 step "parse"
 if "$GODOT_BIN" --headless --path . --quit 2>&1 | grep -qiE 'script error|parse error'; then echo "FAIL: script/parse errors"; fail=1; else echo "ok"; fi
 
