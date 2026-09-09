@@ -65,7 +65,7 @@ func test_lobby_builds_a_two_player_config_when_both_players_ready() -> void:
 	assert_eq(_last_scene_path, "res://race/race.tscn")
 
 
-func test_two_scripted_players_have_independent_huds_finish_and_reach_results() -> void:
+func test_two_scripted_players_have_independent_huds_finish_three_laps_and_reach_results() -> void:
 	var race: RaceManager = RACE_SCENE.instantiate() as RaceManager
 	race.tuning = race.tuning.duplicate() as RaceTuning
 	race.tuning.finish_timeout_seconds = TEST_FINISH_TIMEOUT_SECONDS
@@ -137,7 +137,7 @@ func _config() -> RaceConfig:
 	track.id = &"test_loop"
 	track.display_name = "Test Loop"
 	track.scene = TEST_TRACK_SCENE
-	track.laps_default = 1
+	track.laps_default = 3
 	var first: PlayerSlot = PlayerSlot.new()
 	first.device_id = 0
 	first.driver_id = &"aurora_vale"
@@ -151,7 +151,7 @@ func _config() -> RaceConfig:
 	var config: RaceConfig = RaceConfig.new()
 	config.race_mode = RaceConfig.RaceMode.LOCAL_MULTIPLAYER
 	config.track = track
-	config.laps = 1
+	config.laps = 3
 	config.kart_count = 2
 	config.ai_difficulty = DIFFICULTY
 	config.player_kart = KART

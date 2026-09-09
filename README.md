@@ -5,13 +5,15 @@ Mario Kart에서 *시스템과 플레이 감각*만 영감을 받은 **완전 �
 
 ## 이 레포의 현재 상태
 
-**Phase 13 — 절차적 아트·품질/LOD·로딩·익스포트 준비.** 현재 검증 결과와
+**Phase 14 — 로컬 멀티플레이·분할 화면.** 현재 검증 결과와
 네이티브 창 제한은 [DEVLOG](DEVLOG.md), 에셋별 교체/유지 사유는
 [placeholder ledger](docs/phase13_asset_ledger.md)를 참조한다.
 
-메인 메뉴에서 **Play → Single Race / Grand Prix**, 또는 **Time Trial**을 고른다.
+메인 메뉴에서 **Play → Single Race / Grand Prix / Local Multiplayer**, 또는 **Time Trial**을 고른다.
 드라이버 8명·카트 6종·경기 트랙 4개·난이도 3개를 제공한다. Single Race는
-아이템 on/off를 선택할 수 있다. Grand Prix는 Ridgeline → Lumen → Glacier →
+아이템 on/off를 선택할 수 있다. Local Multiplayer는 키보드 1명과 패드,
+또는 패드 2–4개가 각각 드라이버·카트를 고른 뒤 8대 필드 분할 화면으로 달린다.
+Grand Prix는 Ridgeline → Lumen → Glacier →
 Ochre의 4경기와 누적 점수·최종 포디움을 제공하고, Time Trial은 AI/아이템 없이
 베스트 랩 입력 고스트를 저장·재생한다. 키보드/게임패드·마우스 모두 지원한다.
 
@@ -93,6 +95,10 @@ Headless에서는 장치 재생을 호출하지 않고 같은 풀·수명·크�
 메인 메뉴는 방향키/D-pad/좌스틱으로 이동하고 Enter/Space/A로 선택,
 Esc/B로 뒤로 간다. Play에서 드라이버·카트·트랙·난이도를 고르면 레이스가
 시작된다.
+로컬 멀티플레이는 Play → Local Multiplayer에서 각 패드의 A(키보드는
+Enter/Space)로 참가한다. 각 참가자는 Up/Down으로 DRIVER/KART 줄을 고르고
+Left/Right로 항목을 바꾼 뒤 A/Enter로 READY 한다. B/Esc는 READY 해제 후
+퇴장한다. 2명 이상 전원이 READY가 되면 Ridgeline Circuit 3랩이 시작된다.
 Phase 1-4 주행 샌드박스는 계속 직접 열 수 있다:
 
 ```sh
@@ -117,6 +123,9 @@ Phase 1-4 주행 샌드박스는 계속 직접 열 수 있다:
 
 드리프트는 유지 후 놓으면 도달한 티어만큼 미니 터보를 준다. Pause와
 Results도 방향키/D-pad/좌스틱 + Enter/A로 완전히 조작할 수 있다.
+로컬 레이스는 어느 참가자든 전체를 일시정지할 수 있고, Pause 메뉴 입력은
+일시정지를 건 장치가 소유한다. 기본 미니맵은 P1만 표시하며 Settings →
+Accessibility에서 모든 플레이어 표시로 바꿀 수 있다.
 
 샌드박스 전용: `R` 리셋, `T` 트랙 순환
 (평지→언덕→헤어핀→Track01), `4` 헤어핀 트랙 바로
