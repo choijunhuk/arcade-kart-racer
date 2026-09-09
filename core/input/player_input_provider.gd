@@ -77,19 +77,27 @@ func _get_keyboard_strength(action: StringName) -> float:
 			return INPUT_MAX
 		if key_event.keycode > 0 and Input.is_key_pressed(key_event.keycode):
 			return INPUT_MAX
-	return INPUT_MIN
+	var aggregate: float = Input.get_action_strength(action)
+	return aggregate if aggregate > _get_connected_joypad_strength(action) else INPUT_MIN
 
 
-func _get_joypad_strength(action: StringName) -> float:
+func _get_connected_joypad_strength(action: StringName) -> float:
+	var strongest: float = INPUT_MIN
+	for connected_device_id: int in Input.get_connected_joypads():
+		strongest = maxf(strongest, _get_joypad_strength(action, connected_device_id))
+	return strongest
+
+
+func _get_joypad_strength(action: StringName, joypad_device_id: int = device_id) -> float:
 	var strongest: float = 0.0
 	for event: InputEvent in InputMap.action_get_events(action):
 		if event is InputEventJoypadButton:
 			var button_event: InputEventJoypadButton = event as InputEventJoypadButton
-			if Input.is_joy_button_pressed(device_id, button_event.button_index):
+			if Input.is_joy_button_pressed(joypad_device_id, button_event.button_index):
 				strongest = INPUT_MAX
 		elif event is InputEventJoypadMotion:
 			var motion_event: InputEventJoypadMotion = event as InputEventJoypadMotion
-			var axis_value: float = Input.get_joy_axis(device_id, motion_event.axis)
+			var axis_value: float = Input.get_joy_axis(joypad_device_id, motion_event.axis)
 			if signf(axis_value) == signf(motion_event.axis_value):
 				strongest = maxf(strongest, absf(axis_value))
 	return strongest
