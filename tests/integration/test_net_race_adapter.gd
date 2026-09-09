@@ -343,3 +343,36 @@ func test_departure_before_scene_binding_waits_for_matching_grid() -> void:
 	assert_true((_session.get("_pending_departures") as Array).is_empty())
 	assert_eq(_session.players.size(), 1)
 	assert_eq(_manager.get_karts().size(), 1)
+
+func test_server_impulse_replay_updates_future_prediction_positions() -> void:
+	var kart: KartController = _manager.get_karts()[0]
+	kart.set_frozen(false)
+	kart.get_node("KartPhysics").set("speed", 35.0)
+	var initial: Dictionary = kart.capture_state()
+	var history: Dictionary = _manager.network.get("_predicted_positions")
+	for tick: int in range(1, 13):
+		var frame: InputFrame = InputFrame.new()
+		frame.tick = tick
+		frame.throttle = 1.0
+		_manager.network.prediction.record(frame)
+		kart.step_input(frame, NetTuning.STEP, true)
+		history[tick] = kart.global_position
+	var original: Vector3 = history[6]
+	kart.apply_state(initial)
+	kart.apply_impulse_arcade(Vector3(18.0, 0.0, 0.0), 0.15)
+	var snapshot: RaceSnapshot = NetRaceState.new(_manager).capture(3, [0, 0])
+	for index: int in range(6):
+		kart.step_input(_manager.network.prediction.frames[index], NetTuning.STEP, true)
+	var expected: Vector3 = kart.global_position
+	assert_gt(original.distance_to(expected), 0.1)
+	_manager.network._apply_snapshot(snapshot)
+	assert_lt((history[6] as Vector3).distance_to(expected), 0.0001)
+	assert_eq(history[12], kart.global_position)
+
+func test_repeated_prepare_preserves_the_loaded_race() -> void:
+	_session.started = true
+	var config: RaceConfig = GameState.pending_race_config
+	_session._prepare_race([], 0, 9, 99)
+	assert_eq(_session.players.size(), 2)
+	assert_same(GameState.pending_race_config, config)
+	assert_same(_session.race, _manager.network)

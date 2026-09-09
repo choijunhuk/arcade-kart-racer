@@ -154,7 +154,7 @@ func _apply_snapshot(snapshot: RaceSnapshot) -> void:
 				_predicted_positions.clear()
 			elif _predicted_positions.has(ack):
 				_measure(index, _predicted_positions[ack].distance_to(position))
-			prediction.reconcile(_karts[index], state, ack)
+			prediction.reconcile(_karts[index], state, ack, _predicted_positions)
 		else:
 			_karts[index].apply_state(state)
 	_projectiles.apply(snapshot.projectiles, _state)

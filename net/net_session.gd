@@ -25,6 +25,7 @@ var _loaded: Array[int] = []
 var _pending_departures: Array[int] = []
 var _clock_ticks: int = 0
 var _closing: bool = false
+var _preparing: bool = false
 
 func _ready() -> void:
 	multiplayer.peer_connected.connect(_peer_connected)
@@ -80,6 +81,15 @@ func start_race() -> bool:
 	send(&"_prepare_race", 0, [players, ai_count, laps, seed], true)
 	_prepare_race(players, ai_count, laps, seed)
 	return true
+
+## Repeats preparation only for peers whose scene-load acknowledgement is missing.
+func retry_start() -> void:
+	if not multiplayer.is_server() or not started or running:
+		return
+	for row: Dictionary in players:
+		var id: int = int(row["peer"])
+		if id != SERVER_ID and not _loaded.has(id):
+			send(&"_prepare_race", id, [players, ai_count, laps, seed], true)
 
 ## Registers a loaded race and waits until all peers have matching scene nodes.
 func bind_race(value: NetRace) -> void:
@@ -184,6 +194,11 @@ func _lobby(roster: Array) -> void:
 
 @rpc("authority", "call_remote", "reliable")
 func _prepare_race(roster: Array, bots: int, lap_count: int, race_seed: int) -> void:
+	if _preparing or race != null:
+		if not multiplayer.is_server() and race != null:
+			send(&"_race_loaded", SERVER_ID, [], true)
+		return
+	_preparing = true
 	players.assign(roster.duplicate(true))
 	ai_count = clampi(bots, 0, RaceSnapshot.MAX_KARTS - players.size())
 	laps = clampi(lap_count, 1, 9)

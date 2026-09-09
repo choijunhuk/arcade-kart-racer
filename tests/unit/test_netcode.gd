@@ -2,6 +2,12 @@ extends GutTest
 
 var _kart: KartController
 
+class RetrySession extends NetSession:
+	var targets: Array[int] = []
+	func send(method: StringName, target: int, _args: Array, _reliable: bool) -> void:
+		if method == &"_prepare_race":
+			targets.append(target)
+
 func before_each() -> void:
 	_kart = (load("res://kart/kart.tscn") as PackedScene).instantiate() as KartController
 	add_child_autofree(_kart)
@@ -313,3 +319,23 @@ func test_snapshot_rejects_unbounded_decompression_size() -> void:
 	assert_null(RaceSnapshot.unpack(bytes))
 	bytes.encode_u16(1, 0)
 	assert_null(RaceSnapshot.unpack(bytes))
+
+func test_start_retry_targets_only_unacknowledged_peers_and_stops_after_ack() -> void:
+	var session: RetrySession = RetrySession.new()
+	add_child_autofree(session)
+	session.players = [{"peer": 1}, {"peer": 2}, {"peer": 3}]
+	assert_has_method(session, "retry_start")
+	if not session.has_method("retry_start"):
+		return
+	session.call("retry_start")
+	assert_true(session.targets.is_empty())
+	session.started = true
+	session._mark_loaded(1)
+	session._mark_loaded(2)
+	session.call("retry_start")
+	session.call("retry_start")
+	assert_eq(session.targets, [3, 3])
+	session._mark_loaded(3)
+	assert_true(session.running)
+	session.call("retry_start")
+	assert_eq(session.targets, [3, 3])

@@ -14,7 +14,7 @@ func record(frame: InputFrame) -> void:
 		frames.pop_front()
 
 ## Rewinds full physics state and replays every unacknowledged local input.
-func reconcile(kart: KartController, state: Dictionary, acknowledged: int) -> void:
+func reconcile(kart: KartController, state: Dictionary, acknowledged: int, predicted_positions: Dictionary = {}) -> void:
 	if acknowledged < _last_ack:
 		return
 	_last_ack = acknowledged
@@ -29,6 +29,8 @@ func reconcile(kart: KartController, state: Dictionary, acknowledged: int) -> vo
 		frames.pop_front()
 	for frame: InputFrame in frames:
 		kart.step_input(frame, NetTuning.STEP, true)
+		# Future acknowledgements must compare against this replayed trajectory.
+		predicted_positions[frame.tick] = kart.global_position
 	var correction: Vector3 = before - kart.global_position
 	visual_offset = correction if correction.length() <= NetTuning.SNAP_METERS else Vector3.ZERO
 	_remaining = NetTuning.CORRECTION_SECONDS
