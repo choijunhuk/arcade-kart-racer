@@ -225,3 +225,91 @@ func test_respawn_snapshot_applies_teleport_without_replaying_falling_inputs() -
 	assert_eq(_kart.get_state(), KartState.RESPAWNING)
 	assert_true(prediction.frames.is_empty())
 	assert_eq(prediction.visual_offset, Vector3.ZERO)
+
+func test_full_grid_with_max_projectiles_fits_unreliable_budget() -> void:
+	var source: RaceSnapshot = _snapshot()
+	source.karts.clear()
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 1502
+	_kart.request_boost(_kart.tuning.boost_pad_boost, &"boost_pad")
+	for index: int in range(8):
+		_kart.position = Vector3(567.123 + index * 12.345, -6.789 + index, -432.123 - index * 7.891)
+		_kart.rotation.y = -2.34567 + index * 0.54321
+		var state: Dictionary = _kart.capture_state()
+		state["slip_charge"] = 0.12345 + index * 0.01234
+		state["slip_exit"] = 0.45678 + index * 0.02345
+		state["slip_active"] = true
+		for path: String in KartReplayState.COMPONENT_FIELDS:
+			for field: String in KartReplayState.COMPONENT_FIELDS[path]:
+				if KartReplayState.BOOLEAN_FIELDS.has(field):
+					state["components"][path][field] = true
+				elif not KartReplayState.INTEGER_FIELDS.has(field):
+					state["components"][path][field] = rng.randf_range(0.1, 2.0)
+		source.karts.append({"state": state, "ack": 321 + index, "lap": 2, "rank": index + 1,
+			"checkpoint": 3, "item": 2, "roulette": 0.12345, "cooldown": 0.56789,
+			"finish": 123.45678 + index, "progress": 987.65432 + index})
+	for index: int in range(ItemManager.DEFAULT_MAX_ACTIVE_PROJECTILES):
+		source.projectiles.append({"id": 12345 + index, "item": index % 4 + 1, "owner": index % 8,
+			"pose": Transform3D(Basis.from_euler(Vector3(0.12345, index * 0.23456, -0.34567)),
+				Vector3(432.123 + index * 6.789, 2.345 + index, -567.891 - index * 3.456))})
+	var bytes: PackedByteArray = source.pack()
+	print("FULL_SNAPSHOT_BYTES=%d" % bytes.size())
+	assert_lte(bytes.size(), 1200)
+	assert_lte(var_to_bytes([bytes]).size() + NetTuning.RPC_OVERHEAD_BYTES, NetTuning.MAX_UNRELIABLE_BYTES)
+	var result: RaceSnapshot = RaceSnapshot.unpack(bytes)
+	assert_not_null(result)
+	if result == null: return
+	assert_eq(result.karts.size(), 8)
+	assert_eq(result.projectiles.size(), 16)
+	for index: int in range(8):
+		var before: Dictionary = source.karts[index]["state"]
+		var after: Dictionary = result.karts[index]["state"]
+		for axis: int in range(3):
+			assert_almost_eq(float(after["position"][axis]), float(before["position"][axis]), 0.0051)
+		assert_almost_eq(float(after["rotation"][1]), float(before["rotation"][1]), 0.00051)
+		for path: String in KartReplayState.COMPONENT_FIELDS:
+			for field: String in KartReplayState.COMPONENT_FIELDS[path]:
+				var expected: Variant = before["components"][path][field]
+				if expected is float:
+					assert_almost_eq(float(after["components"][path][field]), float(expected), 0.00001)
+				else:
+					assert_eq(after["components"][path][field], expected)
+		assert_eq(after["boost"]["source"], before["boost"]["source"])
+		for key: String in NetStateCodec.BOOST_FLOAT_FIELDS:
+			assert_almost_eq(float(after["boost"][key]), float(before["boost"][key]), 0.00001)
+		for key: String in NetStateCodec.SLIP_FLOAT_FIELDS:
+			assert_almost_eq(float(after[key]), float(before[key]), 0.00001)
+		assert_true(after["slip_active"])
+	for index: int in range(16):
+		assert_eq(result.projectiles[index]["id"], source.projectiles[index]["id"])
+		assert_eq(result.projectiles[index]["owner"], source.projectiles[index]["owner"])
+		var before: Transform3D = source.projectiles[index]["pose"]
+		var after: Transform3D = result.projectiles[index]["pose"]
+		assert_lt(after.origin.distance_to(before.origin), 0.009)
+		assert_lt(after.basis.get_rotation_quaternion().angle_to(before.basis.get_rotation_quaternion()), 0.002)
+
+func test_unreliable_delivery_rejects_oversize_and_reserves_rpc_framing() -> void:
+	var session: NetSession = NetSession.new()
+	add_child_autofree(session)
+	var bytes: PackedByteArray = []
+	bytes.resize(NetTuning.MAX_UNRELIABLE_BYTES)
+	session.send(&"_snapshot", 0, [bytes], false)
+	session.conditions.advance(NetSession.now() + 1.0)
+	assert_push_error("Unreliable RPC _snapshot exceeds 1200 bytes")
+	# The payload alone fits, but RPC arguments and command framing do not.
+	bytes.resize(NetTuning.MAX_UNRELIABLE_BYTES - 1)
+	session._deliver(&"_snapshot", 0, [bytes], false)
+	assert_push_error("Unreliable RPC _snapshot exceeds 1200 bytes")
+	bytes.resize(1000)
+	session._deliver(&"_snapshot", 0, [bytes], false)
+	assert_push_error_count(2)
+	bytes.resize(2400)
+	session._deliver(&"_event", 0, ["results", bytes], true)
+	assert_push_error_count(2)
+
+func test_snapshot_rejects_unbounded_decompression_size() -> void:
+	var bytes: PackedByteArray = _snapshot().pack()
+	bytes.encode_u16(1, 65535)
+	assert_null(RaceSnapshot.unpack(bytes))
+	bytes.encode_u16(1, 0)
+	assert_null(RaceSnapshot.unpack(bytes))

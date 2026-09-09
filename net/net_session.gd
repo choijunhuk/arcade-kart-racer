@@ -94,7 +94,7 @@ func bind_race(value: NetRace) -> void:
 
 ## Queues a real RPC through optional one-way delay and unreliable loss.
 func send(method: StringName, target: int, args: Array, reliable: bool) -> void:
-	conditions.enqueue(now(), reliable, _deliver.bind(method, target, args))
+	conditions.enqueue(now(), reliable, _deliver.bind(method, target, args, reliable))
 
 ## Monotonic time is restricted to transport, never race adjudication.
 static func now() -> float:
@@ -123,7 +123,12 @@ func _physics_process(_delta: float) -> void:
 	if automated and not started and multiplayer.is_server() and players.size() >= 2:
 		start_race()
 
-func _deliver(method: StringName, target: int, args: Array) -> void:
+func _deliver(method: StringName, target: int, args: Array, reliable: bool) -> void:
+	if not reliable:
+		var bytes: int = var_to_bytes(args).size() + NetTuning.RPC_OVERHEAD_BYTES
+		if bytes > NetTuning.MAX_UNRELIABLE_BYTES:
+			push_error("Unreliable RPC %s exceeds %d bytes (%d including framing reserve); not sent" % [method, NetTuning.MAX_UNRELIABLE_BYTES, bytes])
+			return
 	if peer != null and peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED:
 		if target != 0 and not multiplayer.get_peers().has(target):
 			return

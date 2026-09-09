@@ -110,6 +110,32 @@ func test_event_mirror_encodes_grid_identity_and_actual_signal_name() -> void:
 	assert_eq(packet["args"][0], "boost_started")
 	assert_true(KartReplayState.valid_event(packet["args"][1][1]))
 
+func test_race_events_and_countdown_use_reliable_rpc() -> void:
+	var kart: KartController = _manager.get_karts()[0]
+	EventBus.lap_completed.emit(kart, 1, 12.0)
+	EventBus.kart_finished.emit(kart, 12.0)
+	EventBus.roulette_stopped.emit(kart)
+	EventBus.item_hit.emit(kart, kart, &"nitro_can")
+	EventBus.countdown_tick.emit(3)
+	var kinds: Array[String] = []
+	for packet: Dictionary in _session.packets:
+		if packet["method"] == &"_event":
+			assert_true(packet["reliable"])
+			kinds.append(packet["args"][0])
+	for kind: String in ["lap_completed", "kart_finished", "roulette_stopped", "item_hit", "countdown_tick"]:
+		assert_has(kinds, kind)
+	var rpc_config: Dictionary = _session.get_script().get_base_script().get_rpc_config()
+	assert_eq(rpc_config["_event"]["transfer_mode"], MultiplayerPeer.TRANSFER_MODE_RELIABLE)
+	assert_eq(rpc_config["_event"]["rpc_mode"], MultiplayerAPI.RPC_MODE_AUTHORITY)
+
+func test_reliable_countdown_does_not_repeat_predicted_or_delayed_ticks() -> void:
+	watch_signals(EventBus)
+	_manager.network._receive_event("countdown_tick", [3])
+	_manager.network._receive_event("countdown_tick", [2])
+	_manager.network._receive_event("countdown_tick", [3])
+	_manager.network._receive_event("countdown_tick", [2])
+	assert_signal_emit_count(EventBus, "countdown_tick", 2)
+
 func test_results_cannot_be_rewound_by_an_older_unreliable_snapshot() -> void:
 	_manager.network_replica = true
 	_manager.apply_network_results([])

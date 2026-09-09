@@ -539,9 +539,13 @@ network/TLS setting is added. The selected design is the Phase 15 brief and spec
   Start and Back. A lobby departure removes its row; departure during a race
   ends the session and returns peers to the menu. Host departure does the same.
 
-### Snapshot binary layout (version 1, little endian)
+### Snapshot binary layout (version 2, little endian)
 
-`StreamPeerBuffer` writes the packet without Variant/object serialization:
+`StreamPeerBuffer` writes the records below without Variant/object serialization.
+The wire packet is version u8, decoded length u16, compressed length u16, then
+Godot's built-in Zstandard compression of those records. Each snapshot is
+independent: loss does not invalidate subsequent snapshots. Compression is
+lossless, preserving the prediction timers and effective kart stats.
 
 | Part | Layout |
 |---|---|
@@ -550,10 +554,21 @@ network/TLS setting is added. The selected design is the Phase 15 brief and spec
 | Kart metadata (24 bytes) | acknowledged input tick u32; lap/rank/next-checkpoint/item-index u8; roulette/cooldown/finish-time/progress f32 |
 | Item entity (25 bytes) | activation id u32, catalog id u8, XYZ i32 centimetres, XYZ rotation i16 milliradians, owner grid slot u16 |
 
-An eight-kart snapshot without live items is 1,824 bytes. Decode checks version,
-counts, exact length, finite values and the replay schema. Empty item index is
+The uncompressed eight-kart layout is 1,824 bytes, or 2,224 with 16 projectiles.
+The full-option regression fixture, including distinct seeded component timers,
+compresses to 1,110 bytes. `NetSession._deliver` rejects unreliable arguments
+whose serialized size plus a 64-byte RPC framing reserve exceeds 1,200 bytes,
+and reports a test-visible error. This limit covers inputs as well as snapshots;
+compression size depends on contents, so new roster/item configurations must
+retain the size regression and serialized race harness checks.
+Decode bounds the allocation before decompression, then checks version, counts,
+exact length, finite values and the replay schema. Empty item index is
 zero; the sorted shared item catalog uses one-based indices. Position error is
 ≤0.005m per axis, yaw error ≤0.0005rad (subject to float precision).
+
+Lap/finish/results, item grants/hits and countdown ticks use the reliable
+authority event RPC. Countdown ticks share a descending-value filter with local
+clock prediction so delayed delivery cannot repeat or rewind countdown sounds.
 
 `NetDebugConditions` delays outgoing transport calls and drops seeded unreliable
 traffic; reliable messages are delayed but preserved. `--net-latency 100` adds

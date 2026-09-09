@@ -2,7 +2,8 @@ class_name RaceSnapshot
 extends RefCounted
 
 ## Server-to-client snapshot, with grid indices instead of process-local object ids.
-const VERSION: int = 1
+const VERSION: int = 2
+const WIRE_HEADER_BYTES: int = 5
 const HEADER_BYTES: int = 24
 const ROW_TAIL_BYTES: int = 24
 const PROJECTILE_BYTES: int = 25
@@ -16,8 +17,18 @@ var countdown_seconds: float = 0.0
 var karts: Array[Dictionary] = []
 var projectiles: Array[Dictionary] = []
 
-## Encodes fixed-width records into a PackedByteArray using StreamPeerBuffer.
+## Losslessly compresses the fixed layout; each packet decodes independently.
 func pack() -> PackedByteArray:
+	var raw: PackedByteArray = _pack_records()
+	var compressed: PackedByteArray = raw.compress(FileAccess.COMPRESSION_ZSTD)
+	var wire: StreamPeerBuffer = StreamPeerBuffer.new()
+	wire.put_u8(VERSION)
+	wire.put_u16(raw.size())
+	wire.put_u16(compressed.size())
+	wire.put_data(compressed)
+	return wire.data_array
+
+func _pack_records() -> PackedByteArray:
 	var buffer: StreamPeerBuffer = StreamPeerBuffer.new()
 	buffer.put_u8(VERSION)
 	buffer.put_u32(tick)
@@ -51,6 +62,20 @@ func pack() -> PackedByteArray:
 
 ## Rejects versions, counts, truncated/trailing bytes and nonfinite state data.
 static func unpack(bytes: PackedByteArray) -> RaceSnapshot:
+	if bytes.size() < WIRE_HEADER_BYTES or bytes.size() > NetTuning.MAX_PACKET_BYTES:
+		return null
+	if bytes[0] != VERSION or bytes.decode_u16(3) != bytes.size() - WIRE_HEADER_BYTES:
+		return null
+	var raw_size: int = bytes.decode_u16(1)
+	var max_size: int = HEADER_BYTES + MAX_KARTS * (NetStateCodec.byte_size() + ROW_TAIL_BYTES) + NetTuning.MAX_PROJECTILES * PROJECTILE_BYTES
+	if raw_size < HEADER_BYTES or raw_size > max_size:
+		return null
+	var raw: PackedByteArray = bytes.slice(WIRE_HEADER_BYTES).decompress(raw_size, FileAccess.COMPRESSION_ZSTD)
+	if raw.size() != raw_size:
+		return null
+	return _unpack_records(raw)
+
+static func _unpack_records(bytes: PackedByteArray) -> RaceSnapshot:
 	if bytes.size() < HEADER_BYTES or bytes.size() > NetTuning.MAX_PACKET_BYTES:
 		return null
 	var buffer: StreamPeerBuffer = StreamPeerBuffer.new()

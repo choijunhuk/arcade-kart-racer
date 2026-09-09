@@ -2,7 +2,7 @@ class_name NetEvents
 extends Node
 
 ## Reliable server event mirrors, mapping node identity to stable grid slots.
-const EVENTS: Array[StringName] = [&"lap_completed", &"position_changed", &"kart_finished",
+const EVENTS: Array[StringName] = [&"countdown_tick", &"lap_completed", &"position_changed", &"kart_finished",
 	&"kart_respawned", &"kart_hit", &"item_used", &"item_hit", &"threat_warning",
 	&"roulette_started", &"roulette_stopped", &"roulette_ticked", &"item_exploded", &"wrong_way",
 	&"boost_started", &"boost_ended", &"drift_started", &"drift_ended", &"drift_tier_changed",
@@ -49,7 +49,7 @@ func _send(event: StringName, args: Array) -> void:
 	session.send(&"_event", 0, [String(event), encoded], true)
 
 func _receive(event: String, args: Array) -> void:
-	if not EVENTS.has(StringName(event)):
+	if event == "countdown_tick" or not EVENTS.has(StringName(event)):
 		return # Results and countdown have their own typed adapters.
 	var decoded: Array = []
 	for value: Variant in args:

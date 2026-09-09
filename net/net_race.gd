@@ -181,13 +181,21 @@ func _measure(index: int, error: float) -> void:
 func _receive_event(kind: String, args: Array) -> void:
 	if kind == "results":
 		manager.apply_network_results(NetResults.unpack(args, _local_grid_slot))
+	elif kind == "countdown_tick" and args.size() == 1:
+		_emit_countdown(int(args[0]))
 
 func _update_countdown() -> void:
 	if not session.clock.initialized or _go_server_time <= 0.0 or manager.get_state() != RaceState.COUNTDOWN:
 		return
 	var remaining: float = _go_server_time - session.clock.server_time(NetSession.now())
 	var value: int = clampi(ceili(remaining), Countdown.GO_TICK, Countdown.FIRST_TICK)
-	if value != _countdown_value:
+	_emit_countdown(value)
+
+func _emit_countdown(value: int) -> void:
+	if value < Countdown.GO_TICK or value > Countdown.FIRST_TICK:
+		return
+	# Reliable ticks can arrive after clock prediction; never repeat or rewind them.
+	if _countdown_value < 0 or value < _countdown_value:
 		_countdown_value = value
 		EventBus.countdown_tick.emit(value)
 
