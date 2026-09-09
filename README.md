@@ -5,10 +5,9 @@ Mario Kart에서 *시스템과 플레이 감각*만 영감을 받은 **완전 �
 
 ## 이 레포의 현재 상태
 
-**Phase 12 — 콘텐츠 확장.** 실제 테스트·트랙별 기록과 창 검증 제한은
-[DEVLOG의 Phase 12 보고](DEVLOG.md)에 기록한다. 전체 테스트는 **461/461**,
-트랙 검증은 **7/7** 통과했다. 20경주 advisory에서는 Track 01의 3개 시드가
-충돌 한도를 초과해 exit 1이며 후속 튜닝 항목으로 남는다.
+**Phase 13 — 절차적 아트·품질/LOD·로딩·익스포트 준비.** 현재 검증 결과와
+네이티브 창 제한은 [DEVLOG](DEVLOG.md), 에셋별 교체/유지 사유는
+[placeholder ledger](docs/phase13_asset_ledger.md)를 참조한다.
 
 메인 메뉴에서 **Play → Single Race / Grand Prix**, 또는 **Time Trial**을 고른다.
 드라이버 8명·카트 6종·경기 트랙 4개·난이도 3개를 제공한다. Single Race는
@@ -25,8 +24,8 @@ Ochre의 4경기와 누적 점수·최종 포디움을 제공하고, Time Trial�
 | 드라이버 | Aurora Vale, Bramble Knox, Cinder Rook, Echo Meridian, Flint Harbor, Luma Circuit, Nyx Calder, Orin Gale |
 | 아이템 | Rocket Dart, Hunter Drone, Spike Mine, Nitro Can, Aegis Bubble, Pulse Blast, Storm Beacon, Triple Dart, Phantom Decoy |
 
-세 테스트 트랙까지 합쳐 validator/sandbox 트랙은 총 7개다. 모든 신규 아트와
-voice/BGM 연결은 원본 색상·프리미티브·합성 오디오를 사용하는 Phase 13 교체 대상이다.
+세 테스트 트랙까지 합쳐 validator/sandbox 트랙은 총 7개다. 절차적 카트·드라이버·아이템 아트와 지도 프리뷰를 제공한다.
+합성 오디오/voice hook은 ledger에 사유를 명시해 유지한다.
 
 레이스에는 3-2-1-GO/스타트 부스트, 랩·순위·리스폰·카트 충돌,
 FINISHING 타임아웃, 최종 HUD(아이템 룰렛/쿨다운, 10 Hz 미니맵,
@@ -280,3 +279,31 @@ tools/perf_check.sh 12 30 > /tmp/perf12.log 2>&1 &
 
 샌드박스 캐시 권한 오류가 있으면 `HOME="$PWD/.tmp-home"`를 접두어로 사용한다.
 물리 게임패드·청음·창 모드 시각 품질은 headless 테스트와 별개다.
+
+
+## Phase 13 build / assets
+
+```sh
+HOME="$PWD/.tmp-home" tools/build.sh
+```
+
+Godot 4.7 matching templates are required. Missing templates produce exit 2 and
+an exact command to install a locally obtained official TPZ. No downloads happen.
+Installed templates produce `build/windows/TurboCircuit.exe`,
+`build/macos/TurboCircuit.zip`, and `build/linux/TurboCircuit.x86_64`.
+The macOS export is unsigned. Cross-platform runtime testing is not implied by an
+export command succeeding.
+
+Original art is generated offline:
+
+```sh
+HOME="$PWD/.tmp-home" godot --headless --path . -s tools/generate_ui_art.gd
+# Native session: actual top-down SubViewport renders. Headless: schematic fallback.
+godot --path . -s tools/generate_previews.gd
+```
+
+Credits/licenses: original procedural art [CC0](assets/art/LICENSE.md), original
+synthesized audio [CC0](assets/audio/placeholder/LICENSE.md), Godot default font
+retained under upstream licensing. No macOS fonts or downloaded assets are bundled.
+For performance, `tools/perf_check.sh 12 30` selects low quality at 1600×900;
+headless results cannot establish the 60 FPS GPU acceptance gate.

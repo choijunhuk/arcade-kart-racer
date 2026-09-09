@@ -1,7 +1,6 @@
 # Godot
 .godot/
 .tmp-home/
-export_presets.cfg
 export/
 *.tmp
 
@@ -13,3 +12,6 @@ export/
 # tooling state
 .omc/
 .claude/settings.local.json
+
+# Release binaries
+build/

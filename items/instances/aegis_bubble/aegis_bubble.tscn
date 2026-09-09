@@ -1,13 +1,11 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://items/instances/aegis_bubble/aegis_bubble.gd" id="1_script"]
 
-[sub_resource type="StandardMaterial3D" id="Material"]
-transparency = 1
-albedo_color = Color(0.1, 0.85, 1, 0.28)
-emission_enabled = true
-emission = Color(0.05, 0.5, 1, 1)
-emission_energy_multiplier = 0.8
+[ext_resource type="Shader" path="res://effects/shield_bubble.gdshader" id="2_shader"]
+
+[sub_resource type="ShaderMaterial" id="Material"]
+shader = ExtResource("2_shader")
 
 [sub_resource type="SphereMesh" id="Mesh"]
 material = SubResource("Material")

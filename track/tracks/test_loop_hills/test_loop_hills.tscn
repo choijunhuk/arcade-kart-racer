@@ -165,24 +165,26 @@ mesh = SubResource("Mesh_road_short")
 [node name="RampUp" type="MeshInstance3D" parent="Geometry"]
 # Placed well clear of StartGrid (x in [-28,-2]) so karts start on flat
 # ground and drive INTO the climb instead of spawning underneath it. The
+# Phase 13: lower the assembly 0.2m so its TOP leading edge, not just
+# its center/bottom, is buried below the flat floor. The
 # box is longer than its visible span and its low end sits below y=0 on
 # purpose: that buries the end cap under the pre-existing flat collision
 # floor instead of exposing a wall-like vertical face a kart could clip.
-position = Vector3(7, 0.625, 22)
+position = Vector3(7, 0.425, 22)
 rotation_degrees = Vector3(0, 0, 5.3558)
 mesh = SubResource("Mesh_ramp")
 
 [node name="RampUpCollision" type="CollisionShape3D" parent="Geometry"]
-position = Vector3(7, 0.625, 22)
+position = Vector3(7, 0.425, 22)
 rotation_degrees = Vector3(0, 0, 5.3558)
 shape = SubResource("Shape_ramp")
 
 [node name="LedgePlatform" type="MeshInstance3D" parent="Geometry"]
-position = Vector3(23, 1.25, 22)
+position = Vector3(23, 1.05, 22)
 mesh = SubResource("Mesh_ramp")
 
 [node name="LedgePlatformCollision" type="CollisionShape3D" parent="Geometry"]
-position = Vector3(23, 1.25, 22)
+position = Vector3(23, 1.05, 22)
 shape = SubResource("Shape_ramp")
 
 [node name="LandingZone" type="MeshInstance3D" parent="Geometry"]
@@ -399,7 +401,7 @@ position = Vector3(-45, 0.6, 16)
 [node name="JumpPads" type="Node3D" parent="."]
 
 [node name="MainJump" parent="JumpPads" instance=ExtResource("6_jump")]
-position = Vector3(24, 1.7, 22)
+position = Vector3(24, 1.5, 22)
 rotation_degrees = Vector3(0, -90, 0)
 
 [node name="OffroadZones" type="Node3D" parent="."]

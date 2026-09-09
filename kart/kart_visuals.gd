@@ -41,6 +41,7 @@ func _ready() -> void:
 	_rear_right_base = _wheel_rr.position
 	_bob_noise.seed = BOB_NOISE_SEED
 	_bob_noise.frequency = 1.0
+	KartMeshBuilder.decorate(self, _controller.get_kart_data())
 	_install_hit_flash_material()
 	apply_driver_data(_controller.get_driver_data())
 	if not EventBus.kart_hit.is_connected(_on_kart_hit):
@@ -63,7 +64,7 @@ func _process(delta: float) -> void:
 	_update_hit_flash(delta)
 
 
-## Applies the selected driver's color to the placeholder capsule mesh.
+## Applies the selected driver's suit color.
 func apply_driver_data(driver: DriverData) -> void:
 	if driver == null:
 		return
@@ -184,3 +185,10 @@ func _update_hit_flash(delta: float) -> void:
 		_flash_segment_remaining += feel_tuning.hit_flash_duration
 	var strength: float = 1.0 if _flash_segments_remaining > 0 and _flash_segments_remaining % 2 == 0 else 0.0
 	_flash_material.set_shader_parameter("flash_strength", strength)
+
+
+## Keeps the chassis visible while culling small distant accessories.
+func set_detail_tier(tier: int) -> void:
+	_driver_mesh.visible = tier < 2
+	for child: Node3D in _body_mesh.get_children():
+		child.visible = tier == 0

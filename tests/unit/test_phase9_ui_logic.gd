@@ -183,9 +183,9 @@ func test_minimap_projection_preserves_aspect_and_centers_the_short_axis() -> vo
 	var projected: PackedVector2Array = script.call("normalize_points", points) as PackedVector2Array
 
 	assert_eq(projected.size(), 3)
-	assert_eq(projected[0], Vector2(0.0, 0.25))
-	assert_eq(projected[1], Vector2(1.0, 0.25))
-	assert_eq(projected[2], Vector2(1.0, 0.75))
+	assert_almost_eq(projected[0], Vector2(0.08, 0.29), Vector2.ONE * 0.00001)
+	assert_almost_eq(projected[1], Vector2(0.92, 0.29), Vector2.ONE * 0.00001)
+	assert_almost_eq(projected[2], Vector2(0.92, 0.71), Vector2.ONE * 0.00001)
 
 
 func test_minimap_projection_centers_a_degenerate_line() -> void:

@@ -7,6 +7,7 @@ class Registration extends RefCounted:
 	var kart: KartController
 	var drift_effects: DriftEffects
 	var boost_effects: BoostEffects
+	var visuals: KartVisuals
 
 const LOW_QUALITY_RATIO: float = 0.35
 const MEDIUM_QUALITY_RATIO: float = 0.65
@@ -36,6 +37,7 @@ func configure(karts: Array[KartController], camera: Camera3D) -> void:
 	for kart: KartController in karts:
 		var registration: Registration = Registration.new()
 		registration.kart = kart
+		registration.visuals = kart.get_node("Visuals") as KartVisuals
 		registration.drift_effects = kart.get_node_or_null("DriftEffects") as DriftEffects
 		registration.boost_effects = kart.get_node_or_null("BoostEffects") as BoostEffects
 		_registrations.append(registration)
@@ -53,6 +55,7 @@ func _process(_delta: float) -> void:
 	for registration: Registration in _registrations:
 		if not is_instance_valid(registration.kart):
 			continue
+		registration.visuals.set_detail_tier(QualityTier.lod(_camera.global_position.distance_to(registration.kart.global_position)))
 		var enabled: bool = ParticleBudget.within_lod_distance(
 			_camera.global_position, registration.kart.global_position,
 			tuning.particle_lod_distance,

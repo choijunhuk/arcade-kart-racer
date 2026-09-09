@@ -28,6 +28,7 @@ static func build(track: ContentTrack) -> void:
 		var left_end: Vector3 = end - to_right + up
 		var right_end: Vector3 = end + to_right + up
 		for vertex: Vector3 in [left_start, left_end, right_end, left_start, right_end, right_start]:
+			surface.set_uv(Vector2(vertex.x, vertex.z) * 0.2)
 			surface.add_vertex(track.geometry.to_local(vertex))
 	surface.generate_normals()
 	var mesh: ArrayMesh = surface.commit()

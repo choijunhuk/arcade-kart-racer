@@ -30,6 +30,7 @@ func _ready() -> void:
 	for missing_path: NodePath in validate_required_nodes():
 		push_error("Track is missing required node: %s" % missing_path)
 	_configure_checkpoints()
+	_install_art.call_deferred()
 
 
 ## Returns all direct-child paths missing from the track scene contract.
@@ -105,3 +106,7 @@ func _configure_checkpoints() -> void:
 	for checkpoint: Checkpoint in get_checkpoints():
 		checkpoint.configure(index, racing_line)
 		index += 1
+
+
+func _install_art() -> void:
+	TrackArt.install(self)

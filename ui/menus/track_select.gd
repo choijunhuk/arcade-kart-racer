@@ -61,4 +61,4 @@ func _format_milliseconds(milliseconds: int) -> String:
 
 
 func _preview_track(track: TrackData) -> void:
-	($Panel/VBox/Preview as ColorRect).color = track.preview_color
+	($Panel/VBox/Preview as TextureRect).texture = load("res://assets/previews/%s.png" % track.id) as Texture2D
