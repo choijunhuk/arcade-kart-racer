@@ -4,6 +4,7 @@ extends Node
 const CURRENT_VERSION: int = 1
 const DEFAULT_SAVE_PATH: String = "user://save.json"
 const BACKUP_SUFFIX: String = ".bak"
+const PLAYER_PROFILE_COUNT: int = 4
 
 var save_path: String = DEFAULT_SAVE_PATH
 
@@ -19,6 +20,7 @@ func default_data() -> Dictionary:
 		"best_laps": {},
 		"best_positions": {},
 		"grand_prix_bests": {},
+		"player_profiles": _default_player_profiles(),
 		"last_selection": {"driver": "", "kart": "medium", "track": "test_loop"},
 		"unlocks": [],
 	}
@@ -56,16 +58,33 @@ func save_data(data: Dictionary) -> Error:
 
 ## Records a track result, retaining only lower positive lap times/positions.
 func record_race_result(track_id: StringName, best_lap_ms: int, position: int) -> Error:
+	return record_player_race_result(0, track_id, best_lap_ms, position)
+
+
+## Records one P1-P4 profile result without overwriting another local player.
+func record_player_race_result(
+	profile_index: int, track_id: StringName, best_lap_ms: int, position: int,
+) -> Error:
+	if profile_index < 0 or profile_index >= PLAYER_PROFILE_COUNT:
+		return ERR_INVALID_PARAMETER
 	var data: Dictionary = load_data()
 	var track_key: String = String(track_id)
-	var best_laps: Dictionary = data.get("best_laps", {}) as Dictionary
-	var best_positions: Dictionary = data.get("best_positions", {}) as Dictionary
+	var profiles: Dictionary = data.get("player_profiles", _default_player_profiles()) as Dictionary
+	var profile_key: String = _profile_key(profile_index)
+	var profile: Dictionary = profiles.get(profile_key, {"best_laps": {}, "best_positions": {}}) as Dictionary
+	var best_laps: Dictionary = profile.get("best_laps", {}) as Dictionary
+	var best_positions: Dictionary = profile.get("best_positions", {}) as Dictionary
 	if best_lap_ms > 0 and (not best_laps.has(track_key) or best_lap_ms < int(best_laps[track_key])):
 		best_laps[track_key] = best_lap_ms
 	if position > 0 and (not best_positions.has(track_key) or position < int(best_positions[track_key])):
 		best_positions[track_key] = position
-	data["best_laps"] = best_laps
-	data["best_positions"] = best_positions
+	profile["best_laps"] = best_laps
+	profile["best_positions"] = best_positions
+	profiles[profile_key] = profile
+	data["player_profiles"] = profiles
+	if profile_index == 0:
+		data["best_laps"] = best_laps.duplicate()
+		data["best_positions"] = best_positions.duplicate()
 	return save_data(data)
 
 
@@ -73,6 +92,17 @@ func record_race_result(track_id: StringName, best_lap_ms: int, position: int) -
 func get_best_lap_ms(track_id: StringName) -> int:
 	var data: Dictionary = load_data()
 	var best_laps: Dictionary = data.get("best_laps", {}) as Dictionary
+	return int(best_laps.get(String(track_id), -1))
+
+
+## Returns a P1-P4 profile best lap in milliseconds, or -1.
+func get_player_best_lap_ms(profile_index: int, track_id: StringName) -> int:
+	if profile_index < 0 or profile_index >= PLAYER_PROFILE_COUNT:
+		return -1
+	var data: Dictionary = load_data()
+	var profiles: Dictionary = data.get("player_profiles", {}) as Dictionary
+	var profile: Dictionary = profiles.get(_profile_key(profile_index), {}) as Dictionary
+	var best_laps: Dictionary = profile.get("best_laps", {}) as Dictionary
 	return int(best_laps.get(String(track_id), -1))
 
 
@@ -122,7 +152,7 @@ func _read_valid_data(path: String) -> Dictionary:
 	if version < 0 or version > CURRENT_VERSION:
 		return {}
 	# Syntactically valid JSON can still violate the types consumed by menus/results.
-	for key: String in ["best_laps", "best_positions", "last_selection", "grand_prix_bests"]:
+	for key: String in ["best_laps", "best_positions", "last_selection", "grand_prix_bests", "player_profiles"]:
 		if data.has(key) and not data[key] is Dictionary:
 			return {}
 	for key: String in ["best_laps", "best_positions"]:
@@ -134,6 +164,13 @@ func _read_valid_data(path: String) -> Dictionary:
 				return {}
 	var selection: Dictionary = data.get("last_selection", {})
 	var gp_bests: Dictionary = data.get("grand_prix_bests", {})
+	var profiles: Dictionary = data.get("player_profiles", {})
+	for profile: Variant in profiles.values():
+		if not profile is Dictionary:
+			return {}
+		for section: String in ["best_laps", "best_positions"]:
+			if not (profile as Dictionary).get(section, {}) is Dictionary:
+				return {}
 	for record: Variant in gp_bests.values():
 		if not record is Dictionary:
 			return {}
@@ -176,6 +213,17 @@ func _merge_with_defaults(data: Dictionary) -> Dictionary:
 	for key: Variant in data:
 		merged[key] = data[key]
 	return merged
+
+
+func _default_player_profiles() -> Dictionary:
+	var profiles: Dictionary = {}
+	for index: int in range(PLAYER_PROFILE_COUNT):
+		profiles[_profile_key(index)] = {"best_laps": {}, "best_positions": {}}
+	return profiles
+
+
+func _profile_key(profile_index: int) -> String:
+	return "P%d" % (profile_index + 1)
 
 
 func _write_json(path: String, data: Dictionary) -> Error:

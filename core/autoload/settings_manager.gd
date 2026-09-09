@@ -64,7 +64,11 @@ func default_settings() -> Dictionary:
 			"vibration": true,
 			"remaps": {},
 		},
-		"accessibility": {"speed_lines": true, "drift_tier_icons": true},
+		"accessibility": {
+			"speed_lines": true,
+			"drift_tier_icons": true,
+			"multiplayer_minimap_all": false,
+		},
 		"gameplay": {
 			"camera_shake": 1.0,
 			"fov_effect": 1.0,

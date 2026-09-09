@@ -133,8 +133,15 @@ static func can_transition(from_state: int, to_state: int) -> bool:
 	return allowed.has(to_state)
 
 ## Returns whether FINISHING may close because everyone finished or time expired.
-static func finishing_complete(finished_count: int, kart_count: int, elapsed: float, timeout: float) -> bool:
-	return finished_count >= kart_count or elapsed >= timeout
+static func finishing_complete(
+	finished_count: int, kart_count: int, elapsed: float, timeout: float,
+	finished_human_count: int = 1, human_count: int = 1,
+) -> bool:
+	if finished_count >= kart_count:
+		return true
+	if human_count > 0 and finished_human_count <= 0:
+		return false
+	return elapsed >= timeout
 
 func _begin_loading(is_restart: bool) -> void:
 	if is_restart:
