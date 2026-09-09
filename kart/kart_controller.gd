@@ -55,6 +55,7 @@ func _physics_process(delta: float) -> void:
 
 ## Runs the ordinary fixed-step physics from explicit input, optionally without feedback.
 func step_input(raw: InputFrame, delta: float, replaying: bool = false) -> void:
+	var was_blocked: bool = EventBus.is_blocking_signals()
 	var muted: bool = replaying or network_replica
 	if muted:
 		EventBus.set_block_signals(true)
@@ -66,7 +67,7 @@ func step_input(raw: InputFrame, delta: float, replaying: bool = false) -> void:
 		_physics.reset_motion()
 		_set_state(KartState.FROZEN)
 		if muted:
-			EventBus.set_block_signals(false)
+			EventBus.set_block_signals(was_blocked)
 		return
 	var terrain: KartPhysics.TerrainSample = _sample_terrain(boost_controller.get_result().ignores_offroad)
 	var ground: KartPhysics.GroundProbe = _physics.probe_ground()
@@ -76,7 +77,7 @@ func step_input(raw: InputFrame, delta: float, replaying: bool = false) -> void:
 	_update_hit_reactor(delta)
 	_update_state(ground)
 	if muted:
-		EventBus.set_block_signals(false)
+		EventBus.set_block_signals(was_blocked)
 ## Installs a new input source. Karts never read `Input` directly (spec §23).
 func set_input_provider(provider: InputProvider) -> void:
 	input_provider = provider
@@ -348,6 +349,8 @@ func _set_state(new_state: int) -> void:
 	state = new_state
 	state_changed.emit(old_state, new_state)
 func _on_wall_head_on() -> void:
+	if network_replica:
+		return # Wall-hit adjudication is mirrored from the server.
 	EventBus.wall_head_on.emit(self)
 	_hit_reactor.apply(HitReactor.HitType.BUMP, self, false, 1.0, false)
 func _on_landed(vertical_speed: float) -> void:
@@ -363,10 +366,11 @@ func capture_state() -> Dictionary:
 
 ## Restores validated state without replaying audiovisual or gameplay events.
 func apply_state(snapshot: Dictionary) -> void:
+	var was_blocked: bool = EventBus.is_blocking_signals()
 	EventBus.set_block_signals(true)
 	KartReplayState.restore(self, snapshot)
 	_slipstream_sensor.set("_charge_time", float(snapshot.get("slip_charge", 0.0)))
 	_slipstream_sensor.set("_exit_remaining", float(snapshot.get("slip_exit", 0.0)))
 	_slipstream_active = bool(snapshot.get("slip_active", false))
 	_slipstream_sensor.set("_active", _slipstream_active)
-	EventBus.set_block_signals(false)
+	EventBus.set_block_signals(was_blocked)

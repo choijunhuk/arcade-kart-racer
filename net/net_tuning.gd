@@ -18,3 +18,4 @@ const MAX_PACKET_BYTES: int = 65536
 const MAX_PROJECTILES: int = 64
 const CLOCK_INTERVAL: int = 30
 const CHANNEL_COUNT: int = 3
+const RACE_PROCESS_PRIORITY: int = 100

@@ -5,7 +5,7 @@ Mario Kart에서 *시스템과 플레이 감각*만 영감을 받은 **완전 �
 
 ## 이 레포의 현재 상태
 
-**Phase 14 — 로컬 멀티플레이·분할 화면.** 현재 검증 결과와
+**Phase 15 — LAN 네트워크 구현, 실제 ENet/LAN 검증 및 독립 리뷰 대기.** 현재 검증 결과와
 네이티브 창 제한은 [DEVLOG](DEVLOG.md), 에셋별 교체/유지 사유는
 [placeholder ledger](docs/phase13_asset_ledger.md)를 참조한다.
 
@@ -319,3 +319,27 @@ synthesized audio [CC0](assets/audio/placeholder/LICENSE.md), Godot default font
 retained under upstream licensing. No macOS fonts or downloaded assets are bundled.
 For performance, `tools/perf_check.sh 12 30` selects low quality at 1600×900;
 headless results cannot establish the 60 FPS GPU acceptance gate.
+
+## LAN 온라인 플레이 (Phase 15)
+
+같은 빌드의 게임을 같은 LAN에 있는 2–4대에서 실행한다.
+
+1. 호스트: 메인 메뉴 **ONLINE → HOST**. 기본 포트는 **24565/UDP**.
+2. 참가자: **ONLINE**에서 호스트의 LAN IP와 같은 포트를 입력하고 **JOIN**.
+3. 각자 드라이버·카트를 고르고 **READY**, 호스트가 **START**.
+4. Ridgeline에서 기존 가속·조향·드리프트·아이템 조작으로 완주한다. 각 기기는 자기 카메라/HUD만 표시한다.
+5. 호스트 종료 또는 경기 중 참가자 이탈 시 메뉴로 돌아가 연결 종료 메시지를 표시한다. 온라인 중 전체 경기 일시정지는 지원하지 않는다. 결과의 재시작/트랙 선택은 메뉴로 돌아가 새 로비를 만든다.
+
+자동 검증은 두 개의 실제 headless 프로세스를 사용한다:
+
+```sh
+NET_TEST_LABEL=zero tools/run_net_test.sh
+NET_TEST_LABEL=latency tools/run_net_test.sh --net-latency 100 --net-loss 0.02
+```
+
+`--net-latency`는 **각 방향 편도 지연(ms)**이다. 따라서 100이면 약 200ms RTT이고,
+손실은 입력/스냅샷에 적용한다. 신뢰 전송은 지연만 적용한다. 로그는 `.omc/phase15-logs/`.
+같은 입력 tick의 보정 전 로컬 예측 위치와 서버 위치를 비교해 평균 <0.5m, 최대 <3m를 검사한다.
+리모트 카트는 보간 대상이며 로컬 예측 통계로 보고하지 않는다.
+현재 실행 샌드박스는 UDP bind 자체를 거부하여 두 조건 모두 호스트 생성에서 차단되었다.
+LAN 완주·지연 오차 수치·창 모드 조작감은 아직 검증되지 않았다.

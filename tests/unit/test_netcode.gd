@@ -167,3 +167,33 @@ func test_network_hitstop_is_disabled() -> void:
 	add_child_autofree(stop)
 	assert_false(stop.request(true))
 	assert_eq(Engine.time_scale, 1.0)
+
+func test_active_boost_and_slipstream_roundtrip() -> void:
+	_kart.request_boost(_kart.tuning.boost_pad_boost, &"boost_pad")
+	_kart.get_node("SlipstreamSensor").set("_charge_time", 0.25)
+	var source: RaceSnapshot = _snapshot()
+	var result: RaceSnapshot = RaceSnapshot.unpack(source.pack())
+	assert_not_null(result)
+	if result != null:
+		assert_eq(result.karts[0]["state"]["boost"]["source"], "boost_pad")
+		assert_almost_eq(float(result.karts[0]["state"]["slip_charge"]), 0.25, 0.00001)
+
+func test_replay_suppresses_item_edges_and_preserves_outer_signal_mute() -> void:
+	var item: ItemData = load("res://data/items/nitro_can.tres") as ItemData
+	_kart.item_slot.set_item(item)
+	var frame: InputFrame = _frame(1)
+	frame.item = true
+	EventBus.set_block_signals(true)
+	_kart.step_input(frame, NetTuning.STEP, true)
+	assert_true(EventBus.is_blocking_signals())
+	EventBus.set_block_signals(false)
+	assert_false(_kart.item_slot.consume_use_request())
+
+func test_replica_rejects_external_hits_respawns_and_boosts() -> void:
+	_kart.network_replica = true
+	var before: Dictionary = _kart.capture_state()
+	assert_false(_kart.apply_hit(HitReactor.HitType.SPIN_OUT))
+	_kart.begin_respawn()
+	_kart.teleport_for_respawn(Transform3D(Basis.IDENTITY, Vector3(100, 0, 0)))
+	_kart.request_boost(_kart.tuning.boost_pad_boost, &"boost_pad")
+	assert_eq(_kart.capture_state(), before)

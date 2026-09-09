@@ -16,7 +16,8 @@ cleanup() {
   if [ -n "$host_pid" ]; then kill "$host_pid" 2>/dev/null || true; wait "$host_pid" 2>/dev/null || true; fi
   if [ -n "$client_pid" ]; then kill "$client_pid" 2>/dev/null || true; wait "$client_pid" 2>/dev/null || true; fi
 }
-trap cleanup EXIT HUP INT TERM
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
 "$GODOT_BIN" --headless --path . -- --net-host --ai 6 --laps 1 "$@" >"$host_log" 2>&1 &
 host_pid=$!
 tries=0

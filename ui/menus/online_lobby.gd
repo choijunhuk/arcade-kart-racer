@@ -90,7 +90,9 @@ func _refresh() -> void:
 	_join.disabled = connected
 	_ready_button.disabled = not connected or _session.local_slot() < 0
 	_start.disabled = not connected or not multiplayer.is_server()
-	var roster: Array[Dictionary] = _session.players if connected else [] as Array[Dictionary]
+	var roster: Array[Dictionary] = []
+	if connected:
+		roster = _session.players
 	for index: int in range(_panels.size()):
 		var view: LocalLobby.PanelView = _panels[index]
 		var joined: bool = index < roster.size()

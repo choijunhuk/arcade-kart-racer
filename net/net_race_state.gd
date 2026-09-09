@@ -40,14 +40,14 @@ func capture(tick: int, acknowledgements: Array[int]) -> RaceSnapshot:
 			"finish": laps.get_finish_time(kart) if laps.is_finished(kart) else -1.0,
 			"progress": positions.get_progress(kart)})
 	var live_ids: Array[int] = []
-	for projectile: ItemBase in items.get_active_projectiles():
+	for projectile: ItemBase in items.get_network_items():
 		var instance: int = projectile.get_instance_id()
 		live_ids.append(instance)
 		if not _projectile_ids.has(instance):
 			_projectile_ids[instance] = _next_projectile_id
 			_next_projectile_id += 1
 		result.projectiles.append({"id": _projectile_ids[instance], "item": item_index(projectile.data),
-			"pose": projectile.global_transform, "owner": 0})
+			"pose": projectile.global_transform, "owner": maxi(0, karts.find(projectile.owner_kart))})
 	for instance: int in _projectile_ids.keys():
 		if not live_ids.has(instance):
 			_projectile_ids.erase(instance)

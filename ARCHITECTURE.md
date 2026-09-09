@@ -1,4 +1,4 @@
-# Turbo Circuit architecture — Phase 14
+# Turbo Circuit architecture — Phase 15
 
 This is the current-code contract for the expanded four-track game. Historical decisions and
 verification results live in `DEVLOG.md`; the product specification remains
@@ -484,3 +484,91 @@ Phase 13 additionally buries the hills ramp leading top edge below the floor by
 lowering the ramp/ledge/jump assembly together 0.2m. The same seeded 8-kart race
 changes from 4,387 wall contacts with DNFs to eight contacts and all finishers.
 GhostRecording version 3 rejects earlier content recordings after this change.
+
+## Net: LAN server authority (Phase 15)
+
+`GameState.net_session` owns an ordinary `NetSession` child at the identical
+`/root/GameState/NetSession` RPC path on all peers. No autoload or project
+network/TLS setting is added. The selected design is the Phase 15 brief and spec §28.
+
+- ENet server id 1 owns a roster of 2–4 peers, content-id selections and ready flags.
+  Clients cannot select another peer's kart; sender identity comes from the RPC.
+  Host-only Start distributes roster, AI count, laps and item RNG seed. Each peer
+  loads the ordinary race scene, acknowledges it, and waits at the load barrier.
+- The server runs all human/AI kart physics and all existing item, collision,
+  checkpoint, lap, rank, respawn, countdown and results owners. `NetRace` steps
+  karts at 60Hz after AI decisions. Other race systems retain their fixed-tick
+  ownership. Local host input goes through the same two-tick buffer.
+- Client input ticks are per-peer monotonically increasing sequences. First
+  received input establishes that peer's server consumption origin; two server
+  ticks later consumption starts at input tick 1, then advances once per tick.
+  Duplicate/stale/out-of-window/nonfinite inputs are rejected. Missing frames
+  repeat held levels and clear item/drift edges. Acknowledgement advances even
+  through misses because the server has decided those ticks. History is 240 ticks.
+- Channel 0: reliable lobby, loading, clock probes, events and results. Channel 1:
+  unreliable-ordered input dictionaries. Channel 2: unreliable-ordered packed
+  snapshots every three server ticks. All RPC receivers have explicit authority
+  annotations. Network payloads never select file paths or instantiate objects.
+- A client disables autonomous kart processing and creates no AI controllers.
+  It predicts only its own kart using `step_input()`, restores `capture_state()` /
+  `apply_state()` at the server acknowledgement, and replays every later buffered
+  input. Replay mutes EventBus and does not consume item edges. External hits,
+  respawns, pad/item boosts and launches wait for the server.
+- State reuses the existing explicit `KartReplayState` allowlist, with slipstream
+  timers added at the network boundary. Drift stepping takes the actual passed
+  fixed delta. Correction decays through a visual transform in 0.1s; errors over
+  3m snap. KartVisuals composes this transform with suspension/trick/hit animation.
+- Remote snapshots wait in a bounded render queue. A two-sample interpolator
+  selects endpoints around estimated server-now minus 100ms, lerps position and
+  shortest-arc yaw, and extrapolates at most 50ms. Bodies retain server state while
+  visuals render delayed poses. Transport clocks use monotonic timestamps only;
+  gameplay clocks continue to use fixed delta/ticks. Clock probes estimate RTT/2
+  offset and drive the client countdown display.
+- `NetRaceState` applies explicit lap/rank/item/cooldown reads to existing HUD
+  owners; it never enables their client adjudication. `NetEvents` mirrors server
+  EventBus signals with grid indices instead of object instance ids. Final results
+  are reliable and cannot be overwritten by a delayed snapshot. `NetTrackEvents`
+  mirrors pickup availability so clients never collect or respawn boxes locally.
+- `NetProjectiles` copies only authored mesh/transform descendants for active
+  projectiles and persistent item effects, keyed by server activation ids. Client
+  views have no item scripts, Areas, or collision shapes. Seeded ItemManager remains
+  server-only. HitStop sees `GameState.is_networked`; online pauses cannot stop
+  the shared race. SplitScreen/RaceAudio/KartAudio bind just the local player.
+- Main menu Online enters `online_lobby.tscn`, reusing LocalLobby's panel builder
+  and theme. Host/Join use IP and port 24565, driver/kart selectors, ready, host
+  Start and Back. A lobby departure removes its row; departure during a race
+  ends the session and returns peers to the menu. Host departure does the same.
+
+### Snapshot binary layout (version 1, little endian)
+
+`StreamPeerBuffer` writes the packet without Variant/object serialization:
+
+| Part | Layout |
+|---|---|
+| Header (24 bytes) | version u8, server tick u32, monotonic seconds f64, race state u8, race seconds f32, countdown seconds f32, kart count u8, item-entity count u8 |
+| Kart state (201 bytes) | XYZ i32 centimetres, yaw i16 milliradians; normal/up/velocity f32 vectors; nine effective kart stats f32; allowlisted component bool u8 / enum i16 / timer f32; fixed boost tail and slipstream state |
+| Kart metadata (24 bytes) | acknowledged input tick u32; lap/rank/next-checkpoint/item-index u8; roulette/cooldown/finish-time/progress f32 |
+| Item entity (25 bytes) | activation id u32, catalog id u8, XYZ i32 centimetres, XYZ rotation i16 milliradians, owner grid slot u16 |
+
+An eight-kart snapshot without live items is 1,824 bytes. Decode checks version,
+counts, exact length, finite values and the replay schema. Empty item index is
+zero; the sorted shared item catalog uses one-based indices. Position error is
+≤0.005m per axis, yaw error ≤0.0005rad (subject to float precision).
+
+`NetDebugConditions` delays outgoing transport calls and drops seeded unreliable
+traffic; reliable messages are delayed but preserved. `--net-latency 100` adds
+100ms **per direction**, approximately 200ms RTT. `NetTestRun` requires both real
+processes to reach RESULTS with all karts finished, then reports historical
+pre-reconciliation position error at the same acknowledged input tick for each
+client-predicted kart. Missing samples fail. Remote interpolation is not reported
+as prediction. `tools/run_net_test.sh` captures logs, bounds runtime, and reaps both
+children on success/failure/signals. Adapter tests do not replace this ENet gate.
+
+API references: [ENetMultiplayerPeer](https://docs.godotengine.org/en/latest/classes/class_enetmultiplayerpeer.html),
+[RPC channels and authority](https://docs.godotengine.org/en/latest/tutorials/networking/high_level_multiplayer.html),
+[StreamPeerBuffer](https://docs.godotengine.org/en/latest/classes/class_streampeerbuffer.html).
+
+Validation limits: this sandbox rejects UDP bind, including 127.0.0.1 with an
+automatically chosen free port. Actual host/client loopback, LAN completion and
+latency error bounds are pending. Native visual/audio/controller acceptance and
+the two independent sensitive-path reviews remain outside this solo headless run.

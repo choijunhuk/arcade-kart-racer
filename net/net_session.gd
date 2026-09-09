@@ -136,6 +136,7 @@ func _peer_connected(id: int) -> void:
 	_broadcast_lobby()
 
 func _connected() -> void:
+	send(&"_ping", SERVER_ID, [now()], true)
 	if automated:
 		var row: Dictionary = _new_player(multiplayer.get_unique_id())
 		select(row["driver"], row["kart"], true)
@@ -167,12 +168,12 @@ func _selection(driver: String, kart: String, ready: bool) -> void:
 
 @rpc("authority", "call_remote", "reliable")
 func _lobby(roster: Array) -> void:
-	players.assign(roster)
+	players.assign(roster.duplicate(true))
 	lobby_changed.emit()
 
 @rpc("authority", "call_remote", "reliable")
 func _prepare_race(roster: Array, bots: int, lap_count: int, race_seed: int) -> void:
-	players.assign(roster)
+	players.assign(roster.duplicate(true))
 	ai_count = clampi(bots, 0, RaceSnapshot.MAX_KARTS - players.size())
 	laps = clampi(lap_count, 1, 9)
 	seed = race_seed
@@ -242,6 +243,8 @@ func _pong(sent: float, server: float) -> void:
 func _peer_disconnected(id: int) -> void:
 	if _closing or not multiplayer.is_server():
 		return
+	if automated and race != null and race.manager.get_state() == RaceState.RESULTS:
+		return # Test peers may depart after the results/metrics handshake.
 	if started:
 		send(&"_session_ended", 0, ["A player disconnected."], true)
 		_session_ended("A player disconnected.")
@@ -269,3 +272,8 @@ func _session_ended(message: String) -> void:
 func _test_report(report: Dictionary) -> void:
 	if automated and multiplayer.is_server():
 		test_report_received.emit(report)
+
+func _exit_tree() -> void:
+	conditions.clear()
+	if peer != null:
+		peer.close()

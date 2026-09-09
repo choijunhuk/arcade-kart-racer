@@ -76,6 +76,12 @@ static func unpack(bytes: PackedByteArray) -> RaceSnapshot:
 			"roulette": buffer.get_float(), "cooldown": buffer.get_float(), "finish": buffer.get_float(), "progress": buffer.get_float()}
 		if not KartReplayState.is_valid(row["state"]):
 			return null
+		for key: String in ["roulette", "cooldown", "finish", "progress"]:
+			if not is_finite(float(row[key])):
+				return null
+		for key: String in ["slip_charge", "slip_exit"]:
+			if not is_finite(float(row["state"][key])):
+				return null
 		result.karts.append(row)
 	for _index: int in range(projectile_count):
 		var id: int = buffer.get_u32()

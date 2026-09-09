@@ -14,6 +14,8 @@ var _start_ticks: Array[int] = []
 var _source: InputProvider
 var _input_tick: int = 0
 var _local: int = 0
+var _render_queue: Array[RaceSnapshot] = []
+var _has_render_sample: bool = false
 var _pending: RaceSnapshot
 var _last_snapshot: int = -1
 var _interpolators: Array[NetInterpolator] = []
@@ -30,7 +32,7 @@ func configure(owner_race: RaceManager, owner_session: NetSession) -> void:
 	_state = NetRaceState.new(manager)
 	_karts = manager.get_karts()
 	_local = session.local_slot()
-	process_physics_priority = 100
+	process_physics_priority = NetTuning.RACE_PROCESS_PRIORITY
 	for kart: KartController in _karts:
 		kart.set_physics_process(false)
 		_buffers.append(NetInputBuffer.new())
@@ -40,6 +42,9 @@ func configure(owner_race: RaceManager, owner_session: NetSession) -> void:
 	var events: NetEvents = NetEvents.new()
 	add_child(events)
 	events.configure(session, _karts)
+	var track_events: NetTrackEvents = NetTrackEvents.new()
+	add_child(track_events)
+	track_events.configure(session, manager.get_node("Track"), manager.network_replica)
 	_projectiles = NetProjectiles.new()
 	manager.add_child(_projectiles)
 	session.snapshot_received.connect(_receive_snapshot)
@@ -55,6 +60,11 @@ func begin() -> void:
 func receive_input(sender: int, data: Dictionary) -> void:
 	for key: String in ["tick", "throttle", "brake", "steer"]:
 		if not (data.get(key) is int or data.get(key) is float):
+			return
+	if not data["tick"] is int:
+		return
+	for key: String in ["drift", "drift_pressed", "item", "look_back"]:
+		if not data.get(key) is bool:
 			return
 	var frame: InputFrame = InputFrame.from_dict(data)
 	for index: int in range(session.players.size()):
@@ -115,6 +125,9 @@ func _receive_snapshot(snapshot: RaceSnapshot) -> void:
 		return
 	_last_snapshot = snapshot.tick
 	_pending = snapshot
+	_render_queue.append(snapshot)
+	if _render_queue.size() > NetTuning.HISTORY_TICKS:
+		_render_queue.pop_front()
 
 func _apply_snapshot(snapshot: RaceSnapshot) -> void:
 	_state.apply(snapshot)
@@ -131,20 +144,19 @@ func _apply_snapshot(snapshot: RaceSnapshot) -> void:
 			prediction.reconcile(_karts[index], state, ack)
 		else:
 			_karts[index].apply_state(state)
-			var pose: Transform3D = _karts[index].global_transform
-			_interpolators[index].push(snapshot.server_seconds, pose)
 	_projectiles.apply(snapshot.projectiles, _state)
 
 func _process(delta: float) -> void:
 	if session == null or multiplayer.is_server() or not session.running:
 		return
 	var render_time: float = session.clock.server_time(NetSession.now()) - NetTuning.INTERPOLATION_SECONDS
+	_advance_render_samples(render_time)
 	for index: int in range(_karts.size()):
-		var visuals: Node3D = _karts[index].get_node("Visuals") as Node3D
+		var visuals: KartVisuals = _karts[index].get_node("Visuals") as KartVisuals
 		if index == _local:
-			visuals.position = _karts[index].global_basis.inverse() * prediction.advance_visual(delta)
-		elif _last_snapshot >= 0:
-			visuals.global_transform = _interpolators[index].sample(render_time)
+			visuals.network_pose = Transform3D(Basis.IDENTITY, _karts[index].global_basis.inverse() * prediction.advance_visual(delta))
+		elif _has_render_sample:
+			visuals.network_pose = _karts[index].global_transform.affine_inverse() * _interpolators[index].sample(render_time)
 
 func _measure(index: int, error: float) -> void:
 	var stats: Dictionary = statistics.get(index, {"count": 0, "sum": 0.0, "max": 0.0})
@@ -158,10 +170,23 @@ func _receive_event(kind: String, args: Array) -> void:
 		manager.apply_network_results(NetResults.unpack(args, _local))
 
 func _update_countdown() -> void:
-	if _go_server_time <= 0.0 or manager.get_state() != RaceState.COUNTDOWN:
+	if not session.clock.initialized or _go_server_time <= 0.0 or manager.get_state() != RaceState.COUNTDOWN:
 		return
 	var remaining: float = _go_server_time - session.clock.server_time(NetSession.now())
 	var value: int = clampi(ceili(remaining), Countdown.GO_TICK, Countdown.FIRST_TICK)
 	if value != _countdown_value:
 		_countdown_value = value
 		EventBus.countdown_tick.emit(value)
+
+func _advance_render_samples(render_time: float) -> void:
+	# Hold transport samples until the two interpolation endpoints bracket the delayed time.
+	while not _render_queue.is_empty():
+		if _has_render_sample and _render_queue[0].server_seconds > render_time + NetTuning.SNAPSHOT_INTERVAL * NetTuning.STEP:
+			break
+		var snapshot: RaceSnapshot = _render_queue.pop_front()
+		for index: int in range(_karts.size()):
+			var state: Dictionary = snapshot.karts[index]["state"]
+			var pos: Array = state["position"]
+			var pose: Transform3D = Transform3D(Basis(Vector3.UP, float(state["rotation"][1])), Vector3(pos[0], pos[1], pos[2]))
+			_interpolators[index].push(snapshot.server_seconds, pose)
+		_has_render_sample = true

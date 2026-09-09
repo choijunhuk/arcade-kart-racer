@@ -3,7 +3,7 @@ extends RefCounted
 
 ## Fixed allowlist binary layout; cm positions and milliradian yaw, float32 timers.
 const VECTORS: Array[String] = ["ground_normal", "up", "velocity"]
-const BOOST_SOURCES: Array[StringName] = [&"", &"start_boost", &"slipstream_exit", &"drift", &"trick", &"boost_pad", &"nitro"]
+const BOOST_SOURCES: Array[StringName] = [&"", &"start_boost", &"slipstream_exit", &"mini_turbo_1", &"mini_turbo_2", &"mini_turbo_3", &"trick", &"boost_pad", &"item_boost"]
 
 ## Writes a complete deterministic state with compact component values.
 static func write(buffer: StreamPeerBuffer, state: Dictionary) -> void:

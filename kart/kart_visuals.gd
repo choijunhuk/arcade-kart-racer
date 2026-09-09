@@ -18,6 +18,8 @@ const DRIVER_MATERIAL_ROUGHNESS: float = 0.75
 @onready var _wheel_rl: Node3D = $WheelRL
 @onready var _wheel_rr: Node3D = $WheelRR
 
+var network_pose: Transform3D = Transform3D.IDENTITY
+
 var _wheel_spin_radians: float = 0.0
 var _wheel_jitter_phase: float = 0.0
 var _was_grounded: bool = true
@@ -56,12 +58,16 @@ func _exit_tree() -> void:
 func _process(delta: float) -> void:
 	if _controller == null or delta <= 0.0:
 		return
+	if _controller.network_replica:
+		transform = Transform3D.IDENTITY
 	_update_body_pose(delta)
 	_update_wheels(delta)
 	_update_suspension(delta)
 	_update_hit_visual()
 	_update_trick_visual(delta)
 	_update_hit_flash(delta)
+	if _controller.network_replica:
+		transform = network_pose * transform
 
 
 ## Applies the selected driver's suit color.

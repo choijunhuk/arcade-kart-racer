@@ -145,7 +145,7 @@ static func evaluate_checkpoint_transition(index: int, next_checkpoint_index: in
 
 
 func _on_body_passed(body: Node3D, index: int) -> void:
-	if GameState.is_networked and not multiplayer.is_server():
+	if body is KartController and (body as KartController).network_replica:
 		return # Replicas consume server lap records only.
 	var kart: KartController = body as KartController
 	if kart == null:

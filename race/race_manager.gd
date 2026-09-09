@@ -383,7 +383,7 @@ func _make_default_config() -> RaceConfig:
 	return config
 ## Updates a replica state without enabling authoritative systems.
 func apply_network_state(value: int) -> void:
-	if not network_replica or value == RaceState.RESULTS:
+	if not network_replica or value == RaceState.RESULTS or _state == RaceState.RESULTS:
 		return
 	var previous: int = _state
 	_force_state(value)
