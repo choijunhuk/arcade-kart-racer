@@ -8,8 +8,11 @@ extends GutTest
 ## where it should — sometimes effectively behind the kart — driving
 ## spurious corner braking and a near-stationary crawl right before the
 ## finish line (see native evidence at ~1440-1470m of a ~1499m lap).
-## `ScriptedRaceInputProvider._current_offset()` now hints the search with
-## its own previous tick's offset so it stays anchored on the correct side.
+## `ScriptedRaceInputProvider._current_offset()` now keeps a full, unhinted
+## scan every tick (so it always reacquires the kart's true position, even
+## across a large discontinuous jump like a stuck-recovery respawn) and only
+## picks whichever wrap of that result is continuous with the previous tick,
+## which is the one correction the seam's genuine tie actually needs.
 
 
 func _make_context() -> Dictionary:
@@ -61,3 +64,23 @@ func test_current_offset_hint_keeps_full_lap_progress_monotonic() -> void:
 			assert_gt(unwrapped, unwrapped_previous - 0.5,
 				"step %d: reported offset moved backward across the seam" % step)
 		unwrapped_previous = unwrapped
+
+
+## A stuck-recovery respawn teleports the kart far from wherever the
+## follower last tracked it. `_current_offset()` must reacquire the true
+## position immediately (an unhinted full scan does this), not stay stuck
+## searching only near the stale pre-teleport location.
+func test_current_offset_reacquires_position_after_a_large_teleport() -> void:
+	var context: Dictionary = _make_context()
+	var kart: KartController = context["kart"]
+	var racing_line: RacingLine = context["racing_line"]
+	var provider: ScriptedRaceInputProvider = context["provider"]
+	var length: float = racing_line.length()
+	kart.global_transform = Transform3D(Basis.IDENTITY, racing_line.sample(length * 0.95))
+	provider._current_offset()
+	# A respawn rollback (RespawnSystem.resolve_respawn_transform) can land the
+	# kart well back along the line, far outside any local search window.
+	var teleported_offset: float = length * 0.2
+	kart.global_transform = Transform3D(Basis.IDENTITY, racing_line.sample(teleported_offset))
+	var reported: float = provider._current_offset()
+	assert_almost_eq(reported, teleported_offset, 1.0)

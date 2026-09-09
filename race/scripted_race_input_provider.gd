@@ -22,13 +22,17 @@ var _target_speed_ratio: float = 0.8
 var _drift_on_corners: bool = true
 var _was_drifting: bool = false
 var _locked_direction: float = 1.0
-## Hint fed back into `RacingLine.offset_at()` so the nearest-point search
-## stays anchored on whichever side of the start/finish seam this follower
-## is actually on, instead of an unhinted full scan that ties exactly at the
-## seam (spec item B): the duplicated closing point is equidistant from the
-## last and first baked points, so a fresh scan can snap the reported
-## offset to ~0 a little early, making `sample(offset + LOOKAHEAD_DISTANCE)`
-## land behind the kart and drive spurious corner braking/oscillation.
+## Previous tick's resolved offset, used only to pick which wrap of a fresh
+## full-scan `RacingLine.offset_at()` result is continuous with where this
+## follower actually was (spec item B). The scan itself stays unhinted/full
+## every tick — hinting the search window instead would leave it unable to
+## reacquire the kart after a large discontinuous jump (a stuck-recovery
+## respawn teleport), searching only near the stale pre-teleport location.
+## The seam itself is a genuine tie (the closing baked point duplicates the
+## first one), so an unhinted scan can report either side; without this,
+## picking the "wrong" side snaps the offset back near 0 a little early,
+## making `sample(offset + LOOKAHEAD_DISTANCE)` land behind the kart and
+## drive spurious corner braking/oscillation right before the finish line.
 var _cached_offset: float = -1.0
 
 
@@ -99,13 +103,27 @@ func _apply_corner_braking(frame: InputFrame, curvature: float) -> void:
 		frame.brake = CORNER_BRAKE
 
 
-## Resolves this tick's racing-line offset, hinted from the previous tick so
-## the nearest-point search stays on the same side of the start/finish seam
-## instead of an unhinted scan ambiguously snapping across it (spec item B).
+## Resolves this tick's racing-line offset via an unhinted full scan (always
+## finds the true global nearest point, so a large discontinuous jump like a
+## respawn teleport is reacquired immediately), then keeps whichever wrap of
+## that raw result is closest to the previous tick's offset — the only fix
+## needed for the ambiguous tie exactly at the start/finish seam (spec item B).
 func _current_offset() -> float:
 	if _racing_line == null:
 		return 0.0
-	_cached_offset = _racing_line.offset_at(_kart.global_position, _cached_offset)
+	var raw: float = _racing_line.offset_at(_kart.global_position)
+	if _cached_offset < 0.0:
+		_cached_offset = raw
+		return raw
+	var length: float = _racing_line.length()
+	var best: float = raw
+	var best_delta: float = absf(raw - _cached_offset)
+	for candidate: float in [raw + length, raw - length]:
+		var delta: float = absf(candidate - _cached_offset)
+		if delta < best_delta:
+			best_delta = delta
+			best = candidate
+	_cached_offset = fposmod(best, maxf(length, 0.001))
 	return _cached_offset
 
 
