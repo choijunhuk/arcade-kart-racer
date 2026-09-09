@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="KartData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/schemas/kart_data.gd" id="1_kart"]
+
+[resource]
+script = ExtResource("1_kart")
+id = &"zephyr_needle"
+display_name = "Zephyr Needle"
+weight_class = 0
+max_speed = 27.8
+acceleration = 16.4
+handling = 1.12
+drift_factor = 1.06
+drift_charge_mult = 1.15
+weight = 0.8
+traction = 1.02
+boost_power = 0.99
+offroad_resistance = 0.0
+body_color = Color(0.4, 1, 0.35, 1)

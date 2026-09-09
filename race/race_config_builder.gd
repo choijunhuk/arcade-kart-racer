@@ -3,6 +3,7 @@ extends RefCounted
 
 const DEFAULT_KART_COUNT: int = 8
 const MIN_LAPS: int = 1
+const MAX_KART_COUNT: int = 12
 const MAX_DRIVER_MODIFIER: float = 0.05
 const MODIFIABLE_STATS: Array[StringName] = [
 	&"max_speed",
@@ -49,3 +50,22 @@ static func apply_driver_mods(kart: KartData, driver: DriverData) -> KartData:
 		)
 		modified.set(stat_name, base_value * (1.0 + modifier))
 	return modified
+
+
+## Normalizes scene-entry configs; time trial always has one human and no items.
+static func normalize(config: RaceConfig) -> void:
+	if config.track == null or config.track.scene == null:
+		push_warning("RaceConfig track is invalid; using track_01")
+		config.track = load("res://data/tracks/track_01.tres") as TrackData
+	config.laps = maxi(MIN_LAPS, config.laps)
+	config.kart_count = clampi(config.kart_count, 1, MAX_KART_COUNT)
+	if config.player_slot >= 0:
+		config.player_slot = clampi(config.player_slot, 0, config.kart_count - 1)
+	if config.player_kart == null:
+		config.player_kart = load("res://data/karts/medium.tres") as KartData
+	if config.ai_difficulty == null:
+		config.ai_difficulty = load("res://data/ai/normal.tres") as AIDifficultyProfile
+	if config.race_mode == RaceConfig.RaceMode.TIME_TRIAL:
+		config.kart_count = 1
+		config.player_slot = 0
+		config.items_enabled = false

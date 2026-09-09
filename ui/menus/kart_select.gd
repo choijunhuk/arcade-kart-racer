@@ -76,4 +76,8 @@ func _create_kart_card(kart: KartData) -> Button:
 
 func _select_kart(kart: KartData) -> void:
 	GameState.selected_kart_id = kart.id
-	go_to(TRACK_SELECT_PATH)
+	if GameState.selected_race_mode == RaceConfig.RaceMode.GRAND_PRIX:
+		GameState.selected_track_id = &"track_01_ridgeline_circuit"
+		go_to("res://ui/menus/difficulty_select.tscn")
+	else:
+		go_to(TRACK_SELECT_PATH)

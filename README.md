@@ -5,15 +5,28 @@ Mario Kart에서 *시스템과 플레이 감각*만 영감을 받은 **완전 �
 
 ## 이 레포의 현재 상태
 
-**Phase 11 — Vertical Slice 하드닝.** 실제 자동 게이트 결과와 native 창 검증 제한은
-[DEVLOG의 Phase 11 보고](DEVLOG.md)에 기록한다.
+**Phase 12 — 콘텐츠 확장.** 실제 테스트·트랙별 기록과 창 검증 제한은
+[DEVLOG의 Phase 12 보고](DEVLOG.md)에 기록한다. 전체 테스트는 **461/461**,
+트랙 검증은 **7/7** 통과했다. 20경주 advisory에서는 Track 01의 3개 시드가
+충돌 한도를 초과해 exit 1이며 후속 튜닝 항목으로 남는다.
 
-현재 메인 씬은 Play / Time Trial(Phase 12) / Settings / Quit 메뉴로 시작한다.
-Play는 Single Race → 드라이버 8종 → 카트 3종 → Ridgeline Circuit → AI
-난이도 3종 선택을 거쳐 선택된 `RaceConfig`로 3랩/8카트 레이스를 연다.
-모든 화면은 하나의 Theme와 명시적 키보드/게임패드 focus 경로를 공유하며,
-마우스도 같은 버튼 시그널을 사용한다. Time Trial과 Grand Prix는 Phase 12
-범위라 비활성 상태다.
+메인 메뉴에서 **Play → Single Race / Grand Prix**, 또는 **Time Trial**을 고른다.
+드라이버 8명·카트 6종·경기 트랙 4개·난이도 3개를 제공한다. Single Race는
+아이템 on/off를 선택할 수 있다. Grand Prix는 Ridgeline → Lumen → Glacier →
+Ochre의 4경기와 누적 점수·최종 포디움을 제공하고, Time Trial은 AI/아이템 없이
+베스트 랩 입력 고스트를 저장·재생한다. 키보드/게임패드·마우스 모두 지원한다.
+
+| 콘텐츠 | 목록 |
+|---|---|
+| Light | Comet Feather, Zephyr Needle |
+| Medium | Apex Pulse, Copper Arc |
+| Heavy | Granite Roar, Basalt Crown |
+| 경기 트랙 | Ridgeline Circuit, Lumen Underpass, Glacier Crown, Ochre Rift |
+| 드라이버 | Aurora Vale, Bramble Knox, Cinder Rook, Echo Meridian, Flint Harbor, Luma Circuit, Nyx Calder, Orin Gale |
+| 아이템 | Rocket Dart, Hunter Drone, Spike Mine, Nitro Can, Aegis Bubble, Pulse Blast, Storm Beacon, Triple Dart, Phantom Decoy |
+
+세 테스트 트랙까지 합쳐 validator/sandbox 트랙은 총 7개다. 모든 신규 아트와
+voice/BGM 연결은 원본 색상·프리미티브·합성 오디오를 사용하는 Phase 13 교체 대상이다.
 
 레이스에는 3-2-1-GO/스타트 부스트, 랩·순위·리스폰·카트 충돌,
 FINISHING 타임아웃, 최종 HUD(아이템 룰렛/쿨다운, 10 Hz 미니맵,
@@ -22,11 +35,11 @@ FINISHING 타임아웃, 최종 HUD(아이템 룰렛/쿨다운, 10 Hz 미니맵,
 Sensors→Navigator→Driver→ItemBrain 파이프라인으로 레이싱라인을 이해하고
 코너·추월·회피·지름길·드리프트·아이템 사용을 스스로 판단하는 실제 AI다
 (난이도는 선택한 `RaceConfig.ai_difficulty`). 트랙의 아이템박스를
-통과하면 순위 기반 룰렛(`items/item_table.gd`)으로 7종 아이템 중 하나가
+통과하면 순위 기반 룰렛(`items/item_table.gd`)으로 9종 아이템 중 하나가
 결정되고, `items/item_manager.gd`가 풀링된 아이템 인스턴스의 생성·틱·회수를
 전담한다(발사체/유도/트랩/부스트/실드/범위/리더 견제 7개 카테고리 —
 `ARCHITECTURE.md`의 Items pipeline 참고). 아이템 on/off는
-`RaceConfig.items_enabled`/`tools/run_sim.sh --items on|off`로 전환한다.
+난이도 화면의 토글 또는 `RaceConfig.items_enabled`/`tools/run_sim.sh --items on|off`로 전환한다.
 
 프레젠테이션은 카트 물리와 분리되어 있다. `RaceCamera`는 속도
 방향/드리프트 blend, wall clipping, 0.15초 look-back, speed² + boost spring
@@ -47,7 +60,7 @@ key/button/axis 리맵은 즉시 적용되고 `settings.cfg`에 저장된다.
 
 Master / Music / SFX / Engine 볼륨은 설정 화면에서 즉시 적용되며 0은 버스를
 완전히 mute한다. 엔진 RPM·드리프트 스퀼·3단계 차임·충돌·피격·부스트·점프·착지·
-7종 아이템 발사/명중·획득/룰렛·카운트다운·순위·랩/완주·위협·메뉴 효과음이 연결됐다.
+9종 아이템 발사/명중·획득/룰렛·카운트다운·순위·랩/완주·위협·메뉴 효과음이 연결됐다.
 메뉴/레이스/결과 BGM은 크로스페이드하며, 최종 랩 +3% 피치는 Audio 설정에서
 끌 수 있다. Pause는 Music을 사용자 볼륨에서 추가로 -8 dB 낮춘다.
 
@@ -55,7 +68,7 @@ Master / Music / SFX / Engine 볼륨은 설정 화면에서 즉시 적용되며 
 포함된다. 플레이어 카트는 거리 감쇠가 없는 2D 엔진을 사용한다. Engine 저역
 필터는 플레이어의 오프로드 상태를 기준으로 공용 Engine 버스 전체에 적용된다.
 
-SFX 41개 + BGM 3곡은 외부 다운로드 없는 원본 CC0 합성 플레이스홀더다.
+SFX 41개 + BGM 3곡(새 아이템 4개·트랙 3개 ID는 같은 WAV의 별칭)은 외부 다운로드 없는 원본 CC0 합성 플레이스홀더다.
 모노 22.05 kHz / PCM16 WAV 총 2,570,360 bytes이며 재생성 명령은 다음과 같다.
 
 ```sh
@@ -155,7 +168,7 @@ HOME="$PWD/.tmp-home" tools/run_sim.sh --races 1 --seed 13
 검증표를 기준으로 한다. 실제 화면과 조작감은 같은 보고서의 플레이 지시로 확인한다.
 
 인자: `--races N`, `--difficulty easy|normal|hard`, `--karts 1..8`, `--laps N`,
-`--track track_01|test_loop|test_loop_hills|test_hairpin`, `--items on|off`,
+`--track track_01|track_02|track_03|track_04|test_loop|test_loop_hills|test_hairpin`, `--items on|off`,
 `--mixed-karts on|off`, `--seed N`, `--strict-balance on|off`.
 8배속에서도 실제 게임과 같은 1/60초 물리 step을 유지한다. 전원 완주,
 카트당 리스폰 ≤2, 카트당 정면 충돌 ≤랩당 3을 넘으면 exit 1이다.
@@ -249,3 +262,21 @@ godot --path . res://scenes/test/scene_snapshot.tscn -- res://race/race.tscn /tm
 tools/perf_check.sh 8 30 > /tmp/perf8.log 2>&1 &
 tools/perf_check.sh 12 30 > /tmp/perf12.log 2>&1 &
 ```
+
+
+## Phase 12 플레이 지시
+
+```text
+1. godot --path . 로 실행. Play → Single Race에서 여섯 카트 카드와 네 트랙을 확인한다.
+2. Lumen: 터널의 이동 문을 피하고, 부스트를 가진 상태로 두 골목을 시도한다.
+3. Glacier: 얼음 위 조향을 줄이고, 내리막 끝 주황 패드로 협곡을 건넌다.
+4. Ochre: 모래 갓길·폭풍을 피하고, 서쪽 안쪽 점프 패드로 Sunbridge에 오른다.
+5. Play → Grand Prix: 난이도 선택 후 4경기를 진행한다. 결과의 NEXT RACE로
+   넘어가 동일 참가자와 점수 합계를 확인하고 마지막 GP PODIUM을 본다.
+6. Time Trial: 3랩을 달린 뒤 다시 시도한다. 반투명 고스트·TIME/BEST/GHOST를
+   비교한다. 고스트는 user://ghosts/<track_id>.json에 저장된다.
+7. 샌드박스의 T는 7트랙을 순환하고 I는 9아이템을 순환 지급한다.
+```
+
+샌드박스 캐시 권한 오류가 있으면 `HOME="$PWD/.tmp-home"`를 접두어로 사용한다.
+물리 게임패드·청음·창 모드 시각 품질은 headless 테스트와 별개다.

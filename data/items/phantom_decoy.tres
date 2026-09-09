@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://data/schemas/item_data.gd" id="1_item"]
+[ext_resource type="Script" path="res://data/schemas/ai_item_use_profile.gd" id="2_ai"]
+[ext_resource type="Texture2D" path="res://assets/placeholder/items/spike_mine.svg" id="3_icon"]
+[ext_resource type="PackedScene" path="res://items/instances/phantom_decoy/phantom_decoy.tscn" id="4_scene"]
+
+[sub_resource type="Resource" id="AI_profile"]
+script = ExtResource("2_ai")
+trap_range = 14.0
+
+[resource]
+script = ExtResource("1_item")
+id = &"phantom_decoy"
+display_name = "Phantom Decoy"
+icon = ExtResource("3_icon")
+scene = ExtResource("4_scene")
+category = 2
+power = 1.0
+duration = 0.7
+cooldown = 0.5
+lifetime = 30.0
+max_bounces = 0
+hit_type = 1
+ai_use_profile = SubResource("AI_profile")

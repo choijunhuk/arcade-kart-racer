@@ -8,6 +8,7 @@ const CLOSED_LINE_DISTANCE: float = 1.0
 const MIN_ITEM_BOXES: int = 6
 const MAX_ITEM_LINE_DISTANCE: float = 8.0
 const KILL_ZONE_SAMPLE_STEP: float = 5.0
+const MIN_KILL_DEPTH: float = 32.0
 
 
 func _init() -> void:
@@ -165,6 +166,12 @@ func _validate_kill_zone_coverage(kill_zones: Node, track: Node, errors: PackedS
 	if geometry == null:
 		return
 	var track_rect: Rect2 = _horizontal_aabb(geometry)
+	var floor_y: float = INF
+	for shape: CollisionShape3D in _collect_collision_shapes(geometry):
+		floor_y = minf(floor_y, _shape_world_aabb(shape).position.y)
+	for shape: CollisionShape3D in _collect_collision_shapes(kill_zones):
+		if not kill_plane_is_safe(_shape_world_aabb(shape), floor_y):
+			errors.append("KillZone must be below geometry with at least %.0fm vertical depth" % MIN_KILL_DEPTH)
 	if track_rect.size == Vector2.ZERO:
 		return
 	var kill_rect: Rect2 = _horizontal_aabb(kill_zones)
@@ -208,7 +215,8 @@ func _shape_world_aabb(shape: CollisionShape3D) -> AABB:
 		var radius: float = (shape.shape as SphereShape3D).radius
 		extents = Vector3(radius, radius, radius)
 	else:
-		extents = shape.shape.get_debug_mesh().get_aabb().size * 0.5 if shape.shape != null else Vector3.ONE
+		if shape.shape != null:
+			return shape.global_transform * shape.shape.get_debug_mesh().get_aabb()
 	var local_aabb: AABB = AABB(-extents, extents * 2.0)
 	return shape.global_transform * local_aabb
 
@@ -228,3 +236,8 @@ func _sample_uncovered_corners(track_rect: Rect2, kill_rect: Rect2) -> PackedVec
 		if not kill_rect.has_point(point):
 			uncovered.append(point)
 	return uncovered
+
+
+## Thick planes below the lowest geometry catch fast falls without tunnelling.
+static func kill_plane_is_safe(bounds: AABB, floor_y: float) -> bool:
+	return bounds.size.y >= MIN_KILL_DEPTH and bounds.end.y < floor_y

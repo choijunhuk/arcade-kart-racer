@@ -1,8 +1,8 @@
-# Turbo Circuit architecture — Phase 11
+# Turbo Circuit architecture — Phase 12
 
-This is the current-code contract for the Vertical Slice. Historical decisions and
+This is the current-code contract for the expanded four-track game. Historical decisions and
 verification results live in `DEVLOG.md`; the product specification remains
-`KART_RACING_DEV_PROMPT.md`. Phase 11 adds hardening and measurement, not a new mode.
+`KART_RACING_DEV_PROMPT.md`. Phase 12 adds content, Grand Prix and deterministic single-player lap ghosts.
 
 ## Boundaries and invariants
 
@@ -85,10 +85,10 @@ resources. Driver/kart/track/difficulty menus filter by schema instead of mainta
 separate content registries.
 
 `RaceConfigBuilder` resolves the selected Resources and applies five allowlisted
-stats to deep KartData duplicates, clamped to ±5%. Eight driver resources, three
-kart classes, one selectable race track and three difficulties are live. Time Trial
-and Grand Prix remain disabled until Phase 12. Items are enabled in the standard
-menu flow; the on/off switch is currently the config/simulator option.
+stats to deep KartData duplicates, clamped to ±5%. Eight drivers, six karts (two per weight class), four selectable tracks and three
+difficulties are live. Kart cards wrap in a three-column scrolling grid. The
+difficulty screen exposes items on/off; time trial forces one human and items off.
+Grand Prix skips individual track selection and uses the ordered four-track cup.
 
 `RaceHud` binds the player, lap/position trackers, item manager, racing line and
 roster. It owns rank/lap, countdown, wrong-way/threat banners, roulette/cooldown,
@@ -125,7 +125,8 @@ result state while preserving the manager/UI references.
 
 `RaceConfig` contains track, laps, kart_count, player_slot, difficulty, player kart
 and driver, items_enabled and seed. `player_slot = -1` is all AI; kart_count accepts
-1–12. Optional `kart_roster` supplies per-grid-slot KartData for mixed simulations;
+1–12. `race_mode` selects single race, GP or time trial. Optional `kart_roster` and
+`driver_roster` supply stable per-grid-slot identities for a GP or mixed simulations;
 empty retains the selected player's kart class for the whole field. Driver mods
 are applied after choosing the slot's base kart. A player-provider factory remains
 an explicit test seam. Start grids extend existing authored slots for the 12-kart
@@ -240,8 +241,9 @@ fresh measurement.
 
 Tracks under `track/tracks/` use TrackRoot and expose Geometry, Environment,
 RacingLine, ordered Checkpoints with RespawnPoints, StartGrid and element containers.
-All four tracks are validated: test_loop, test_loop_hills, test_hairpin and
-track_01_ridgeline_circuit. RacingLine builds/bakes curve points once and provides
+All seven tracks are validated: test_loop, test_loop_hills, test_hairpin and
+track_01_ridgeline_circuit, track_02_lumen_underpass, track_03_glacier_crown and
+track_04_ochre_rift. RacingLine builds/bakes curve points once and provides
 length/sample/tangent/right/curvature/offset APIs. Hinted offset queries search a
 bounded neighborhood; unhinted queries can scan the baked line.
 
@@ -258,7 +260,7 @@ ItemBox owns only hide/respawn and generic collection. Its respawn now uses elap
 physics time. ItemManager owns one slot per kart, rank normalization/weighted picks,
 roulette, cooldowns, scene-keyed ObjectPools, active projectiles and effect ticking.
 ItemSlot deduplicates input by tick, then captures/consumes use edges; player and AI
-share this path. The seven typed item scenes inherit projectile, homing, trap,
+share this path. The nine typed item scenes inherit projectile, homing, trap,
 boost, shield, area or leader-strike bases. New items remain data/scene extensions,
 not item-id branches in ItemManager.
 
@@ -267,6 +269,99 @@ boost; shield absorbs one eligible hit. Pulse Blast telegraphs, slows, knocks ba
 and cancels drift only on accepted hits. Storm Beacon selects the leader, warns for
 three seconds and respects shield/boost-pad/item-box immunity. Item lifecycle and
 pool ownership remain race-local and are cleared on restart/exit.
+
+
+## Grand Prix
+
+`GrandPrix` is an autoload-free RefCounted owned by
+`GameState.grand_prix_state`. Its seeded roster is selected once from the data
+catalogue; `current_config()` carries the same kart/driver identities, difficulty
+and seed into every scene. Grid slot is the identity used for scoring, independent
+of a node's instance id after scene replacement. `RaceResults.Entry.grid_slot`
+carries that stable identity into the results adapter.
+
+`RaceModes` is the composition adapter. It submits each round exactly once, rejects
+stale/duplicate/incomplete results, and advances only after scoring. Points are
+15/12/10/8/6/4/2/1; DNFs earn zero. Ties use best finish, then finish-count countback,
+then stable grid slot. Standings are defensive copies. Intermediate results show
+both race rows and accumulated standings with Next Race. Final results show the
+three-driver podium and final table. SaveManager keeps best cup rank/highest
+points by `horizon_cup/<difficulty>` in the optional version-1
+`grand_prix_bests` section; older saves acquire it through default merging.
+
+## Time Trial and Ghost
+
+Time trial uses the ordinary race lifecycle with one human, no AI and items off.
+`TimeTrialGhost` wraps the chosen input source in `RecordingInputProvider`, storing
+one raw InputFrame at its actual consumption boundary. Each valid best lap writes
+`user://ghosts/<track_id>.json` through a temporary file/rename. Slower laps do not
+replace the ghost; respawns invalidate only that lap. Unsupported/corrupt snapshots
+are rejected before state restoration. The HUD shows elapsed/best time and delta
+at equivalent forward progress. The final lap retains its completed elapsed time.
+
+`GhostRecording` contains version/tick rate, initial state, input frames, external
+track effects, lap ticks and scalar progress samples. Progress is used only for
+timing comparison, never to move or correct the ghost. `KartReplayState` captures
+exact basis vectors (not an Euler round trip), motion, drift, hit/wheelspin and
+active boost state plus effective kart statistics. JSON number types are normalized
+back to their explicit integer/boolean/float contract. BoostPad now enters through
+`KartController.request_boost`, so pads, launches and accepted track hits can be
+recorded at the same tick boundary; internal drift/trick boosts reproduce from input.
+
+`GhostPlayback` feeds `GhostInputProvider` into a translucent real KartController.
+Its root and BumpArea have collision layer/mask zero; it is never registered with
+race ranks, pickups, collision resolution or AI. A layer-zero, world-mask-only
+`KartWorldMotion` child reuses CharacterBody3D's slide solver against the road. It
+cannot affect the player, pickups or hazards. Direct shape queries independently
+measure ordered checkpoint crossings. Ground/terrain sensing remains active.
+The kart scene is loaded on demand to avoid a PackedScene/script preload cycle.
+
+Determinism is a **same-build, 60 Hz** contract, tested on test_loop for a standing
+and flying lap with real pads and a scripted driver. Record/replay may differ by
+one tick because Area3D and explicit query notifications have different boundaries;
+the test also checks every sampled pose stays within 1 cm without pose correction.
+Version 2 also records moving-obstacle transforms at each input boundary.
+`GhostWorldReplay` creates collision-only copies on its private layer (bit 20),
+excludes live movers from the ghost solver/rays, and applies recorded poses before
+stepping input. Normal karts cannot collide with those copies. A regression checks
+that moving the live gate leaves its replay copy at the recorded location. The
+ghost remains input-driven; these are environment poses, not kart pose corrections.
+Physics/content changes must bump/invalidate the ghost format before claiming
+old ghosts compatible; cross-build deterministic replay is not claimed.
+
+## Content authoring checklist
+
+1. Add typed `.tres` resources with unique original ids, names and colors. Driver
+   modifiers stay within ±5%; `voice_set` is an audio hook, not a voice asset.
+2. A new track has all TrackRoot containers. `ContentTrack` creates the ordered
+   checkpoints/grid/three item rows and full-depth kill plane before base validation.
+   Theme scripts own dimensions, elevations, materials, hazards and shortcuts.
+3. `RoadRibbon` joins shared banked edges into one mesh/trimesh, with real missing
+   chords for chasms. Independent box end faces were unsuitable for banked/sloped
+   road seams. Track01 keeps its original authoring path. Spawn/respawn transforms
+   face horizontally; actual bank/slope normals cannot accumulate body roll while
+   flat-road steering retains its established floating-point behavior.
+4. Pads overlap the kart body above the surface. All fall footprints have a kill
+   plane below geometry and at least 32 m deep (authored planes use 200 m). A
+   shortcut cannot bypass ordered checkpoints; its next gate is after the rejoin.
+   Elevated shortcuts include the launch approach in their AI route, without a
+   drive-up ramp to the deck.
+5. Lumen has emissive tunnel walls, two sliding gates and two fast alleys. Glacier
+   has three full-width ice sheets, banked turns, a downhill/chasm launch and two
+   path-following boulders. Ochre has broad sand shoulders, an enclosed basin,
+   three chained boosts and a timed SQUASH storm that hits once per active phase.
+6. Add simulator/sandbox entries and validator invocations. Validate all seven
+   tracks, then run seeded full races at each difficulty and record actual timings.
+7. New items use data plus an instance scene. TripleDart owns three RocketDart
+   children, registers each live dart for AI/shields, reserves three budget slots,
+   and removes registrations before pool return. PhantomDecoy inherits trap
+   arming/owner immunity with a rotating pickup look. ItemManager remains unchanged.
+8. Add audio-library ids (and generator aliases), previews and rank-table weights
+   summing to 100. New item/track sounds currently reuse original placeholder WAVs.
+
+New geometry APIs were checked against the official [SurfaceTool documentation](https://docs.godotengine.org/en/latest/classes/class_surfacetool.html),
+[Mesh documentation](https://docs.godotengine.org/en/latest/classes/class_mesh.html), and
+[Environment documentation](https://docs.godotengine.org/en/latest/classes/class_environment.html).
 
 ## Presentation and audio budgets
 
@@ -312,7 +407,7 @@ local player's terrain and affects the shared Engine bus. Headless skips device
   exit. `SOAK_LOG` selects the retained log path.
 - `tools/validate_tracks.sh`: structure, ordered offsets, line closure, start and
   respawn proximity/ground, item-box proximity/count, and kill-zone footprint.
-- `scenes/test/drive_snapshot.tscn`: four sandbox track indices; scene_snapshot
+- `scenes/test/drive_snapshot.tscn`: seven sandbox track indices; scene_snapshot
   captures an arbitrary scene. Windowed commands must run in the background with
   redirected logs when called from the restricted agent environment.
 - `tools/perf_check.sh 8 30` / `12 30`: real frame intervals after warmup, FPS,
@@ -322,5 +417,5 @@ local player's terrain and affects the shared Engine bus. Headless skips device
   native focus/fullscreen delivery, PNG appearance or subjective driving/audio feel.
 
 Current exact gate outcomes and blocked native checks are recorded in DEVLOG's
-Phase 11 report. No push, tag, next-phase implementation or independent delegated
+Phase 12 report. No push, tag, Phase 13 implementation or independent delegated
 review is part of this delivery.

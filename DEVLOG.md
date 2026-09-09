@@ -1,5 +1,160 @@
 # Development Log
 
+## Phase 12 보고 — 콘텐츠 확장
+
+권위 문서: `.omc/phase12_brief.md`. `phase/12-content`에서 단독으로 구현했다.
+브랜치 전환·push·서브역할 위임은 하지 않았다. Godot은 검증에 `--headless`와
+프로젝트 로컬 HOME을 사용했고, `project.godot`/네트워크/TLS 설정은 변경하지 않았다.
+
+### 구현과 변경 파일
+
+- `data/karts/{zephyr_needle,copper_arc,basalt_crown}.tres`: 클래스별 1종을 추가해
+  총 6종, Light/Medium/Heavy 각 2종. 이름·색상·클래스 내부 스탯 조합을 구분했다.
+  기존 드라이버 8명의 ±3–5% 보정과 고유 `voice_set` ID는 이미 존재했으며 검사했다.
+- `track/content_track.gd`, `tools/road_ribbon.gd`, `track/tracks/track_02_*`,
+  `track_03_*`, `track_04_*`, `data/tracks/track_0{2,3,4}.tres`: 각 12 체크포인트,
+  8 그리드, 3×5 아이템박스, 3랩, 색상 프리뷰·BGM ID·200m 깊이 kill plane.
+  도심은 340m 터널/네온/이동 문/골목 2개, 얼음은 전폭 ice sheet 3개/실제 뱅킹/
+  내리막-협곡 점프/왕복 바위 2개, 사막은 넓은 모래 갓길/고도 변화/협곡 바닥과 벽/
+  주기적 SQUASH 폭풍/연속 부스트 3개/점프가 필요한 Sunbridge를 제공한다.
+- `race/grand_prix.gd`, `race/race_modes.gd`, `race/race_config*.gd`,
+  `race/race_results.gd`, `core/autoload/{game_state,save_manager}.gd`: GP 로스터를
+  시드로 한 번 정하고 네 트랙에 유지한다. 15/12/10/8/6/4/2/1점, best finish 우선
+  동점 처리, 중복 라운드 차단, 누적 순위/Next Race/최종 포디움과 난이도별 GP best 저장.
+- `race/{time_trial_ghost,ghost_recording,ghost_playback,ghost_world_replay}.gd`,
+  `core/input/{input_frame,recording_input_provider,ghost_input_provider}.gd`,
+  `kart/{kart_replay_state,kart_world_motion}.gd`: 입력·초기 물리/드리프트/부스트 상태·
+  외부 트랙 효과·이동 장애물 위치를 버전 2 JSON에 저장한다. 고스트의 카트/접촉
+  layer와 mask는 0이며 레이스 명단에 들어가지 않는다. 월드 전용 이동 바디와
+  고스트 전용 장애물 복사본이 기존 물리를 사용한다. 랩 위치 보정 없이 재생한다.
+- `items/instances/{triple_dart,phantom_decoy}/`, `data/items/`,
+  `data/item_tables/default_8_karts.tres`: 새 아이템 2종, 9열의 순위 확률(모든 행 100).
+  Triple Dart는 기존 RocketDart 세 개의 확산/수명/풀·발사체 예산을 관리하며,
+  Phantom Decoy는 기존 TrapItem의 지연 활성화·소유자 면역을 재사용한다.
+  **`items/item_manager.gd`는 변경하지 않았다.**
+- `ui/menus/`, `ui/hud/hud.gd`, `ui/results/results_screen.gd`: 카트 6장 스크롤/
+  포커스 순환, 트랙 4개 선택, GP/Time Trial 활성화, 아이템 토글과 타임 트라이얼
+  강제 off, TIME/BEST/GHOST delta, GP 결과/포디움.
+- `track/elements/{boost_pad,rolling_boulder,timed_hazard}.gd`, `track/track_validator.gd`,
+  `race/respawn_system.gd`, `kart/kart_physics.gd`: 패드 이벤트를 공개 카트 API로 통일,
+  hazard relay 연결, 진입/리스폰 수평 방향, 경사 조향·낙하 평면 검사.
+- `tests/unit/test_{phase12_content,phase12_items,phase12_banked_steering,grand_prix,ghost_recording}.gd`,
+  `tests/integration/test_{grand_prix_flow,time_trial,phase12_tracks,phase12_menus}.gd`와
+  기존 메뉴/확률표 회귀를 확장했다. `tests/sim/`, `tools/validate_tracks.sh`,
+  `scenes/test/kart_sandbox.gd`에 트랙/아이템과 랩별 계측을 추가했다.
+- `data/audio/`, `audio/race_audio.gd`, `tools/gen_placeholder_audio.gd`: 신규
+  아이템/트랙 ID를 기존 원본 WAV에 연결하며 재생성 시에도 별칭을 보존한다.
+  생성기를 실제 실행했고 WAV/import 파일의 바이트 변경은 없었다.
+
+### 단순화와 결함 수정 근거
+
+- 노면 박스의 단차/끝면이 뱅킹 구간에서 수천 번의 벽 충돌을 만들었다. 신규
+  트랙은 하나의 연속 mesh/trimesh 노면으로 바꿨다. Track 01 제작 경로는 유지했다.
+- 패드가 차체에 닿지 않거나 발사 후 땅을 너무 일찍 다시 감지하던 상태를 실제
+  위치·grounded 로그로 재현했다. 접촉 높이와 발사 위치/속도를 조정했고 얼음
+  트랙의 실제 협곡을 통과시켰다. 지름길이 체크포인트를 건너뛰지 않도록 재배치했다.
+- 사막 AI가 점프 패드를 거치지 않고 고가 데크로 향했다. 진입 경로에 패드를 넣고,
+  일반 슬립스트림 속도로 부적절하게 선택하지 않도록 속도 조건을 정했다.
+- 수평 조향을 전역 적용하면 평지의 부동소수점 계산 변화가 기존 Track 01 회귀를
+  깨뜨렸다. 기존 평지 계산은 보존하고 실제 경사/뱅킹 법선만 수평 회전으로 처리한다.
+- 고스트 입력만 기록하면 패드 부스트가 빠졌다. 카트의 공개 부스트 API로 통일했다.
+  정확한 basis 벡터, 주행 중 랩의 속도/드리프트/부스트 상태도 복원한다.
+- 고스트 kart scene의 사전 로딩 순환으로 리소스가 종료 시 남았다. 생성 시 로딩으로
+  바꿔 해결했다. 리플레이의 이동 문은 현재 트랙과 분리된 전용 충돌체로 재생한다.
+- RaceManager의 설정 정규화를 기존 RaceConfigBuilder로 옮겨 400줄 한도를 유지했다.
+
+### 검증
+
+- 기준선: **421/421** GUT 통과(140.366s).
+- 최종 전체 suite: **461/461 통과** (기존 421 + 신규 40, 81 scripts, 4671 assertions, 214.774s, exit 0).
+- headless editor import + startup parse: script/parse 오류 **0**, exit 0.
+- `tools/validate_tracks.sh`: **7/7 통과**. 각 신규 트랙 `--races 2`와
+  Normal `--races 3`, Easy/Hard 각 2경주 모두 성공. 신규 트랙 경주 표본은
+  모든 카트 완주, 리스폰 0회, 정면 충돌 최대 2회/카트/3랩(허용 9회).
+- GP: 테스트 트랙 2개 실제 주행→최종 순위/플레이어 best 저장, 정규 트랙 4개
+  각 3랩×8카트 실제 주행→최종 GP 포디움/일관된 로스터를 검사했다.
+- 고스트: test_loop 정지 출발 **1143 → 1142틱**, 주행 중 다음 랩
+  **1003 → 1002틱**. 둘 다 실제 순차 체크포인트 판정, 오차 1틱, 같은 틱 위치
+  오차 ≤1cm(위치 보정 없음). 이동 문 복사본/실제 플레이어 충돌 분리도 통과했다.
+- `git diff --check`, shell 구문 검사, GDScript 파일 길이 검사 통과.
+  프로젝트 GDScript에 400줄 초과 파일 없음. 새 외부 의존성 없음.
+- 스크린샷은 background + 파일 redirect + polling으로 시도했지만 macOS
+  `com.apple.hiservices-xpcservice` 연결 오류로 PNG를 얻지 못했다. 사용자 지시에
+  따라 나머지 창 검증을 skip했다. Headless 포커스 순환/스크롤/화면 범위 검사는
+  수행했지만 실제 렌더링·물리 게임패드·청음·GPU 성능을 통과로 표시하지 않는다.
+
+#### 트랙별 실제 평균 랩 시간
+
+8카트·3랩·items on. Easy/Hard는 2경주(16 finish samples), Normal은
+3경주(24 samples), seed 1부터. 수치는 전체 레이스 시간/3의 평균이며
+첫 랩의 그리드/출발 효과도 포함한다. `--races 2` Normal 반복 게이트도 별도 통과.
+
+| 트랙 | Easy | Normal | Hard | 리스폰 |
+|---|---:|---:|---:|---:|
+| Lumen Underpass (도심 야간) | 67.00s | 63.17s | 60.95s | 0 |
+| Glacier Crown (얼음 고원) | 71.00s | 66.66s | 64.55s | 0 |
+| Ochre Rift (사막 협곡) | 72.14s | 67.90s | 64.69s | 0 |
+
+#### 20경주 advisory 아이템 균형 측정
+
+`HOME="$PWD/.tmp-home" tools/run_sim.sh --track track_01 --races 20 --strict-balance off`
+는 동일 seed의 items on/off **20쌍(총 40경주)**을 완료했다. 양쪽 모두 160/160
+카트가 완주했지만, 새 아이템을 켠 시드 5/7/19의 AiKart1 정면 충돌이
+**18/10/10회**로 3랩당 9회 한도를 초과해 **전체 exit 1**이다.
+확률표/판정 한도를 낮춰 이 결과를 통과 처리하지 않았다.
+
+- 평균 랩 63.135s; 평균 1–8위 시간차 5.973s.
+- lap1 최하위 순위 상승: on 1.10 − off 0.40 = **+0.70** (기준 ≥0.40).
+- 선두 피격 **1.10/경주** (기준 ≤3).
+- Triple Dart 14회 사용 / 4회 명중;
+  Phantom Decoy 27회 사용 / 25회 명중.
+- 균형 지표 자체 `balance_gate_pass=true`; 주행 충돌 예산은 위 세 시드에서 실패했다.
+  이 항목은 브리프의 advisory 측정 결과와 남은 튜닝 위험으로 기록한다.
+
+### TODO(phase-N)와 알려진 제한
+
+- **TODO(phase-13)**: 기존 Track 01에서 새 아이템을 사용하는 seed 5/7/19의
+  벽 접촉/회피 튜닝. 위 advisory exit 1을 미해결 상태로 보존한다.
+- **TODO(phase-13)**: 카트/드라이버/트랙/아이템의 최종 아트·프리뷰, 실제 voice assets,
+  신규 트랙별 음악/아이템별 음색, 최종 믹스·로컬라이제이션·컨트롤러 진동.
+- **TODO(phase-13)**: native 창 시각/게임패드/청음 및 현재 빌드 GPU 성능 검증.
+  이번 sandbox에서 PNG 생성 및 프로세스 종료 요청 모두 OS 권한에 막혔다.
+- Phase 11의 `TODO(phase-12)` 아이템 토글과 kill-plane 두께 일반화는 해결했다.
+- 고스트는 같은 빌드·60Hz용이며 물리/콘텐츠 계약 변경 시 format version을 올려
+  이전 고스트를 무효화해야 한다. 엔진 버전 간 결정론이나 네트워크 동기화는 미검증이다.
+- 기준선에도 있던 macOS 인증서 진단과 Dummy renderer 종료 시 shader RID 진단이
+  원문 로그에 남는다. 네트워크/TLS section이나 로그 숨김 필터를 추가하지 않았다.
+- 단독 구현·자체 검토이며 독립 위임 리뷰는 하지 않았다.
+
+### 커밋 상태
+
+`git add`가 `.git/index.lock: Operation not permitted`로 차단됐다.
+요청된 예외에 따라 **모든 작업은 미커밋 상태**다. `git commit`은 실행되지 않았고
+push/브랜치 전환도 하지 않았다.
+
+### 플레이 지시
+
+```text
+실행: godot --path .
+캐시 권한 문제가 있으면: HOME="$PWD/.tmp-home" godot --path .
+
+1. Play → Single Race → 드라이버 → 카트(6장) → 트랙(4개) → 난이도/아이템 토글.
+2. 도심: 이동 문을 피하고 부스트를 가진 채 두 골목을 통과한다.
+3. 얼음: 얼음 노면에서는 조향을 줄이고 내리막 끝 주황 패드로 협곡을 건넌다.
+4. 사막: 폭풍의 활성/해제를 보고 모래 갓길을 피한다. 서쪽 안쪽 점프 패드로
+   Sunbridge를 시도한다. 연속 부스트 세 개도 통과한다.
+5. Play → Grand Prix → 드라이버/카트/난이도. 결과에서 NEXT RACE를 눌러 4경기를
+   완주하고 누적 점수·동일 참가자·GP PODIUM과 best 저장을 확인한다.
+6. 메인 메뉴 Time Trial → 같은 선택 → 3랩. 다시 시도해 반투명 고스트와
+   TIME/BEST/GHOST delta를 비교한다. 리스폰한 랩은 고스트 기록에서 제외된다.
+7. 샌드박스 T는 7트랙 순환, I는 9아이템 순환 지급, A는 AI 7대 추가.
+```
+
+원문 로그/JSON은 `.omc/phase12-evidence/`; 재현 요약은
+`docs/phase12_validation.json`에 보관한다. Phase 13 구현은 시작하지 않는다.
+
+---
+
 ## Phase 11 보고 — Vertical Slice 하드닝
 
 **구현/자동 기능 검증 통과, 출시 판정 보류.** `phase/11-hardening`을 유지했고

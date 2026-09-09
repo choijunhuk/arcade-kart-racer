@@ -28,3 +28,23 @@ func clone() -> InputFrame:
 	copy.look_back = look_back
 	copy.tick = tick
 	return copy
+
+
+## Serializes only the deterministic input contract, including one-shot edges.
+func to_dict() -> Dictionary:
+	return {"throttle": throttle, "brake": brake, "steer": steer, "drift": drift,
+		"drift_pressed": drift_pressed, "item": item, "look_back": look_back, "tick": tick}
+
+
+## Restores a previously validated recording frame without polling live input.
+static func from_dict(data: Dictionary) -> InputFrame:
+	var frame: InputFrame = InputFrame.new()
+	frame.throttle = float(data.get("throttle", 0.0))
+	frame.brake = float(data.get("brake", 0.0))
+	frame.steer = float(data.get("steer", 0.0))
+	frame.drift = bool(data.get("drift", false))
+	frame.drift_pressed = bool(data.get("drift_pressed", false))
+	frame.item = bool(data.get("item", false))
+	frame.look_back = bool(data.get("look_back", false))
+	frame.tick = int(data.get("tick", 0))
+	return frame

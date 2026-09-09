@@ -4,7 +4,7 @@ extends MenuScreen
 const TRACK_DIRECTORY: String = "res://data/tracks"
 const DIFFICULTY_SELECT_PATH: String = "res://ui/menus/difficulty_select.tscn"
 const NO_RECORD_TEXT: String = "--:--.---"
-const TRACK_BUTTON_SIZE: Vector2 = Vector2(720.0, 150.0)
+const TRACK_BUTTON_SIZE: Vector2 = Vector2(720.0, 78.0)
 const MILLISECONDS_PER_MINUTE: int = 60_000
 const MILLISECONDS_PER_SECOND: int = 1_000
 const SECONDS_PER_MINUTE: int = 60
@@ -40,6 +40,8 @@ func _build_track_list() -> void:
 			_format_milliseconds(best_lap_ms),
 		]
 		button.pressed.connect(_select_track.bind(track))
+		button.focus_entered.connect(_preview_track.bind(track))
+		button.mouse_entered.connect(_preview_track.bind(track))
 		_track_list.add_child(button)
 		_buttons.append(button)
 
@@ -56,3 +58,7 @@ func _format_milliseconds(milliseconds: int) -> String:
 	var seconds: int = (milliseconds / MILLISECONDS_PER_SECOND) % SECONDS_PER_MINUTE
 	var remainder: int = milliseconds % MILLISECONDS_PER_SECOND
 	return "%02d:%02d.%03d" % [minutes, seconds, remainder]
+
+
+func _preview_track(track: TrackData) -> void:
+	($Panel/VBox/Preview as ColorRect).color = track.preview_color

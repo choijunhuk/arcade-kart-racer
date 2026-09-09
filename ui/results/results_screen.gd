@@ -19,6 +19,8 @@ const SECONDS_PER_MINUTE: int = 60
 @onready var _menu_button: Button = $Panel/VBox/Actions/MenuButton
 
 var _manager: RaceManager
+var _gp_label: Label
+var _is_grand_prix: bool = false
 
 
 func _ready() -> void:
@@ -33,6 +35,9 @@ func _ready() -> void:
 ## Populates sorted driver/kart/time rows, record status, and action focus.
 func show_results(entries: Array[RaceResults.Entry], manager: RaceManager) -> void:
 	_manager = manager
+	_is_grand_prix = GameState.grand_prix_state != null
+	_rows.custom_minimum_size.y = 0.0 if _is_grand_prix else 420.0
+	_rows.add_theme_constant_override("separation", 4 if _is_grand_prix else 7)
 	_clear_rows()
 	_record_badge.visible = false
 	var ordered: Array[RaceResults.Entry] = ResultsOrdering.by_rank(entries)
@@ -42,6 +47,7 @@ func show_results(entries: Array[RaceResults.Entry], manager: RaceManager) -> vo
 		_rows.add_child(row)
 		_animate_row(row, index)
 		_record_badge.visible = _record_badge.visible or entry.is_new_record
+	_show_grand_prix()
 	visible = true
 	_restart_button.call_deferred("grab_focus")
 
@@ -71,6 +77,8 @@ func _add_cell(row: HBoxContainer, cell_name: StringName, text: String, width: f
 	label.name = cell_name
 	label.custom_minimum_size.x = width
 	label.text = text
+	if _is_grand_prix:
+		label.add_theme_font_size_override("font_size", 18)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	row.add_child(label)
 
@@ -112,14 +120,53 @@ func _wire_action_focus() -> void:
 func _on_restart_pressed() -> void:
 	if _manager != null:
 		visible = false
-		_manager.restart()
+		if _is_grand_prix:
+			if RaceModes.next_grand_prix_race():
+				GameState.change_scene("res://race/race.tscn")
+			else:
+				_manager.back_to_menu()
+		else:
+			_manager.restart()
 
 
 func _on_track_select_pressed() -> void:
 	if _manager != null:
+		GameState.grand_prix_state = null
+		GameState.selected_race_mode = RaceConfig.RaceMode.SINGLE_RACE
 		_manager.back_to_track_select()
 
 
 func _on_menu_pressed() -> void:
 	if _manager != null:
 		_manager.back_to_menu()
+
+
+func _show_grand_prix() -> void:
+	var gp: GrandPrix = GameState.grand_prix_state
+	_is_grand_prix = gp != null
+	_restart_button.text = "RESTART"
+	if _gp_label == null:
+		_gp_label = Label.new()
+		_gp_label.name = "GrandPrixStandings"
+		_gp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_gp_label.add_theme_font_size_override("font_size", 18)
+		$Panel/VBox.add_child(_gp_label)
+		$Panel/VBox.move_child(_gp_label, _rows.get_index() + 1)
+	_gp_label.visible = _is_grand_prix
+	if not _is_grand_prix:
+		return
+	var standings: Array[GrandPrix.Standing] = gp.standings()
+	var lines: PackedStringArray = PackedStringArray()
+	lines.append("GP PODIUM • HORIZON CUP" if gp.is_complete() else "GP STANDINGS • ROUND %d/%d" % [gp.round_index + 1, gp.tracks.size()])
+	if gp.is_complete():
+		var podium: PackedStringArray = PackedStringArray()
+		for index: int in range(mini(3, standings.size())):
+			podium.append("%d  %s" % [index + 1, standings[index].driver_name])
+		lines.append("  |  ".join(podium))
+	for index: int in range(0, standings.size(), 2):
+		var row: PackedStringArray = PackedStringArray()
+		for slot: int in range(index, mini(index + 2, standings.size())):
+			row.append("%d. %s  %d pts" % [slot + 1, standings[slot].driver_name, standings[slot].points])
+		lines.append("     •     ".join(row))
+	_gp_label.text = "\n".join(lines)
+	_restart_button.text = "FINISH CUP" if gp.is_complete() else "NEXT RACE"

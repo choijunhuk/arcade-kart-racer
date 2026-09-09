@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="TrackData" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://data/schemas/track_data.gd" id="1"]
+[ext_resource type="PackedScene" path="res://track/tracks/track_04_ochre_rift/track_04_ochre_rift.tscn" id="2"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/race.wav" id="3"]
+
+[sub_resource type="Gradient" id="Color"]
+colors = PackedColorArray(0.62, 0.38, 0.18, 1, 0.8, 0.42, 0.16, 1)
+
+[sub_resource type="GradientTexture2D" id="Preview"]
+gradient = SubResource("Color")
+width = 256
+height = 128
+
+[resource]
+script = ExtResource("1")
+id = &"track_04_ochre_rift"
+display_name = "Ochre Rift"
+scene = ExtResource("2")
+laps_default = 3
+preview = SubResource("Preview")
+preview_color = Color(0.8, 0.42, 0.16, 1)
+bgm = ExtResource("3")
+bgm_id = &"ochre_rift"
+lap_length_hint = 1697.0

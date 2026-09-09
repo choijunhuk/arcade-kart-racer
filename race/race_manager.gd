@@ -55,8 +55,14 @@ var _ai_context: AIRaceContext
 var _finishing_elapsed: float = 0.0
 var _results_delay_remaining: float = -1.0
 var _final_entries: Array[RaceResults.Entry] = []
+var _hazard_relay: HazardRelay
+var modes: RaceModes
 
 func _ready() -> void:
+	_hazard_relay = HazardRelay.new()
+	modes = RaceModes.new()
+	add_child(_hazard_relay)
+	add_child(modes)
 	if _config == null:
 		_config = GameState.pending_race_config
 	if _config == null:
@@ -134,7 +140,7 @@ func _begin_loading(is_restart: bool) -> void:
 	if is_restart:
 		_force_state(RaceState.LOADING)
 	_clear_runtime()
-	_validate_config()
+	RaceConfigBuilder.normalize(_config)
 	_track = _config.track.scene.instantiate() as TrackRoot
 	_track.name = "Track"
 	add_child(_track)
@@ -143,7 +149,7 @@ func _begin_loading(is_restart: bool) -> void:
 	_spawn_karts()
 	_register_track_elements()
 	_race_results.setup(_config.track.id, _karts, _player_kart)
-	_audio.configure(_player_kart, _config.laps)
+	_audio.configure(_player_kart, _config.laps, _config.track.bgm_id)
 	_countdown.setup(tuning, _karts)
 	var observed_kart: KartController = _player_kart if _player_kart != null else _karts[0]
 	_camera.set_target(observed_kart)
@@ -153,24 +159,12 @@ func _begin_loading(is_restart: bool) -> void:
 		_player_kart, _lap_tracker, _position_tracker, _karts.size(), _config.laps,
 		_item_manager, _track.get_racing_line(), _karts,
 	)
+	modes.setup(_config, _player_kart, _track, _hud)
 	_pause_menu.bind(self, _player_kart != null and not GameState.automation_mode)
 	_pause_menu.hide_menu()
 	_results_screen.hide_results()
 	_transition_to(RaceState.COUNTDOWN)
 	_countdown.start()
-
-func _validate_config() -> void:
-	if _config.track == null or _config.track.scene == null:
-		push_warning("RaceConfig track is invalid; using track_01")
-		_config.track = DEFAULT_TRACK
-	_config.laps = maxi(1, _config.laps)
-	_config.kart_count = clampi(_config.kart_count, 1, MAX_KART_COUNT)
-	if _config.player_slot >= 0:
-		_config.player_slot = clampi(_config.player_slot, 0, _config.kart_count - 1)
-	if _config.player_kart == null:
-		_config.player_kart = DEFAULT_KART
-	if _config.ai_difficulty == null:
-		_config.ai_difficulty = DEFAULT_AI_DIFFICULTY
 
 func _setup_systems() -> void:
 	_lap_tracker.reset()
@@ -234,6 +228,8 @@ func _load_driver_roster() -> void:
 			_drivers.append(resource as DriverData)
 
 func _driver_for_slot(slot: int, is_player: bool) -> DriverData:
+	if slot < _config.driver_roster.size():
+		return _config.driver_roster[slot]
 	if is_player and _config.player_driver != null:
 		return _config.player_driver
 	return _drivers[slot % _drivers.size()] if not _drivers.is_empty() else _config.player_driver
@@ -275,6 +271,9 @@ func _make_scripted_provider(kart: KartController, speed_ratio: float) -> Script
 	return provider
 
 func _register_track_elements() -> void:
+	for hazard: Node in _track.get_node("Hazards").get_children():
+		if hazard is Hazard:
+			_hazard_relay.register_hazard(hazard as Hazard)
 	var kill_zones: Node = _track.get_node_or_null("KillZones")
 	if kill_zones != null:
 		for child: Node in kill_zones.get_children():
@@ -287,6 +286,8 @@ func _register_track_elements() -> void:
 				_item_manager.register_item_box(child as ItemBox)
 
 func _on_kart_finished(kart: KartController, finish_time_seconds: float) -> void:
+	if kart == _player_kart:
+		modes.player_finished()
 	EventBus.kart_finished.emit(kart, finish_time_seconds)
 	var ai_controller: AIController = _ai_controllers.get(kart.get_instance_id()) as AIController
 	if ai_controller != null:
@@ -325,6 +326,7 @@ func _finalize_results() -> void:
 		if _lap_tracker.is_finished(kart):
 			finish_times[kart.get_instance_id()] = _lap_tracker.get_finish_time(kart)
 	_final_entries = _race_results.finalize(ranking, finish_times)
+	modes.finalize(_final_entries)
 	_transition_to(RaceState.RESULTS)
 	_results_screen.show_results(_final_entries, self)
 

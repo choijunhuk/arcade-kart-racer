@@ -74,10 +74,10 @@ func test_vertical_slice_flow_three_consecutive_runs() -> void:
 		_drifts = 0
 		_race_states.clear()
 		for path: String in MENU_PATHS:
-			# Alphabetical kart cards: heavy, light, medium; difficulty: easy, hard, normal.
+			# Six sorted kart cards: medium is row 2/column 2; difficulty: easy, hard, normal.
 			if path.ends_with("track_select.tscn"):
 				await _press_action(&"ui_right")
-				await _press_action(&"ui_right")
+				await _press_action(&"ui_down")
 			elif path.ends_with("race.tscn"):
 				await _press_action(&"ui_down")
 				await _press_action(&"ui_down")

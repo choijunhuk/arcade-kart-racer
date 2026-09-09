@@ -12,6 +12,9 @@ const DIFFICULTY_PROFILES: Dictionary[StringName, AIDifficultyProfile] = {
 	&"hard": preload("res://data/ai/hard.tres"),
 }
 const TRACK_SCENES: Dictionary[StringName, PackedScene] = {
+	&"track_02": preload("res://track/tracks/track_02_lumen_underpass/track_02_lumen_underpass.tscn"),
+	&"track_03": preload("res://track/tracks/track_03_glacier_crown/track_03_glacier_crown.tscn"),
+	&"track_04": preload("res://track/tracks/track_04_ochre_rift/track_04_ochre_rift.tscn"),
 	&"track_01": preload("res://track/tracks/track_01_ridgeline_circuit/track_01_ridgeline_circuit.tscn"),
 	&"test_hairpin": preload("res://track/tracks/test_hairpin/test_hairpin.tscn"),
 	&"test_loop": preload("res://track/tracks/test_loop/test_loop.tscn"),
@@ -53,6 +56,10 @@ var _current_position_tracker: PositionTracker
 ## Tracks each kart's first lap-1 completion so the last kart to complete lap
 ## 1 (i.e. rank 8 by race position, not grid slot) can be identified for the
 ## lap1-rank8 balance control comparison.
+var _lap_times: Dictionary[String, Array] = {}
+var _last_lap_totals: Dictionary[String, float] = {}
+var _launches: Dictionary[String, int] = {}
+var _hazard_hits: Dictionary[String, int] = {}
 var _lap1_completions: Dictionary[String, bool] = {}
 var _lap1_last_kart_name: String = ""
 var _current_kart_count: int = 0
@@ -68,6 +75,8 @@ func _run() -> void:
 	EventBus.item_used.connect(_on_item_used)
 	EventBus.item_hit.connect(_on_item_hit)
 	EventBus.lap_completed.connect(_on_lap_completed)
+	EventBus.kart_hit.connect(_on_hazard_hit)
+	EventBus.kart_launched.connect(_on_launched)
 	var options: Dictionary = parse_options(OS.get_cmdline_user_args())
 	var difficulty: AIDifficultyProfile = DIFFICULTY_PROFILES[options["difficulty"]]
 	var track_scene: PackedScene = TRACK_SCENES[options["track"]]
@@ -271,6 +280,9 @@ func _run_one_race(
 			unfinished[String(kart.name)] = {"lap": tracker.get_lap(kart), "next_checkpoint": tracker.get_next_checkpoint_index(kart), "position": str(kart.global_position), "speed": kart.get_speed()}
 	var output: Dictionary = {
 		"unfinished": unfinished,
+		"lap_times": _lap_times.duplicate(true),
+		"hazard_hits": _hazard_hits.duplicate(),
+		"launches": _launches.duplicate(),
 		"winning_class": winning_class,
 		"race": race_number,
 		"finish_order": finish_order,
@@ -312,6 +324,10 @@ func _reset_metrics() -> void:
 	_item_hits.clear()
 	_rank_one_hits = 0
 	_current_position_tracker = null
+	_lap_times.clear()
+	_last_lap_totals.clear()
+	_hazard_hits.clear()
+	_launches.clear()
 	_lap1_completions.clear()
 	_lap1_last_kart_name = ""
 func _on_kart_respawned(kart: Node) -> void:
@@ -337,6 +353,12 @@ func _on_item_hit(_source_kart: Node, target_kart: Node, item_id: StringName) ->
 ## running last once every kart has finished lap 1, i.e. rank 8 by race
 ## position rather than by grid slot.
 func _on_lap_completed(kart: Node, lap: int, _lap_time_seconds: float) -> void:
+	var name_key: String = String(_kart_names_by_id.get(kart.get_instance_id(), ""))
+	if not name_key.is_empty():
+		if not _lap_times.has(name_key):
+			_lap_times[name_key] = []
+		_lap_times[name_key].append(_lap_time_seconds - _last_lap_totals.get(name_key, 0.0))
+		_last_lap_totals[name_key] = _lap_time_seconds
 	if lap != 1:
 		return
 	var kart_name: String = String(_kart_names_by_id.get(kart.get_instance_id(), ""))
@@ -352,3 +374,13 @@ func _on_drift_ended(_kart: Node, released_tier: int) -> void:
 		_tier3_release_count += 1
 func _on_shortcut_entered(_body: Node3D) -> void:
 	_shortcut_take_count += 1
+
+func _on_hazard_hit(kart: Node, _type: int) -> void:
+	var name_key: String = String(_kart_names_by_id.get(kart.get_instance_id(), ""))
+	if not name_key.is_empty():
+		_hazard_hits[name_key] = _hazard_hits.get(name_key, 0) + 1
+
+func _on_launched(kart: Node) -> void:
+	var name_key: String = String(_kart_names_by_id.get(kart.get_instance_id(), ""))
+	if not name_key.is_empty():
+		_launches[name_key] = _launches.get(name_key, 0) + 1
