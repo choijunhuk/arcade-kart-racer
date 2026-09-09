@@ -26,6 +26,9 @@ var _projectiles: NetProjectiles
 var _reported_results: bool = false
 var _countdown_value: int = -1
 var _go_server_time: float = 0.0
+## In-progress chunk assemblies keyed by tick, awaiting every chunk before
+## the snapshot is treated as received (spec: chunks never partially apply).
+var _chunk_assemblies: Dictionary[int, Dictionary] = {}
 
 ## Binds explicit race-owned services after composition, before network countdown.
 func configure(owner_race: RaceManager, owner_session: NetSession) -> void:
@@ -80,7 +83,7 @@ func _receive_input_frame(sender: int, data: Dictionary) -> void:
 	var frame: InputFrame = InputFrame.from_dict(data)
 	for index: int in range(session.players.size()):
 		if int(session.players[index]["peer"]) == sender:
-			if bool(_karts[index].get("_finished")):
+			if _karts[index].is_finished():
 				return
 			if _buffers[index].insert(frame) and _start_ticks[index] < 0:
 				_start_ticks[index] = tick + NetTuning.INPUT_DELAY
@@ -96,13 +99,13 @@ func _physics_process(_delta: float) -> void:
 		_client_step()
 
 func _server_step() -> void:
-	if not bool(_karts[_local].get("_finished")):
+	if not _karts[_local].is_finished():
 		var frame: InputFrame = _next_input()
 		receive_input(NetSession.SERVER_ID, frame.to_dict())
 	var acknowledgements: Array[int] = []
 	for index: int in range(_karts.size()):
 		var input: InputFrame
-		if index < session.players.size() and not bool(_karts[index].get("_finished")):
+		if index < session.players.size() and not _karts[index].is_finished():
 			var target: int = tick - _start_ticks[index] + 1
 			input = _buffers[index].consume(target) if _start_ticks[index] >= 0 and target > 0 else InputFrame.zero()
 			acknowledgements.append(_buffers[index].last_processed_tick)
@@ -111,7 +114,9 @@ func _server_step() -> void:
 			acknowledgements.append(_buffers[index].last_processed_tick if index < session.players.size() else 0)
 		_karts[index].step_input(input, NetTuning.STEP)
 	if tick % NetTuning.SNAPSHOT_INTERVAL == 0:
-		session.send(&"_snapshot", 0, [_state.capture(tick, acknowledgements).pack()], false)
+		var snapshot: RaceSnapshot = _state.capture(tick, acknowledgements)
+		for chunk: PackedByteArray in snapshot.pack_chunked():
+			session.send(&"_snapshot", 0, [chunk], false)
 	if manager.get_state() == RaceState.RESULTS and not _reported_results:
 		_reported_results = true
 		session.send(&"_event", 0, ["results", NetResults.pack(manager.get_results())], true)
@@ -120,7 +125,7 @@ func _client_step() -> void:
 	if _pending != null:
 		_apply_snapshot(_pending)
 		_pending = null
-	if bool(_karts[_local].get("_finished")):
+	if _karts[_local].is_finished():
 		return
 	var frame: InputFrame = _next_input()
 	_input_history.append(frame.to_dict())
@@ -144,13 +149,52 @@ func _next_input() -> InputFrame:
 	return frame
 
 func _receive_snapshot(snapshot: RaceSnapshot) -> void:
-	if snapshot.tick <= _last_snapshot or snapshot.karts.size() != _karts.size():
+	if snapshot.tick <= _last_snapshot:
 		return
-	_last_snapshot = snapshot.tick
-	_pending = snapshot
-	_render_queue.append(snapshot)
+	var assembled: RaceSnapshot = _assemble_chunk(snapshot)
+	if assembled == null or assembled.karts.size() != _karts.size():
+		return
+	_last_snapshot = assembled.tick
+	_pending = assembled
+	_render_queue.append(assembled)
 	if _render_queue.size() > NetTuning.HISTORY_TICKS:
 		_render_queue.pop_front()
+
+## Buffers chunks sharing a tick until every sibling has arrived, then
+## merges them (sorted back into roster-slot order) into one logical
+## snapshot. Returns null while still waiting, so a lost chunk simply
+## drops that tick's snapshot without corrupting any other tick's.
+func _assemble_chunk(snapshot: RaceSnapshot) -> RaceSnapshot:
+	if snapshot.chunk_count <= 1:
+		return snapshot
+	var entry: Dictionary = _chunk_assemblies.get(snapshot.tick, {"chunks": {}, "count": snapshot.chunk_count})
+	(entry["chunks"] as Dictionary)[snapshot.chunk_index] = snapshot
+	_chunk_assemblies[snapshot.tick] = entry
+	for stale_tick: int in _chunk_assemblies.keys():
+		if stale_tick < snapshot.tick:
+			_chunk_assemblies.erase(stale_tick)
+	var chunks: Dictionary = entry["chunks"]
+	if chunks.size() < int(entry["count"]):
+		return null
+	_chunk_assemblies.erase(snapshot.tick)
+	return _merge_chunks(chunks, int(entry["count"]))
+
+static func _merge_chunks(chunks: Dictionary, count: int) -> RaceSnapshot:
+	var first: RaceSnapshot = chunks[0]
+	var merged: RaceSnapshot = RaceSnapshot.new()
+	merged.tick = first.tick
+	merged.server_seconds = first.server_seconds
+	merged.race_state = first.race_state
+	merged.race_seconds = first.race_seconds
+	merged.countdown_seconds = first.countdown_seconds
+	for index: int in range(count):
+		var chunk: RaceSnapshot = chunks.get(index)
+		if chunk == null:
+			return null
+		merged.karts.append_array(chunk.karts)
+		merged.projectiles.append_array(chunk.projectiles)
+	merged.karts.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["slot"]) < int(b["slot"]))
+	return merged
 
 func _apply_snapshot(snapshot: RaceSnapshot) -> void:
 	_state.apply(snapshot)
@@ -202,6 +246,12 @@ func _update_countdown() -> void:
 		return
 	var remaining: float = _go_server_time - session.clock.server_time(NetSession.now())
 	var value: int = clampi(ceili(remaining), Countdown.GO_TICK, Countdown.FIRST_TICK)
+	_emit_countdown(value)
+
+## Public entry point for a RACING-state transition observed off a snapshot
+## (spec: route it through the same descending-value filter as reliable
+## countdown ticks so delivery order cannot repeat or rewind the display).
+func emit_countdown(value: int) -> void:
 	_emit_countdown(value)
 
 func _emit_countdown(value: int) -> void:

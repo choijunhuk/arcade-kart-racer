@@ -224,3 +224,54 @@ func test_network_human_recovers_despite_periodic_wall_hits() -> void:
 		if kart.get_state() == KartState.RESPAWNING:
 			break
 	assert_eq(kart.get_state(), KartState.RESPAWNING)
+
+## Spec item E: item-hit chains (SPIN_OUT/TUMBLE) are a different cause from
+## a wall/self BUMP jam. Unlike the BUMP case above, this must keep resetting
+## the network human's stuck timer through the whole chain, so being
+## incapacitated by items never forces a respawn on its own.
+func test_item_hit_chain_does_not_respawn_network_human() -> void:
+	var kart: KartController = _manager.get_karts()[1]
+	var respawn: RespawnSystem = _manager.get_node("RespawnSystem") as RespawnSystem
+	kart.set_frozen(false)
+	var frame: InputFrame = InputFrame.new()
+	frame.throttle = 0.12
+	for tick: int in range(ceili((respawn.tuning.stuck_duration + 1.0) / NetTuning.STEP)):
+		kart.get_node("KartPhysics").set("speed", 0.0)
+		if tick % 30 == 0:
+			(kart.get_node("HitReactor") as HitReactor).clear()
+			kart.apply_hit(HitReactor.HitType.SPIN_OUT)
+		kart.step_input(frame, NetTuning.STEP, true)
+		respawn._physics_process(NetTuning.STEP)
+		if kart.get_state() == KartState.RESPAWNING:
+			break
+	assert_ne(kart.get_state(), KartState.RESPAWNING)
+
+## Spec item A regression: a network human passing all 8 of track_01's real
+## checkpoints must complete its lap, and a mid-lap server-owned respawn
+## (the stuck-recovery path) must never reset LapTracker's own record of
+## progress (`last_checkpoint_index`/`next_checkpoint_index`) — investigation
+## found no such reset in the current code (register_kart is idempotent and
+## respawn never re-registers), but this locks the invariant in against
+## regressions in either system.
+func test_network_human_passing_eight_checkpoints_completes_lap_and_respawn_keeps_checkpoint_index() -> void:
+	var kart: KartController = _manager.get_karts()[1]
+	var lap_tracker: LapTracker = _manager.get_node("LapTracker") as LapTracker
+	var respawn: RespawnSystem = _manager.get_node("RespawnSystem") as RespawnSystem
+	kart.set_frozen(false)
+	for index: int in range(4):
+		lap_tracker._on_body_passed(kart, index)
+	assert_eq(lap_tracker.get_last_checkpoint_index(kart), 3)
+	assert_eq(lap_tracker.get_next_checkpoint_index(kart), 4)
+	# Mid-lap server-owned stuck recovery must preserve checkpoint progress.
+	respawn.request_respawn(kart)
+	respawn._physics_process(respawn.tuning.respawn_fade_duration)
+	respawn._physics_process(respawn.tuning.respawn_frozen_duration)
+	assert_ne(kart.get_state(), KartState.RESPAWNING)
+	assert_eq(lap_tracker.get_last_checkpoint_index(kart), 3)
+	assert_eq(lap_tracker.get_next_checkpoint_index(kart), 4)
+	assert_false(lap_tracker.is_finished(kart))
+	for index: int in range(4, 8):
+		lap_tracker._on_body_passed(kart, index)
+	lap_tracker._on_body_passed(kart, 0)
+	assert_eq(lap_tracker.get_lap(kart), 1)
+	assert_true(lap_tracker.is_finished(kart))

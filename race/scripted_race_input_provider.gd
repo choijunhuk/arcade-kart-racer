@@ -22,6 +22,14 @@ var _target_speed_ratio: float = 0.8
 var _drift_on_corners: bool = true
 var _was_drifting: bool = false
 var _locked_direction: float = 1.0
+## Hint fed back into `RacingLine.offset_at()` so the nearest-point search
+## stays anchored on whichever side of the start/finish seam this follower
+## is actually on, instead of an unhinted full scan that ties exactly at the
+## seam (spec item B): the duplicated closing point is equidistant from the
+## last and first baked points, so a fresh scan can snap the reported
+## offset to ~0 a little early, making `sample(offset + LOOKAHEAD_DISTANCE)`
+## land behind the kart and drive spurious corner braking/oscillation.
+var _cached_offset: float = -1.0
 
 
 func _init(kart: KartController, racing_line: RacingLine, target_speed_ratio: float = 0.8) -> void:
@@ -33,12 +41,13 @@ func _init(kart: KartController, racing_line: RacingLine, target_speed_ratio: fl
 ## Produces deterministic pursuit steering with conservative corner braking.
 func get_frame() -> InputFrame:
 	var frame: InputFrame = InputFrame.new()
-	var steer: float = _compute_steer_toward_line()
+	var offset: float = _current_offset()
+	var steer: float = _compute_steer_toward_line(offset)
 	frame.steer = steer
 	frame.throttle = _target_speed_ratio * lerpf(
 		1.0, MIN_CORNER_THROTTLE, clampf(absf(steer), 0.0, 1.0),
 	)
-	var signed_curvature: float = _upcoming_curvature()
+	var signed_curvature: float = _upcoming_curvature(offset)
 	var curvature: float = absf(signed_curvature)
 	var drift_state: int = _kart.get_drift_state()
 	if _drift_on_corners:
@@ -90,10 +99,19 @@ func _apply_corner_braking(frame: InputFrame, curvature: float) -> void:
 		frame.brake = CORNER_BRAKE
 
 
-func _upcoming_curvature() -> float:
+## Resolves this tick's racing-line offset, hinted from the previous tick so
+## the nearest-point search stays on the same side of the start/finish seam
+## instead of an unhinted scan ambiguously snapping across it (spec item B).
+func _current_offset() -> float:
 	if _racing_line == null:
 		return 0.0
-	var offset: float = _racing_line.offset_at(_kart.global_position)
+	_cached_offset = _racing_line.offset_at(_kart.global_position, _cached_offset)
+	return _cached_offset
+
+
+func _upcoming_curvature(offset: float) -> float:
+	if _racing_line == null:
+		return 0.0
 	var first: Vector3 = _racing_line.sample(offset + CURVATURE_SAMPLE_DISTANCE)
 	var second: Vector3 = _racing_line.sample(offset + CURVATURE_SAMPLE_DISTANCE * 2.0)
 	var third: Vector3 = _racing_line.sample(offset + CURVATURE_SAMPLE_DISTANCE * 3.0)
@@ -104,10 +122,9 @@ func _upcoming_curvature() -> float:
 	return incoming.signed_angle_to(outgoing, Vector3.UP) / CURVATURE_SAMPLE_DISTANCE
 
 
-func _compute_steer_toward_line() -> float:
+func _compute_steer_toward_line(offset: float) -> float:
 	if _racing_line == null:
 		return 0.0
-	var offset: float = _racing_line.offset_at(_kart.global_position)
 	var target_global: Vector3 = _racing_line.sample(offset + LOOKAHEAD_DISTANCE)
 	var to_target: Vector3 = target_global - _kart.global_position
 	to_target.y = 0.0

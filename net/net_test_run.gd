@@ -106,9 +106,20 @@ func _trace_divergence(snapshot: RaceSnapshot) -> void:
 	if session.race == null:
 		return
 	var slot: int = session.local_slot()
-	if slot < 0 or slot >= snapshot.karts.size():
+	if slot < 0:
 		return
-	var row: Dictionary = snapshot.karts[slot]
+	# A raw per-chunk snapshot may only carry a subset of karts (spec: bounded
+	# packetization), so find this slot by its explicit `slot` field rather
+	# than assuming array position, and skip silently if it is not in this chunk.
+	var row: Dictionary = {}
+	var found: bool = false
+	for candidate: Dictionary in snapshot.karts:
+		if int(candidate.get("slot", -1)) == slot:
+			row = candidate
+			found = true
+			break
+	if not found:
+		return
 	var ack: int = int(row["ack"])
 	var history: Dictionary = session.race.get("_predicted_positions")
 	if not history.has(ack):
@@ -136,6 +147,9 @@ func _log_progress() -> void:
 	var manager: RaceManager = race.manager
 	var laps: LapTracker = manager.get_node("LapTracker") as LapTracker
 	var positions: PositionTracker = manager.get_node("PositionTracker") as PositionTracker
+	var track: TrackRoot = manager.get_node("Track") as TrackRoot
+	var racing_line: RacingLine = track.get_racing_line()
+	var checkpoints: Array[Checkpoint] = track.get_checkpoints()
 	var buffers: Array = race.get("_buffers")
 	var starts: Array = race.get("_start_ticks")
 	var rows: Array[Dictionary] = []
@@ -145,6 +159,7 @@ func _log_progress() -> void:
 		var buffer: NetInputBuffer = buffers[index]
 		var human: bool = index < session.players.size()
 		var target: int = race.tick - int(starts[index]) + 1
+		_check_checkpoint_progress(kart, laps, racing_line, checkpoints, race.tick)
 		rows.append({"name": String(kart.name), "lap": laps.get_lap(kart),
 			"checkpoint": laps.get_next_checkpoint_index(kart), "progress": positions.get_progress(kart),
 			"speed": kart.get_speed(), "state": kart.get_state(),
@@ -158,3 +173,22 @@ func _log_progress() -> void:
 		print("NET_PROGRESS tick=%d kart=%s lap=%d cp=%d progress=%.3f speed=%.3f state=%d last_input_tick=%d input_age=%d details=%s" % [
 			race.tick, row["name"], row["lap"], row["checkpoint"], row["progress"], row["speed"], row["state"],
 			row["last_input_tick"], row["input_age_ticks"], JSON.stringify(row)])
+
+## Diagnostic-only regression guard (spec item A): logs when a kart's world
+## position has physically passed a checkpoint's racing-line offset by more
+## than one checkpoint's worth of slack while LapTracker's own record of the
+## last checkpoint hit has not kept up. Never used for gameplay adjudication.
+func _check_checkpoint_progress(
+	kart: KartController, laps: LapTracker, racing_line: RacingLine,
+	checkpoints: Array[Checkpoint], tick: int,
+) -> void:
+	if racing_line == null or checkpoints.size() < 2:
+		return
+	var offset: float = racing_line.offset_at(kart.global_position)
+	var expected_cp: int = 0
+	for checkpoint: Checkpoint in checkpoints:
+		if checkpoint.index != 0 and offset >= checkpoint.offset:
+			expected_cp = checkpoint.index
+	var actual_cp: int = laps.get_last_checkpoint_index(kart)
+	if expected_cp - actual_cp > 1:
+		print("NET_CP_MISS kart=%s tick=%d expected_cp=%d actual_cp=%d" % [kart.name, tick, expected_cp, actual_cp])

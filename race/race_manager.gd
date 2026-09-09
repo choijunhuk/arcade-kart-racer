@@ -377,7 +377,13 @@ func apply_network_state(value: int) -> void:
 	var previous: int = _state
 	_force_state(value)
 	if previous == RaceState.COUNTDOWN and value == RaceState.RACING:
-		EventBus.countdown_tick.emit(0)
+		# Route through NetRace's descending-value filter: an unreliable
+		# RACING snapshot can arrive before the reliable 3-2-1 tick events,
+		# and this must not let those late ticks repeat/rewind past GO.
+		if network != null:
+			network.emit_countdown(0)
+		else:
+			EventBus.countdown_tick.emit(0)
 		EventBus.race_started.emit()
 func apply_network_results(entries: Array[RaceResults.Entry]) -> void:
 	if not network_replica:

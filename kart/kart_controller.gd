@@ -163,6 +163,9 @@ func get_ground_normal() -> Vector3:
 	return _physics.ground_normal
 func get_state() -> int:
 	return state
+## Returns whether this kart has crossed the finish line (spec §9.3).
+func is_finished() -> bool:
+	return _finished
 func get_kart_data() -> KartData:
 	return kart_data
 ## Returns the driver identity used by results and presentation.

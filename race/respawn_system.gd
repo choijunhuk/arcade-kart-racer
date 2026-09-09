@@ -104,8 +104,15 @@ func _update_stuck_timer(registration: Registration, delta: float) -> void:
 		travel.y = 0.0
 		speed = minf(speed, travel.length() / delta) if delta > 0.0 else speed
 		registration.previous_position = kart.global_position
-	# Repeated wall hits must not indefinitely reset a network human's recovery.
-	if kart.get_state() in [KartState.FROZEN, KartState.RESPAWNING, KartState.FINISHED] or (kart.get_state() == KartState.HIT and not registration.track_motion):
+	# Repeated wall/self BUMP hits must not indefinitely reset a network
+	# human's recovery (a kart jammed against a wall keeps re-triggering
+	# BUMP, which would otherwise never let the stuck timer accumulate).
+	# Item-hit chains (SPIN_OUT/TUMBLE) are a different cause: the kart is
+	# legitimately incapacitated, not stuck, so those must keep resetting
+	# the timer even for network humans, or a long hit chain would force
+	# an unwanted respawn mid-incapacitation.
+	var suppress_reset: bool = registration.track_motion and kart.get_hit_state() == HitReactor.HitType.BUMP
+	if kart.get_state() in [KartState.FROZEN, KartState.RESPAWNING, KartState.FINISHED] or (kart.get_state() == KartState.HIT and not suppress_reset):
 		registration.stuck_timer = 0.0
 		return
 	if kart.is_throttle_held() and speed < tuning.stuck_speed_threshold:

@@ -541,15 +541,21 @@ network/TLS setting is added. The selected design is the Phase 15 brief and spec
 - Server RespawnSystem registrations for network humans also measure horizontal
   body travel: throttle against a wall can raise scalar drivetrain speed without
   moving the kart. This keeps the existing stuck timer effective under contact;
-  repeated HIT states do not reset that timer for these server-owned humans.
-  Client replicas cannot initiate recovery. The network test runner prints each
-  kart's progress and input age every five seconds during RACING.
+  repeated wall/self BUMP hits do not reset that timer for these server-owned
+  humans (a kart jammed against a wall keeps re-triggering BUMP). Item-hit
+  chains (SPIN_OUT/TUMBLE) are a different cause — the kart is legitimately
+  incapacitated, not stuck — so those keep resetting the timer even for network
+  humans. Client replicas cannot initiate recovery. The network test runner
+  prints each kart's progress and input age every five seconds during RACING,
+  plus a diagnostic-only `NET_CP_MISS` line if a kart's world position has
+  passed a checkpoint's racing-line offset by more than one checkpoint's worth
+  of slack while LapTracker's own last-hit record has not kept up.
 - Main menu Online enters `online_lobby.tscn`, reusing LocalLobby's panel builder
   and theme. Host/Join use IP and port 24565, driver/kart selectors, ready, host
   Start and Back. A lobby departure removes its row; departure during a race
   ends the session and returns peers to the menu. Host departure does the same.
 
-### Snapshot binary layout (version 2, little endian)
+### Snapshot binary layout (version 3, little endian)
 
 `StreamPeerBuffer` writes the records below without Variant/object serialization.
 The wire packet is version u8, decoded length u16, compressed length u16, then
@@ -559,26 +565,40 @@ lossless, preserving the prediction timers and effective kart stats.
 
 | Part | Layout |
 |---|---|
-| Header (24 bytes) | version u8, server tick u32, monotonic seconds f64, race state u8, race seconds f32, countdown seconds f32, kart count u8, item-entity count u8 |
-| Kart state (201 bytes) | XYZ i32 centimetres, yaw i16 milliradians; normal/up/velocity f32 vectors; nine effective kart stats f32; allowlisted component bool u8 / enum i16 / timer f32; fixed boost tail and slipstream state |
+| Header (26 bytes) | version u8, server tick u32, monotonic seconds f64, race state u8, race seconds f32, countdown seconds f32, chunk index u8, chunk count u8, kart count u8, item-entity count u8 |
+| Kart state (202 bytes) | XYZ i32 centimetres, yaw i16 milliradians; normal/up/velocity f32 vectors; nine effective kart stats f32; allowlisted component bool u8 / enum i16 / timer f32; fixed boost tail and slipstream state; then a roster-slot u8 |
 | Kart metadata (24 bytes) | acknowledged input tick u32; lap/rank/next-checkpoint/item-index u8; roulette/cooldown/finish-time/progress f32 |
 | Item entity (25 bytes) | activation id u32, catalog id u8, XYZ i32 centimetres, XYZ rotation i16 milliradians, owner grid slot u16 |
 
-The uncompressed eight-kart layout is 1,824 bytes, or 2,224 with 16 projectiles.
-The full-option regression fixture, including distinct seeded component timers,
-compresses to 1,110 bytes. `NetSession._deliver` rejects unreliable arguments
-whose serialized size plus a 64-byte RPC framing reserve exceeds 1,200 bytes,
-and reports a test-visible error. This limit covers inputs as well as snapshots;
-compression size depends on contents, so new roster/item configurations must
-retain the size regression and serialized race harness checks.
+`RaceSnapshot.pack()` still emits one whole packet (chunk index 0, chunk count
+1) for the common roster size. A busy race (many karts/items) instead calls
+`pack_chunked()`: karts and item entities are greedily grouped, in order, into
+however many chunks are needed to stay under a conservative raw-byte budget
+per chunk (so compression only ever shrinks further, never risking the
+transport's size limit), each carrying the full header plus its own kart/item
+subset. The explicit per-kart roster slot lets a receiver place rows without
+assuming a contiguous full array. `NetRace` buffers chunks by tick until every
+sibling has arrived, then merges and slot-sorts them into one logical snapshot
+before applying it; a chunk lost to unreliable delivery drops only that tick's
+snapshot, exactly like today's single-packet loss. `NetSession._deliver` still
+rejects (and reports a test-visible error for) any single unreliable argument
+whose serialized size plus a 64-byte RPC framing reserve exceeds 1,200 bytes —
+now a defensive backstop, since chunking keeps normal snapshot traffic under it
+regardless of roster/item count — and this limit also still covers inputs.
 Decode bounds the allocation before decompression, then checks version, counts,
-exact length, finite values and the replay schema. Empty item index is
-zero; the sorted shared item catalog uses one-based indices. Position error is
-≤0.005m per axis, yaw error ≤0.0005rad (subject to float precision).
+chunk index/count, exact length, finite values and the replay schema. Empty
+item index is zero; the sorted shared item catalog uses one-based indices.
+Position error is ≤0.005m per axis, yaw error ≤0.0005rad (subject to float
+precision).
 
 Lap/finish/results, item grants/hits and countdown ticks use the reliable
 authority event RPC. Countdown ticks share a descending-value filter with local
 clock prediction so delayed delivery cannot repeat or rewind countdown sounds.
+A replica's own COUNTDOWN-to-RACING transition (observed off an unreliable
+snapshot, which can arrive before the reliable 3-2-1 tick events under real
+latency) emits its countdown-zero through that same filter rather than
+straight to `EventBus`, so late reliable ticks arriving afterwards cannot
+replay 3/2/1 past GO or duplicate the zero.
 
 `NetDebugConditions` delays outgoing transport calls and drops seeded unreliable
 traffic; reliable messages are delayed but preserved. `--net-latency 100` adds

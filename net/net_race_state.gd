@@ -31,7 +31,7 @@ func capture(tick: int, acknowledgements: Array[int]) -> RaceSnapshot:
 	for index: int in range(karts.size()):
 		var kart: KartController = karts[index]
 		var slot: ItemSlot = kart.item_slot
-		result.karts.append({"state": kart.capture_state(), "ack": acknowledgements[index],
+		result.karts.append({"slot": index, "state": kart.capture_state(), "ack": acknowledgements[index],
 			"lap": laps.get_lap(kart), "rank": positions.get_position(kart),
 			"checkpoint": laps.get_next_checkpoint_index(kart),
 			"item": item_index(slot.get_roulette_result() if slot.roulette_active else slot.get_item_data()),
