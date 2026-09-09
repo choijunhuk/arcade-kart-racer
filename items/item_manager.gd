@@ -297,3 +297,8 @@ func _pool_key(item_data: ItemData) -> String:
 
 func _is_projectile_category(category: ItemData.ItemCategory) -> bool:
 	return category == ItemData.ItemCategory.PROJECTILE or category == ItemData.ItemCategory.HOMING
+
+## Restores a normalized cooldown read without enabling client item decisions.
+func apply_network_cooldown(kart: KartController, ratio: float) -> void:
+	_cooldowns[kart.get_instance_id()] = clampf(ratio, 0.0, 1.0)
+	_cooldown_durations[kart.get_instance_id()] = 1.0

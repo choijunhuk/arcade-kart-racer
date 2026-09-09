@@ -1,0 +1,167 @@
+class_name NetRace
+extends Node
+
+## Race-local fixed-tick transport adapter; server alone owns all race adjudication.
+var session: NetSession
+var manager: RaceManager
+var tick: int = 0
+var prediction: NetPrediction = NetPrediction.new()
+var statistics: Dictionary[int, Dictionary] = {}
+var _state: NetRaceState
+var _karts: Array[KartController] = []
+var _buffers: Array[NetInputBuffer] = []
+var _start_ticks: Array[int] = []
+var _source: InputProvider
+var _input_tick: int = 0
+var _local: int = 0
+var _pending: RaceSnapshot
+var _last_snapshot: int = -1
+var _interpolators: Array[NetInterpolator] = []
+var _predicted_positions: Dictionary[int, Vector3] = {}
+var _projectiles: NetProjectiles
+var _reported_results: bool = false
+var _countdown_value: int = -1
+var _go_server_time: float = 0.0
+
+## Binds explicit race-owned services after composition, before network countdown.
+func configure(owner_race: RaceManager, owner_session: NetSession) -> void:
+	manager = owner_race
+	session = owner_session
+	_state = NetRaceState.new(manager)
+	_karts = manager.get_karts()
+	_local = session.local_slot()
+	process_physics_priority = 100
+	for kart: KartController in _karts:
+		kart.set_physics_process(false)
+		_buffers.append(NetInputBuffer.new())
+		_start_ticks.append(-1)
+		_interpolators.append(NetInterpolator.new())
+	_source = ScriptedRaceInputProvider.new(_karts[_local], (manager.get_node("Track") as TrackRoot).get_racing_line()) if session.automated else PlayerInputProvider.new()
+	var events: NetEvents = NetEvents.new()
+	add_child(events)
+	events.configure(session, _karts)
+	_projectiles = NetProjectiles.new()
+	manager.add_child(_projectiles)
+	session.snapshot_received.connect(_receive_snapshot)
+	session.event_received.connect(_receive_event)
+	session.bind_race(self)
+
+## Starts the authoritative countdown only after every participant has loaded.
+func begin() -> void:
+	if multiplayer.is_server():
+		(manager.get_node("Countdown") as Countdown).start()
+
+## Accepts only the sender's roster slot, with finite, bounded input fields.
+func receive_input(sender: int, data: Dictionary) -> void:
+	for key: String in ["tick", "throttle", "brake", "steer"]:
+		if not (data.get(key) is int or data.get(key) is float):
+			return
+	var frame: InputFrame = InputFrame.from_dict(data)
+	for index: int in range(session.players.size()):
+		if int(session.players[index]["peer"]) == sender:
+			if _buffers[index].insert(frame) and _start_ticks[index] < 0:
+				_start_ticks[index] = tick + NetTuning.INPUT_DELAY
+			return
+
+func _physics_process(_delta: float) -> void:
+	if not session.running:
+		return
+	tick += 1
+	if multiplayer.is_server():
+		_server_step()
+	else:
+		_client_step()
+
+func _server_step() -> void:
+	var frame: InputFrame = _next_input()
+	receive_input(NetSession.SERVER_ID, frame.to_dict())
+	var acknowledgements: Array[int] = []
+	for index: int in range(_karts.size()):
+		var input: InputFrame
+		if index < session.players.size():
+			var target: int = tick - _start_ticks[index] + 1
+			input = _buffers[index].consume(target) if _start_ticks[index] >= 0 and target > 0 else InputFrame.zero()
+			acknowledgements.append(_buffers[index].last_processed_tick)
+		else:
+			input = _karts[index].input_provider.get_frame()
+			acknowledgements.append(0)
+		_karts[index].step_input(input, NetTuning.STEP)
+	if tick % NetTuning.SNAPSHOT_INTERVAL == 0:
+		session.send(&"_snapshot", 0, [_state.capture(tick, acknowledgements).pack()], false)
+	if manager.get_state() == RaceState.RESULTS and not _reported_results:
+		_reported_results = true
+		session.send(&"_event", 0, ["results", NetResults.pack(manager.get_results())], true)
+
+func _client_step() -> void:
+	if _pending != null:
+		_apply_snapshot(_pending)
+		_pending = null
+	var frame: InputFrame = _next_input()
+	session.send(&"_receive_input", NetSession.SERVER_ID, [frame.to_dict()], false)
+	prediction.record(frame)
+	_karts[_local].step_input(frame, NetTuning.STEP)
+	_predicted_positions[frame.tick] = _karts[_local].global_position
+	_predicted_positions.erase(frame.tick - NetTuning.HISTORY_TICKS)
+	_update_countdown()
+
+func _next_input() -> InputFrame:
+	_input_tick += 1
+	var frame: InputFrame = _source.get_frame()
+	frame.tick = _input_tick
+	return frame
+
+func _receive_snapshot(snapshot: RaceSnapshot) -> void:
+	if snapshot.tick <= _last_snapshot or snapshot.karts.size() != _karts.size():
+		return
+	_last_snapshot = snapshot.tick
+	_pending = snapshot
+
+func _apply_snapshot(snapshot: RaceSnapshot) -> void:
+	_state.apply(snapshot)
+	_go_server_time = snapshot.server_seconds + snapshot.countdown_seconds
+	for index: int in range(_karts.size()):
+		var row: Dictionary = snapshot.karts[index]
+		var state: Dictionary = row["state"]
+		var values: Array = state["position"]
+		var position: Vector3 = Vector3(values[0], values[1], values[2])
+		if index == _local:
+			var ack: int = int(row["ack"])
+			if _predicted_positions.has(ack):
+				_measure(index, _predicted_positions[ack].distance_to(position))
+			prediction.reconcile(_karts[index], state, ack)
+		else:
+			_karts[index].apply_state(state)
+			var pose: Transform3D = _karts[index].global_transform
+			_interpolators[index].push(snapshot.server_seconds, pose)
+	_projectiles.apply(snapshot.projectiles, _state)
+
+func _process(delta: float) -> void:
+	if session == null or multiplayer.is_server() or not session.running:
+		return
+	var render_time: float = session.clock.server_time(NetSession.now()) - NetTuning.INTERPOLATION_SECONDS
+	for index: int in range(_karts.size()):
+		var visuals: Node3D = _karts[index].get_node("Visuals") as Node3D
+		if index == _local:
+			visuals.position = _karts[index].global_basis.inverse() * prediction.advance_visual(delta)
+		elif _last_snapshot >= 0:
+			visuals.global_transform = _interpolators[index].sample(render_time)
+
+func _measure(index: int, error: float) -> void:
+	var stats: Dictionary = statistics.get(index, {"count": 0, "sum": 0.0, "max": 0.0})
+	stats["count"] = int(stats["count"]) + 1
+	stats["sum"] = float(stats["sum"]) + error
+	stats["max"] = maxf(float(stats["max"]), error)
+	statistics[index] = stats
+
+func _receive_event(kind: String, args: Array) -> void:
+	if kind == "results":
+		manager.apply_network_results(NetResults.unpack(args, _local))
+
+func _update_countdown() -> void:
+	if _go_server_time <= 0.0 or manager.get_state() != RaceState.COUNTDOWN:
+		return
+	var remaining: float = _go_server_time - session.clock.server_time(NetSession.now())
+	var value: int = clampi(ceili(remaining), Countdown.GO_TICK, Countdown.FIRST_TICK)
+	if value != _countdown_value:
+		_countdown_value = value
+		EventBus.countdown_tick.emit(value)

@@ -25,6 +25,8 @@ var grand_prix_state: GrandPrix
 ## other human-only conveniences so unattended windows keep running.
 var automation_mode: bool = false
 var is_networked: bool = false
+var net_session: NetSession
+var network_message: String = ""
 
 
 ## Stores the content identifiers selected for the next race session.
@@ -36,6 +38,8 @@ func set_selection(driver_id: StringName, kart_id: StringName, track_id: StringN
 
 ## Clears transient session selections and returns to bootstrap mode.
 func reset_session() -> void:
+	if net_session != null:
+		net_session.close()
 	current_mode = Mode.BOOT
 	selected_driver_id = &""
 	selected_kart_id = &""

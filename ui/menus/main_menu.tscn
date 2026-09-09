@@ -67,6 +67,10 @@ text = "PLAY"
 layout_mode = 2
 text = "TIME TRIAL"
 
+[node name="OnlineButton" type="Button" parent="Panel/VBox"]
+layout_mode = 2
+text = "ONLINE"
+
 [node name="SettingsButton" type="Button" parent="Panel/VBox"]
 layout_mode = 2
 text = "SETTINGS"
@@ -74,3 +78,7 @@ text = "SETTINGS"
 [node name="QuitButton" type="Button" parent="Panel/VBox"]
 layout_mode = 2
 text = "QUIT"
+
+[node name="NetworkMessage" type="Label" parent="Panel/VBox"]
+layout_mode = 2
+autowrap_mode = 2

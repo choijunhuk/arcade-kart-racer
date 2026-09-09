@@ -43,3 +43,9 @@ func get_progress() -> float:
 	if not _active:
 		return 1.0 if _result != null else 0.0
 	return clampf(1.0 - _remaining / DURATION_SECONDS, 0.0, 1.0)
+
+## Restores the server-owned reveal for read-only HUD presentation.
+func apply_network_result(item: ItemData, progress: float) -> void:
+	_result = item
+	_active = progress >= 0.0
+	_remaining = (1.0 - clampf(progress, 0.0, 1.0)) * DURATION_SECONDS

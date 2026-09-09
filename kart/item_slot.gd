@@ -100,3 +100,9 @@ func get_roulette_progress() -> float:
 ## Returns the result fixed at pickup time even while the reveal is active.
 func get_roulette_result() -> ItemData:
 	return _roulette.get_result()
+
+## Sets replica UI state without rolling RNG or emitting authoritative events.
+func apply_network_item(item: ItemData, progress: float) -> void:
+	_item = item if progress < 0.0 else null
+	roulette_active = progress >= 0.0
+	_roulette.apply_network_result(item, progress)

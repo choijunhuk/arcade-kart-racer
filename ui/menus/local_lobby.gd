@@ -36,7 +36,7 @@ func _ready() -> void:
 	_load_content()
 	_state = LocalLobbyState.new(_drivers[0].id, _karts[0].id)
 	for player_index: int in range(LocalLobbyState.MAX_PLAYERS):
-		var panel: PanelView = _create_panel(player_index)
+		var panel: PanelView = create_panel(player_index)
 		_panels.append(panel)
 		_grid.add_child(panel.panel)
 	_refresh_panels()
@@ -107,7 +107,8 @@ func _load_content() -> void:
 		push_error("Local lobby requires at least one driver and kart")
 
 
-func _create_panel(player_index: int) -> PanelView:
+## Builds the shared local/online player summary panel.
+static func create_panel(player_index: int) -> PanelView:
 	var view: PanelView = PanelView.new()
 	view.panel = PanelContainer.new()
 	view.panel.name = "Player%dPanel" % (player_index + 1)
@@ -123,7 +124,7 @@ func _create_panel(player_index: int) -> PanelView:
 	return view
 
 
-func _label(parent: Control, text: String, font_size: int) -> Label:
+static func _label(parent: Control, text: String, font_size: int) -> Label:
 	var label: Label = Label.new()
 	label.text = text
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

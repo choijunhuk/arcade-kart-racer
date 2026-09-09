@@ -242,3 +242,13 @@ func _on_shortcut_exited(body: Node3D, shortcut: TrackShortcut) -> void:
 		# instead of anchoring on the pre-shortcut position and potentially
 		# resolving to a bogus, backward-jumping offset.
 		record.cached_offset = shortcut.exit_offset
+
+## Updates replica read state from server rank/progress, without ranking locally.
+func apply_network_row(kart: KartController, rank: int, progress: float) -> void:
+	var record: KartRecord = _records.get(kart.get_instance_id())
+	if record == null:
+		return # Only registered grid identities can receive snapshots.
+	record.position = rank
+	record.progress = progress
+	_previous_ranking.assign(_records.keys())
+	_previous_ranking.sort_custom(func(a: int, b: int) -> bool: return _records[a].position < _records[b].position)

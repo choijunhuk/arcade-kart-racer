@@ -1,15 +1,12 @@
 class_name RaceManager
 extends Node3D
-
 const KART_SCENE: PackedScene = preload("res://kart/kart.tscn")
 const DEFAULT_TRACK: TrackData = preload("res://data/tracks/track_01.tres")
 const DEFAULT_KART: KartData = preload("res://data/karts/medium.tres")
-const DEFAULT_AI_DIFFICULTY: AIDifficultyProfile = preload("res://data/ai/normal.tres")
 const DEFAULT_LAPS: int = 3
 const DEFAULT_KART_COUNT: int = 8
 const MAX_KART_COUNT: int = 12
 const FINISHED_SPEED_RATIO: float = 0.5
-
 const LEGAL_TRANSITIONS: Dictionary = {
 	RaceState.LOADING: [RaceState.COUNTDOWN],
 	RaceState.COUNTDOWN: [RaceState.RACING, RaceState.PAUSED],
@@ -18,9 +15,7 @@ const LEGAL_TRANSITIONS: Dictionary = {
 	RaceState.RESULTS: [RaceState.LOADING],
 	RaceState.PAUSED: [RaceState.COUNTDOWN, RaceState.RACING],
 }
-
 @export var tuning: RaceTuning = preload("res://data/tuning/race_default.tres")
-
 @onready var _audio: RaceAudio = $RaceAudio
 @onready var _lap_tracker: LapTracker = $LapTracker
 @onready var _position_tracker: PositionTracker = $PositionTracker
@@ -37,7 +32,6 @@ const LEGAL_TRANSITIONS: Dictionary = {
 @onready var _particle_budget: ParticleBudgetController = $ParticleBudgetController
 @onready var _speed_lines: SpeedLines = $SpeedLines
 @onready var _split_screen: SplitScreen = $SplitScreen
-
 var _state: int = RaceState.LOADING
 var _paused_from_state: int = RaceState.RACING
 var _config: RaceConfig
@@ -55,8 +49,10 @@ var _results_delay_remaining: float = -1.0
 var _final_entries: Array[RaceResults.Entry] = []
 var _hazard_relay: HazardRelay
 var modes: RaceModes
-
+var network: NetRace
+var network_replica: bool = false
 func _ready() -> void:
+	network_replica = GameState.is_networked and not multiplayer.is_server()
 	_hazard_relay = HazardRelay.new()
 	modes = RaceModes.new()
 	add_child(_hazard_relay)
@@ -66,71 +62,73 @@ func _ready() -> void:
 	if _config == null:
 		_config = _make_default_config()
 	_begin_loading(false)
-
+	if GameState.net_session != null:
+		network = NetRace.new()
+		add_child(network)
+		network.configure(self, GameState.net_session)
 func _physics_process(delta: float) -> void:
+	if network_replica or (GameState.net_session != null and not GameState.net_session.running):
+		return
 	match _state:
 		RaceState.COUNTDOWN:
 			_advance_countdown.call_deferred(delta)
 		RaceState.FINISHING:
 			_advance_finishing(delta)
-
-## Supplies a race config before entering the tree and an optional player
-## provider factory `(KartController, RacingLine) -> InputProvider` for tests/sims.
+## Configures a race and optional `(KartController, RacingLine) -> InputProvider` factory.
 func configure(config: RaceConfig, player_provider_factory: Callable = Callable()) -> void:
 	_config = config
 	_player_provider_factory = player_provider_factory
-
 ## Returns the current RaceState value.
 func get_state() -> int:
 	return _state
-
 ## Returns registered karts in grid-slot order.
 func get_karts() -> Array[KartController]:
 	return _karts.duplicate()
-
 ## Returns local human karts in P1-P4 order.
 func get_human_karts() -> Array[KartController]:
 	return _player_karts.duplicate()
-
 ## Returns finalized result entries in rank order.
 func get_results() -> Array[RaceResults.Entry]:
 	return _final_entries.duplicate()
-
 ## Restarts the same config without replacing this manager instance.
 func restart() -> void:
+	if GameState.is_networked:
+		back_to_menu()
+		return
 	get_tree().paused = false
 	_begin_loading(true)
-
 ## Pauses the SceneTree only from COUNTDOWN or RACING.
 func pause_race() -> void:
+	if GameState.is_networked:
+		return
 	if _state != RaceState.COUNTDOWN and _state != RaceState.RACING:
 		return
 	_paused_from_state = _state
 	_transition_to(RaceState.PAUSED)
 	get_tree().paused = true
-
 ## Restores the exact state from which the race was paused.
 func resume_race() -> void:
 	if _state != RaceState.PAUSED:
 		return
 	get_tree().paused = false
 	_transition_to(_paused_from_state)
-
 ## Leaves the race through GameState's validated scene-change helper.
 func back_to_menu() -> void:
+	if GameState.net_session != null:
+		GameState.net_session.close()
 	get_tree().paused = false
 	GameState.change_scene("res://scenes/main.tscn")
-
 ## Leaves results for the data-driven track selection screen.
 func back_to_track_select() -> void:
+	if GameState.is_networked:
+		back_to_menu()
+		return
 	get_tree().paused = false
 	GameState.change_scene("res://ui/menus/track_select.tscn")
-
 ## Returns whether a requested state edge belongs to the Phase 5 table.
 static func can_transition(from_state: int, to_state: int) -> bool:
 	var allowed: Array = LEGAL_TRANSITIONS.get(from_state, []) as Array
 	return allowed.has(to_state)
-
 ## Waits for all humans before applying the AI finish margin.
 static func finishing_complete(
 	finished_count: int, kart_count: int, elapsed: float, timeout: float,
@@ -139,7 +137,6 @@ static func finishing_complete(
 	if finished_count >= kart_count:
 		return true
 	return finished_human_count >= human_count and elapsed >= timeout
-
 func _begin_loading(is_restart: bool) -> void:
 	if is_restart:
 		_force_state(RaceState.LOADING)
@@ -151,24 +148,31 @@ func _begin_loading(is_restart: bool) -> void:
 	move_child(_track, 0)
 	_setup_systems()
 	_spawn_karts()
-	_register_track_elements()
+	if not network_replica:
+		_register_track_elements()
 	_race_results.setup_players(_config.track.id, _karts, _player_karts)
-	_audio.configure(_player_kart, _config.laps, _config.track.bgm_id)
+	var local_players: Array[KartController] = _player_karts
+	if GameState.net_session != null:
+		local_players = [_karts[GameState.net_session.local_slot()]]
+	_audio.configure(local_players[0] if not local_players.is_empty() else null, _config.laps, _config.track.bgm_id)
 	_countdown.setup(tuning, _karts)
 	var primary_hud: RaceHud = RacePresentation.configure(
-		get_world_3d(), _config, _karts, _player_karts, _lap_tracker, _position_tracker,
+		get_world_3d(), _config, _karts, local_players, _lap_tracker, _position_tracker,
 		_item_manager, _track, _camera, _hud, _speed_lines, _split_screen, _particle_budget,
 	)
 	modes.setup(_config, _player_kart, _track, primary_hud)
 	_pause_menu.bind(
-		self, _player_kart != null and not GameState.automation_mode,
+		self, _player_kart != null and not GameState.automation_mode and not GameState.is_networked,
 		_config.player_device_ids(),
 	)
 	_pause_menu.hide_menu()
 	_results_screen.hide_results()
 	_transition_to(RaceState.COUNTDOWN)
-	_countdown.start()
-
+	if not GameState.is_networked:
+		_countdown.start()
+	else:
+		for kart: KartController in _karts:
+			kart.set_frozen(true)
 func _setup_systems() -> void:
 	_lap_tracker.reset()
 	_lap_tracker.total_laps = _config.laps
@@ -188,7 +192,6 @@ func _setup_systems() -> void:
 	_item_manager.set_physics_process(false)
 	if not _lap_tracker.kart_finished.is_connected(_on_kart_finished):
 		_lap_tracker.kart_finished.connect(_on_kart_finished)
-
 func _spawn_karts() -> void:
 	var grid: Array[Transform3D] = _track.get_start_grid(_config.kart_count)
 	_roster = RaceRoster.new()
@@ -202,13 +205,14 @@ func _spawn_karts() -> void:
 		var kart: KartController = KART_SCENE.instantiate() as KartController
 		var player: PlayerSlot = _config.player_for_grid_slot(slot)
 		var is_player: bool = player != null
+		kart.network_replica = network_replica
 		kart.name = _player_name(_player_karts.size()) if is_player else "AiKart%d" % (slot + 1)
 		var driver: DriverData = _roster.driver_for_slot(_config, slot, player)
 		var base_kart: KartData = _roster.kart_for_slot(_config, slot, player)
 		kart.kart_data = RaceConfigBuilder.apply_driver_mods(base_kart, driver)
 		kart.set_driver_data(driver)
 		var kart_audio: KartAudio = kart.get_node("KartAudio") as KartAudio
-		if is_player:
+		if is_player and (GameState.net_session == null or slot == GameState.net_session.local_slot()):
 			var is_primary: bool = _player_karts.is_empty()
 			kart_audio.set_local_player_mix(1.0 if is_primary else KartAudio.SECONDARY_PLAYER_GAIN, is_primary)
 		else:
@@ -223,7 +227,8 @@ func _spawn_karts() -> void:
 			if _player_kart == null:
 				_player_kart = kart
 		else:
-			_spawn_ai_kart(kart, race_rng, ai_index, ai_count)
+			if not network_replica:
+				_spawn_ai_kart(kart, race_rng, ai_index, ai_count)
 			ai_index += 1
 		_karts.append(kart)
 		_lap_tracker.register_kart(kart)
@@ -232,10 +237,8 @@ func _spawn_karts() -> void:
 		_item_manager.register_kart(kart)
 		_respawn_system.register_kart(kart, _get_respawn_transform)
 	_ai_context.player_kart = _player_kart
-
 func _player_name(player_index: int) -> String:
 	return "PlayerKart" if _config.human_count() == 1 else "PlayerKart%d" % (player_index + 1)
-
 func _make_ai_context() -> AIRaceContext:
 	var context: AIRaceContext = AIRaceContext.new()
 	context.racing_line = _track.get_racing_line()
@@ -245,7 +248,6 @@ func _make_ai_context() -> AIRaceContext:
 	context.request_respawn = _respawn_system.request_respawn
 	context.get_countdown_phase_seconds = _countdown.get_phase_seconds
 	return context
-
 func _spawn_ai_kart(kart: KartController, race_rng: RandomNumberGenerator, ai_index: int, ai_count: int) -> void:
 	var controller: AIController = AIController.new()
 	controller.name = "AIController"
@@ -256,7 +258,6 @@ func _spawn_ai_kart(kart: KartController, race_rng: RandomNumberGenerator, ai_in
 	var phase_offset: float = tick_interval * (float(ai_index) / maxf(float(ai_count), 1.0))
 	controller.setup(kart, _track, _ai_context, _config.ai_difficulty, kart_rng, phase_offset)
 	_ai_controllers[kart.get_instance_id()] = controller
-
 func _make_player_provider(kart: KartController, player: PlayerSlot) -> InputProvider:
 	if _player_provider_factory.is_valid():
 		var candidate: Variant = _player_provider_factory.call(kart, _track.get_racing_line())
@@ -264,12 +265,6 @@ func _make_player_provider(kart: KartController, player: PlayerSlot) -> InputPro
 			return candidate as InputProvider
 		push_error("RaceManager player provider factory must return InputProvider")
 	return PlayerInputProvider.new(player.device_id)
-
-func _make_scripted_provider(kart: KartController, speed_ratio: float) -> ScriptedRaceInputProvider:
-	var provider: ScriptedRaceInputProvider = ScriptedRaceInputProvider.new(kart, _track.get_racing_line(), speed_ratio)
-	provider.set_drift_on_corners(true)
-	return provider
-
 func _register_track_elements() -> void:
 	for hazard: Node in _track.get_node("Hazards").get_children():
 		if hazard is Hazard:
@@ -284,27 +279,22 @@ func _register_track_elements() -> void:
 		for child: Node in item_boxes.get_children():
 			if child is ItemBox:
 				_item_manager.register_item_box(child as ItemBox)
-
 func _on_kart_finished(kart: KartController, finish_time_seconds: float) -> void:
 	if kart == _player_kart:
 		modes.player_finished()
 	EventBus.kart_finished.emit(kart, finish_time_seconds)
 	var ai_controller: AIController = _ai_controllers.get(kart.get_instance_id()) as AIController
 	if ai_controller != null:
-		# AIDriver itself drops to safe-cruise mode once state == FINISHED
-		# (spec §13.4), so keep feeding its own provider instead of swapping.
 		kart.set_finished(ai_controller.get_input_provider())
 	else:
-		kart.set_finished(_make_scripted_provider(kart, FINISHED_SPEED_RATIO))
+		kart.set_finished(ScriptedRaceInputProvider.new(kart, _track.get_racing_line(), FINISHED_SPEED_RATIO))
 	if (_player_indices.has(kart.get_instance_id()) or _player_kart == null) and _state == RaceState.RACING:
 		_transition_to(RaceState.FINISHING)
-
 func _advance_countdown(delta: float) -> void:
 	if _state != RaceState.COUNTDOWN:
 		return
 	if _countdown.advance(delta):
 		_transition_to(RaceState.RACING)
-
 func _advance_finishing(delta: float) -> void:
 	var finished_humans: int = RaceCompletion.count(_lap_tracker, _player_karts)
 	if finished_humans < _player_karts.size():
@@ -322,7 +312,6 @@ func _advance_finishing(delta: float) -> void:
 	_results_delay_remaining = maxf(0.0, _results_delay_remaining - delta)
 	if _results_delay_remaining <= 0.0:
 		_finalize_results()
-
 func _finalize_results() -> void:
 	_position_tracker.force_update()
 	var ranking: Array[KartController] = _position_tracker.get_ranking()
@@ -334,10 +323,8 @@ func _finalize_results() -> void:
 	modes.finalize(_final_entries)
 	_transition_to(RaceState.RESULTS)
 	_results_screen.show_results(_final_entries, self)
-
 func _get_respawn_transform(kart: KartController) -> Transform3D:
 	return RespawnSystem.resolve_respawn_transform(kart, _lap_tracker, _track.get_racing_line(), _karts)
-
 func _transition_to(new_state: int) -> void:
 	if not can_transition(_state, new_state):
 		push_error("Illegal race transition %d -> %d" % [_state, new_state])
@@ -354,20 +341,18 @@ func _transition_to(new_state: int) -> void:
 	elif new_state == RaceState.FINISHING:
 		_finishing_elapsed = 0.0
 		_results_delay_remaining = -1.0
-
 func _force_state(new_state: int) -> void:
 	var old_state: int = _state
 	_state = new_state
 	if old_state != new_state:
 		EventBus.race_state_changed.emit(old_state, new_state)
-
 func _set_race_systems_active(active: bool) -> void:
+	active = active and not network_replica
 	_lap_tracker.set_race_active(active)
 	_position_tracker.set_race_active(active)
 	_respawn_system.set_physics_process(active)
 	_collision_resolver.set_physics_process(active)
 	_item_manager.set_physics_process(active and _config.items_enabled)
-
 func _clear_runtime() -> void:
 	_split_screen.clear_views()
 	_final_entries.clear()
@@ -389,7 +374,6 @@ func _clear_runtime() -> void:
 	if is_instance_valid(_track):
 		_track.free()
 	_track = null
-
 func _make_default_config() -> RaceConfig:
 	var config: RaceConfig = RaceConfig.new()
 	config.track = DEFAULT_TRACK
@@ -397,3 +381,19 @@ func _make_default_config() -> RaceConfig:
 	config.kart_count = DEFAULT_KART_COUNT
 	config.player_kart = DEFAULT_KART
 	return config
+## Updates a replica state without enabling authoritative systems.
+func apply_network_state(value: int) -> void:
+	if not network_replica or value == RaceState.RESULTS:
+		return
+	var previous: int = _state
+	_force_state(value)
+	if previous == RaceState.COUNTDOWN and value == RaceState.RACING:
+		EventBus.countdown_tick.emit(0)
+		EventBus.race_started.emit()
+## Displays only server-finalized results.
+func apply_network_results(entries: Array[RaceResults.Entry]) -> void:
+	if not network_replica:
+		return
+	_final_entries = entries
+	_force_state(RaceState.RESULTS)
+	_results_screen.show_results(entries, self)

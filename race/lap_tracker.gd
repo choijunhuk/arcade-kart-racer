@@ -145,6 +145,8 @@ static func evaluate_checkpoint_transition(index: int, next_checkpoint_index: in
 
 
 func _on_body_passed(body: Node3D, index: int) -> void:
+	if GameState.is_networked and not multiplayer.is_server():
+		return # Replicas consume server lap records only.
 	var kart: KartController = body as KartController
 	if kart == null:
 		return
@@ -189,3 +191,19 @@ func _update_wrong_way(record: KartRecord, delta: float) -> void:
 
 func _get_record(kart: KartController) -> KartRecord:
 	return _records.get(kart.get_instance_id()) as KartRecord
+
+## Returns the authoritative fixed-tick race clock for snapshots.
+func network_race_seconds() -> float:
+	return _race_time
+
+## Applies an authoritative row without emitting duplicate lap/finish events.
+func apply_network_row(kart: KartController, row: Dictionary, seconds: float) -> void:
+	var record: KartRecord = _get_record(kart)
+	if record == null:
+		return # Unregistered bodies have no network identity.
+	record.lap = int(row["lap"])
+	record.next_checkpoint_index = int(row["checkpoint"])
+	record.last_checkpoint_index = posmod(record.next_checkpoint_index - 1, _checkpoints.size())
+	record.finished = float(row["finish"]) >= 0.0
+	record.finish_time = float(row["finish"])
+	_race_time = seconds
