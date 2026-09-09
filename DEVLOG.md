@@ -2400,3 +2400,7 @@ Phase 14 분할 화면은 시작하지 않는다. 먼저 Phase 13 native/manual 
 ### 사용자에게 필요한 결정 (있다면)
 
 새 구현 결정 없음. Phase 13 전체 DoD 승인에는 위 native/manual 검증이 필요하다.
+
+### Phase 13 main-thread windowed check (M3 Max, 2026-09-09)
+- Track 01 drive snapshot: textured road, painted edges/curbs, guardrail posts, trees, new kart silhouette, translucent item boxes — OK. Sky tint reads greenish on the day theme; revisit ProceduralSkyMaterial colors in a later polish pass.
+- perf_probe 12 karts / quality 0: mean 99.1 fps, 4 frames > 33 ms, `post_load_100ms_pass=false` (a post-load hitch above 100 ms remains — known gap, track in Phase 14 perf item).
