@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.2 — Phase 13 (unreleased)
+## v0.2 — Phase 13 (unreleased; native acceptance pending)
 
 - Original six-kart chassis silhouettes, helmet/rim accessories, procedural track
   surfaces/skies/scenery, soft particles, fresnel shield and pickup/pad art.
@@ -9,7 +9,13 @@
 - Threaded scene loading with progress/failure state and post-load frame telemetry.
 - Padded minimap projection with a minimum visible aspect ratio.
 - Three export presets and an offline template preflight; explicit asset retention ledger.
-- Native visual/GPU/audio/gamepad and cross-platform runtime acceptance remain pending.
+- Match AI drift entry to the kart speed threshold so rejected low-speed hops
+  preserve wall recovery steering; emergency braking releases drift for full
+  steering recovery. Retain the existing collision budgets.
+- Bury the hills ramp leading edge and invalidate older ghosts with format 3.
+- Retain synthesized CC0 audio, Godot default font and disabled haptics explicitly
+  in the asset ledger. Native visual/GPU/audio/gamepad and cross-platform runtime
+  acceptance remain pending; missing export templates return exit 2 with an install hint.
 
 ## v0.1 — Vertical Slice (unreleased; no tag created)
 

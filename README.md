@@ -289,6 +289,9 @@ HOME="$PWD/.tmp-home" tools/build.sh
 
 Godot 4.7 matching templates are required. Missing templates produce exit 2 and
 an exact command to install a locally obtained official TPZ. No downloads happen.
+The Phase 13 finish check on this machine returned exit 2: matching export
+templates are absent from the project-local HOME. Install them into the printed
+directory and rerun the same command.
 Installed templates produce `build/windows/TurboCircuit.exe`,
 `build/macos/TurboCircuit.zip`, and `build/linux/TurboCircuit.x86_64`.
 The macOS export is unsigned. Cross-platform runtime testing is not implied by an

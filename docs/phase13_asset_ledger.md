@@ -12,7 +12,7 @@ Historical reports remain chronological; this table is the current disposition.
 | Particles / boost / shield | Radial alpha particles, additive sparks/exhaust/impact, fresnel shield. Existing hit-flash and threat marker retained because they already implement required feedback. |
 | Skid | Bounded strips fade when inactive; a new drift starts a new strip to avoid reconnecting across the track. |
 | Portraits / kart and nine item icons | Replaced with deterministic original Image-generated PNGs. |
-| Track previews | Four generated schematic fallback PNGs ready to commit (git index is sandbox-blocked). Native SubViewport renderer tool implemented; native capture blocked by macOS XPC. Rendered replacement remains a native acceptance gap. |
+| Track previews | Four generated schematic fallback PNGs are tracked in the Phase 13 implementation commit. Native SubViewport renderer tool implemented; native capture blocked by macOS XPC. Rendered replacement remains a native acceptance gap. |
 | Default font | Explicitly keep Godot default; no verified offline redistributable font; never copy system fonts. |
 | 41 SFX / three BGM / new track and item aliases | Explicitly keep original CC0 synthesized audio. Existing audio pool, mix and looping behavior preserved; no official downloaded replacements. Final listening/mix remains unverified. |
 | Driver voice sets | Keep identifiers as extension hooks; no recorded speech. Original synthesized feedback avoids unlicensed recordings. |

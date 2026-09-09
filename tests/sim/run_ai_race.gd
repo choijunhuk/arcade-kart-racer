@@ -335,8 +335,6 @@ func _on_kart_respawned(kart: Node) -> void:
 	if not kart_name.is_empty():
 		_respawns[kart_name] = int(_respawns.get(kart_name, 0)) + 1
 func _on_wall_head_on(kart: KartController) -> void:
-	if OS.get_environment("PHASE13_PROFILE_WALLS") == "1":
-		print("WALL_PROFILE ", JSON.stringify({"kart": String(kart.name), "position": str(kart.global_position), "speed": kart.get_speed(), "forward": str(kart.get_forward())}))
 	var kart_name: String = String(_kart_names_by_id.get(kart.get_instance_id(), ""))
 	if kart_name.is_empty():
 		return
