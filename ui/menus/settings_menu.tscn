@@ -246,6 +246,10 @@ layout_mode = 2
 button_pressed = true
 text = "Drift Tier Color + Icon Labels"
 
+[node name="MultiplayerMinimapToggle" type="CheckButton" parent="Panel/VBox/Tabs/Accessibility"]
+layout_mode = 2
+text = "Show Minimap For Every Local Player"
+
 [node name="TierLegend" type="Label" parent="Panel/VBox/Tabs/Accessibility"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.25, 0.9, 1, 1)

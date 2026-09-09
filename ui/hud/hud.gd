@@ -105,6 +105,16 @@ func bind(
 	_minimap.bind(racing_line, karts, player_kart)
 
 
+## Selects whether this player's viewport pays the minimap rendering cost.
+func set_minimap_visible(minimap_visible: bool) -> void:
+	_minimap.visible = minimap_visible
+
+
+## Returns the kart observed by this HUD for integration checks and adapters.
+func get_bound_kart() -> KartController:
+	return _player_kart
+
+
 ## Displays time-trial timing independently of the standard rank/item panels.
 func bind_time_trial(trial: TimeTrialGhost) -> void:
 	_time_trial = trial

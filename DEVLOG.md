@@ -2404,3 +2404,118 @@ Phase 14 분할 화면은 시작하지 않는다. 먼저 Phase 13 native/manual 
 ### Phase 13 main-thread windowed check (M3 Max, 2026-09-09)
 - Track 01 drive snapshot: textured road, painted edges/curbs, guardrail posts, trees, new kart silhouette, translucent item boxes — OK. Sky tint reads greenish on the day theme; revisit ProceduralSkyMaterial colors in a later polish pass.
 - perf_probe 12 karts / quality 0: mean 99.1 fps, 4 frames > 33 ms, `post_load_100ms_pass=false` (a post-load hitch above 100 ms remains — known gap, track in Phase 14 perf item).
+
+## Phase 14 보고 — 로컬 멀티플레이 / 분할 화면 (2026-09-09)
+
+### 구현된 기능
+
+- `RaceConfig.players: Array[PlayerSlot]`가 P1–P4의 device/driver/kart/grid를
+  보유한다. 사람 수와 AI 수는 1–4명/`kart_count - human_count`로 계산한다.
+  기존 `player_slot` 기반 single/GP/time-trial/all-AI config는 normalize 경계에서
+  같은 동작을 유지한다.
+- Local Multiplayer 메뉴는 키보드(-1, 기본 P1)와 joypad index를 독립 장치로
+  참가/퇴장시킨다. 4개 패널은 전역 GUI focus 대신 각 장치의 DRIVER/KART
+  커서·선택·ready 상태를 직접 관리하며, 2명 이상 전원 ready 시 시작한다.
+- 한 `World3D`를 공유하는 1–4개 SubViewport가 각각 current RaceCamera,
+  RaceHud, SpeedLines를 소유한다. 2인은 상/하, 3–4인은 사분면이다. 3D scale은
+  1/2/3–4명에 1.0/0.85/0.70이며 HUD는 full resolution이다. 미니맵은 기본
+  P1만, Accessibility 설정으로 전원 표시한다.
+- Particle/mesh LOD는 모든 player camera 중 가장 가까운 거리를 사용한다.
+  P1 엔진은 2D gain 1.0, 다른 사람 엔진은 공유 mix에서 0.45로 감쇠하며,
+  countdown/UI/race audio adapter는 한 번만 실행된다.
+- 첫 사람 완주부터 FINISHING margin을 재고, 전원 완주 또는 timeout에 결과를
+  확정한다. 결과의 모든 human row를 강조하고 P1–P4별 best lap/position을
+  별도 저장한다. P1은 기존 track menu 호환용 top-level record도 갱신한다.
+- 어느 참가자든 전체 레이스를 pause할 수 있고, pause menu navigation/resume은
+  pause를 건 장치가 소유한다.
+- perf probe가 `--players N --karts N --duration N`을 받고 2인 60fps,
+  3–4인 45fps target/pass를 출력한다.
+
+### 생성/수정된 파일
+
+- 새 모델/로직: `data/schemas/player_slot.gd`, `race/split_screen.gd`,
+  `race/race_roster.gd`, `race/race_presentation.gd`, `race/race_completion.gd`.
+- 메뉴: `ui/menus/local_lobby.{gd,tscn}`, `mode_select.{gd,tscn}`,
+  `pause_menu.gd`, `settings_menu.{gd,tscn}`.
+- 레이스/표현/저장: `race_config*.gd`, `race_manager.gd`, `race_results.gd`,
+  `race.tscn`, `hud.gd`, `results_screen.gd`, `player_input_provider.gd`,
+  `particle_budget_controller.gd`, `kart_audio.gd`, `save_manager.gd`.
+- 검증/문서: `test_phase14_local_multiplayer.gd` unit/integration,
+  `perf_probe.gd`, `ARCHITECTURE.md`, `README.md`, `CHANGELOG.md`, `DEVLOG.md`.
+
+### 핵심 설계 결정과 이유
+
+- 레이스 월드를 복제하지 않는다. gameplay owner는 하나이고 viewport별 camera
+  current slot만 분리해야 랩/아이템/AI가 완전히 동일한 상태를 관찰한다.
+- 공용 scene geometry의 detail tier는 viewport마다 다른 값을 동시에 가질 수
+  없으므로 nearest-camera로 합성한다. 어느 플레이어에게 가까운 오브젝트도
+  조기 LOD 처리되지 않는다.
+- `PlayerSlot`은 저장 profile이 아니라 한 경기의 참가 슬롯이다. 경기 결과의
+  human 순서가 P1–P4 save profile index가 되어 lobby 재참가와 독립적이다.
+- 기존 all-AI sim과 single-player 호출부가 많으므로 `player_slot`을 즉시 삭제하지
+  않고 `players`로 변환한다. 새 local flow만 canonical multi roster를 직접 만든다.
+
+### 실행 방법
+
+```sh
+HOME="$PWD/.tmp-home" /opt/homebrew/bin/godot --path .
+# Play -> Local Multiplayer -> 패드 2개 A -> 선택 -> 모두 READY
+
+HOME="$PWD/.tmp-home" /opt/homebrew/bin/godot --headless --path . \
+  scenes/test/perf_probe.tscn -- --players 2 --karts 8 --duration 30
+```
+
+### 테스트 방법 및 결과
+
+- TDD RED: Phase 14 unit 0/12, lobby integration 2/4에서 새 계약 부재를 확인했다.
+- Focused GREEN: unit 14/14, integration 4/4. 실제 `test_loop` 3랩에서 scripted
+  human 2명이 독립 HUD를 갱신하고 모두 양수 finish time으로 결과에 들어갔다.
+  P2 device action이 shared SceneTree를 pause하고 두 카트가 정지하는 것도 확인했다.
+- 기존 targeted regression: player input 4/4, save 5/5, race results 3/3,
+  race manager 3/3, menu flow 9/9, settings 3/3, audio 14/14, race flow 3/3.
+- `tools/validate_tracks.sh`: exit 0, 7/7 `TRACK VALIDATION PASSED`.
+- `tools/run_sim.sh --races 1 --difficulty normal --karts 8 --laps 3`: exit 0,
+  `success:true`, 8/8 완주, respawn 0, wall head-on 0.
+- 5초 headless composition probe: 2인/8대 mean 144.95fps, worst 11.97ms,
+  33ms 초과 0; 4인/8대 mean 144.94fps, worst 10.43ms, 33ms 초과 0.
+  둘 다 `gpu_measurement:false`이므로 native GPU 목표 합격 근거로 사용하지 않는다.
+- 최종 `tools/gate.sh`: 전체 GUT 496/496와 import/parse/tracks/sim/file-size/
+  project hygiene를 확인한다. SaveManager 변경은 brief가 명시한 sensitive path다.
+
+### 현재 문제점 / 알려진 버그
+
+- 이 sandbox에서는 windowed tool이 hang하므로 실행하지 않았다. native 2-pad
+  snapshot과 실제 GPU 2인 60fps/4인 45fps 판정은 main thread가 수행한다.
+- headless macOS CA lookup 및 Dummy renderer RID 종료 진단은 이전 Phase와 동일하며
+  `project.godot`에 network/TLS 우회를 추가하지 않았다.
+- 공유 오디오 출력은 물리적으로 한 mix이므로 P2–P4 관점별 stereo listener가
+  아니라 P1 full + 상대 human 감쇠 방식이다.
+
+### TODO / PLACEHOLDER 목록
+
+Phase 14 새 코드의 TODO/PLACEHOLDER는 없다. 아래 native acceptance만 남는다.
+
+1. 패드 2개로 lobby join/각자 selection/ready 후 실제 3랩 완주.
+2. 두 viewport snapshot에서 camera/HUD/speed lines와 P1-only minimap 확인.
+3. native 1600×900 low에서 2인/8대 ≥60fps, 4인/8대 ≥45fps 기록.
+4. P2 pause 후 P1 입력이 menu focus를 움직이지 않고 P2만 resume하는지 확인.
+
+### 다음 Phase 계획
+
+Phase 15 online multiplayer는 선택 Phase이며 사용자 명시 승인 전 시작하지 않는다.
+
+### 플레이 지시 (패드 2개)
+
+1. Play → Local Multiplayer로 들어가 두 패드에서 각각 A를 눌러 P1/P2로 참가한다.
+2. 각 패드 Up/Down으로 DRIVER/KART 줄을 이동하고 Left/Right로 서로 다른 조합을
+   고른다. 한 패드 선택이 다른 패널을 움직이지 않아야 한다.
+3. 두 패드에서 A로 READY 한다. Ridgeline Circuit, 8대, 3랩이 자동 시작된다.
+4. 상/하 viewport에서 각 카메라·순위·랩·속도·아이템이 자기 카트만 따라가는지,
+   기본 미니맵이 P1에만 있는지 확인한다.
+5. P2의 Start로 pause한다. 전체 카트가 멈추고 P2만 menu를 조작/resume해야 한다.
+6. 두 사람이 모두 완주해 결과표에서 두 human row가 강조되는지 확인한다.
+
+### 사용자에게 필요한 결정 (있다면)
+
+main-thread native snapshot/perf/physical-pad 결과로 Phase 14 최종 승인 여부만
+판정하면 된다. 이 작업에서는 push/merge/branch switch를 하지 않았다.

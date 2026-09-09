@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.3 — Phase 14 (unreleased; native acceptance pending)
+
+- Add typed P1-P4 player slots, automatic AI remainder, and per-profile race bests.
+- Add a device-owned local lobby with keyboard/P1 and joypad-index join/leave,
+  independent driver/kart cursors, ready state, and automatic start.
+- Render one shared World3D through independent one-to-four player cameras, HUDs,
+  speed lines, configurable minimaps, scaled 3D viewports, and nearest-camera LOD.
+- Let any joined player pause the shared race while the initiating device owns the
+  pause menu; highlight every human in results and wait from the first human finish.
+- Extend the performance probe with `--players N`, 60 fps two-player and 45 fps
+  four-player targets. Headless composition measurements pass; native GPU and
+  two-pad windowed acceptance remain pending in the main thread.
+
 ## v0.2 — Phase 13 (unreleased; native acceptance pending)
 
 - Original six-kart chassis silhouettes, helmet/rim accessories, procedural track
@@ -32,5 +45,5 @@
 - Tune kart-class and item data; exact before/after measurements and remaining
   native-window verification limitations are recorded in DEVLOG.md.
 
-Final art/audio assets, haptics, Time Trial, Grand Prix and multiplayer are outside
-this release. Visual appearance, GPU performance and listening require native QA.
+Final external audio, haptics, online multiplayer, and native visual/GPU/listening
+acceptance remain outside the automated headless evidence.

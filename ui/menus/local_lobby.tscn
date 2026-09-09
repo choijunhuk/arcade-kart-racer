@@ -1,0 +1,64 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://ui/menus/local_lobby.gd" id="1_script"]
+[ext_resource type="Theme" path="res://ui/theme/default_theme.tres" id="2_theme"]
+
+[node name="LocalLobby" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2_theme")
+script = ExtResource("1_script")
+back_scene_path = "res://ui/menus/mode_select.tscn"
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.012, 0.025, 0.06, 1)
+
+[node name="Panel" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 100.0
+offset_top = 40.0
+offset_right = -100.0
+offset_bottom = -40.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBox" type="VBoxContainer" parent="Panel"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Title" type="Label" parent="Panel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 38
+text = "LOCAL MULTIPLAYER"
+horizontal_alignment = 1
+
+[node name="Hint" type="Label" parent="Panel/VBox"]
+layout_mode = 2
+text = "JOIN: A / ENTER  •  UP/DOWN: DRIVER/KART  •  LEFT/RIGHT: SELECT  •  B/ESC: LEAVE"
+horizontal_alignment = 1
+
+[node name="Players" type="GridContainer" parent="Panel/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/h_separation = 20
+theme_override_constants/v_separation = 20
+columns = 2
+
+[node name="Footer" type="Label" parent="Panel/VBox"]
+layout_mode = 2
+text = "Race starts when 2–4 joined players are ready • Track: Ridgeline Circuit • 8 karts"
+horizontal_alignment = 1

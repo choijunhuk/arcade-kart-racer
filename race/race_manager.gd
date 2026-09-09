@@ -1,15 +1,10 @@
 class_name RaceManager
 extends Node3D
 
-## Composes one race and exclusively owns the Phase 5 state transitions.
-## Lap, position, respawn, collision, countdown, and results logic stay in
-## their dedicated child nodes (spec §6.1 rule 2 and §14).
-
 const KART_SCENE: PackedScene = preload("res://kart/kart.tscn")
 const DEFAULT_TRACK: TrackData = preload("res://data/tracks/track_01.tres")
 const DEFAULT_KART: KartData = preload("res://data/karts/medium.tres")
 const DEFAULT_AI_DIFFICULTY: AIDifficultyProfile = preload("res://data/ai/normal.tres")
-const DRIVER_DIRECTORY: String = "res://data/drivers"
 const DEFAULT_LAPS: int = 3
 const DEFAULT_KART_COUNT: int = 8
 const MAX_KART_COUNT: int = 12
@@ -41,6 +36,7 @@ const LEGAL_TRANSITIONS: Dictionary = {
 @onready var _results_screen: ResultsScreen = $ResultsScreen
 @onready var _particle_budget: ParticleBudgetController = $ParticleBudgetController
 @onready var _speed_lines: SpeedLines = $SpeedLines
+@onready var _split_screen: SplitScreen = $SplitScreen
 
 var _state: int = RaceState.LOADING
 var _paused_from_state: int = RaceState.RACING
@@ -49,7 +45,9 @@ var _player_provider_factory: Callable
 var _track: TrackRoot
 var _karts: Array[KartController] = []
 var _player_kart: KartController
-var _drivers: Array[DriverData] = []
+var _player_karts: Array[KartController] = []
+var _player_indices: Dictionary[int, int] = {}
+var _roster: RaceRoster
 var _ai_controllers: Dictionary[int, AIController] = {}
 var _ai_context: AIRaceContext
 var _finishing_elapsed: float = 0.0
@@ -72,9 +70,6 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	match _state:
 		RaceState.COUNTDOWN:
-			# Deferred so every kart's own _physics_process (which refreshes its
-			# input snapshot) has already run this tick before Countdown samples
-			# start input; RaceManager runs before its Karts children (spec §6.1).
 			_advance_countdown.call_deferred(delta)
 		RaceState.FINISHING:
 			_advance_finishing(delta)
@@ -92,6 +87,10 @@ func get_state() -> int:
 ## Returns registered karts in grid-slot order.
 func get_karts() -> Array[KartController]:
 	return _karts.duplicate()
+
+## Returns local human karts in P1-P4 order.
+func get_human_karts() -> Array[KartController]:
+	return _player_karts.duplicate()
 
 ## Returns finalized result entries in rank order.
 func get_results() -> Array[RaceResults.Entry]:
@@ -132,9 +131,14 @@ static func can_transition(from_state: int, to_state: int) -> bool:
 	var allowed: Array = LEGAL_TRANSITIONS.get(from_state, []) as Array
 	return allowed.has(to_state)
 
-## Returns whether FINISHING may close because everyone finished or time expired.
-static func finishing_complete(finished_count: int, kart_count: int, elapsed: float, timeout: float) -> bool:
-	return finished_count >= kart_count or elapsed >= timeout
+## Waits for all humans before applying the AI finish margin.
+static func finishing_complete(
+	finished_count: int, kart_count: int, elapsed: float, timeout: float,
+	finished_human_count: int = 1, human_count: int = 1,
+) -> bool:
+	if finished_count >= kart_count:
+		return true
+	return finished_human_count >= human_count and elapsed >= timeout
 
 func _begin_loading(is_restart: bool) -> void:
 	if is_restart:
@@ -148,19 +152,18 @@ func _begin_loading(is_restart: bool) -> void:
 	_setup_systems()
 	_spawn_karts()
 	_register_track_elements()
-	_race_results.setup(_config.track.id, _karts, _player_kart)
+	_race_results.setup_players(_config.track.id, _karts, _player_karts)
 	_audio.configure(_player_kart, _config.laps, _config.track.bgm_id)
 	_countdown.setup(tuning, _karts)
-	var observed_kart: KartController = _player_kart if _player_kart != null else _karts[0]
-	_camera.set_target(observed_kart)
-	_particle_budget.configure(_karts, _camera)
-	_speed_lines.set_target(observed_kart)
-	_hud.bind(
-		_player_kart, _lap_tracker, _position_tracker, _karts.size(), _config.laps,
-		_item_manager, _track.get_racing_line(), _karts,
+	var primary_hud: RaceHud = RacePresentation.configure(
+		get_world_3d(), _config, _karts, _player_karts, _lap_tracker, _position_tracker,
+		_item_manager, _track, _camera, _hud, _speed_lines, _split_screen, _particle_budget,
 	)
-	modes.setup(_config, _player_kart, _track, _hud)
-	_pause_menu.bind(self, _player_kart != null and not GameState.automation_mode)
+	modes.setup(_config, _player_kart, _track, primary_hud)
+	_pause_menu.bind(
+		self, _player_kart != null and not GameState.automation_mode,
+		_config.player_device_ids(),
+	)
 	_pause_menu.hide_menu()
 	_results_screen.hide_results()
 	_transition_to(RaceState.COUNTDOWN)
@@ -188,28 +191,37 @@ func _setup_systems() -> void:
 
 func _spawn_karts() -> void:
 	var grid: Array[Transform3D] = _track.get_start_grid(_config.kart_count)
-	_load_driver_roster()
+	_roster = RaceRoster.new()
 	_ai_controllers.clear()
 	_ai_context = _make_ai_context()
 	var race_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	race_rng.seed = _config.seed
-	var ai_count: int = _config.kart_count - (1 if _config.player_slot >= 0 else 0)
+	var ai_count: int = _config.ai_count()
 	var ai_index: int = 0
 	for slot: int in range(_config.kart_count):
 		var kart: KartController = KART_SCENE.instantiate() as KartController
-		var is_player: bool = slot == _config.player_slot
-		kart.name = "PlayerKart" if is_player else "AiKart%d" % (slot + 1)
-		var driver: DriverData = _driver_for_slot(slot, is_player)
-		var base_kart: KartData = _config.kart_roster[slot % _config.kart_roster.size()] if not _config.kart_roster.is_empty() else _config.player_kart
+		var player: PlayerSlot = _config.player_for_grid_slot(slot)
+		var is_player: bool = player != null
+		kart.name = _player_name(_player_karts.size()) if is_player else "AiKart%d" % (slot + 1)
+		var driver: DriverData = _roster.driver_for_slot(_config, slot, player)
+		var base_kart: KartData = _roster.kart_for_slot(_config, slot, player)
 		kart.kart_data = RaceConfigBuilder.apply_driver_mods(base_kart, driver)
 		kart.set_driver_data(driver)
-		(kart.get_node("KartAudio") as KartAudio).set_player_audio(is_player)
+		var kart_audio: KartAudio = kart.get_node("KartAudio") as KartAudio
+		if is_player:
+			var is_primary: bool = _player_karts.is_empty()
+			kart_audio.set_local_player_mix(1.0 if is_primary else KartAudio.SECONDARY_PLAYER_GAIN, is_primary)
+		else:
+			kart_audio.set_player_audio(false)
 		_karts_root.add_child(kart)
 		kart.global_transform = grid[slot]
 		kart.reset_motion_arcade()
 		if is_player:
-			kart.set_input_provider(_make_player_provider(kart))
-			_player_kart = kart
+			kart.set_input_provider(_make_player_provider(kart, player))
+			_player_indices[kart.get_instance_id()] = _player_karts.size()
+			_player_karts.append(kart)
+			if _player_kart == null:
+				_player_kart = kart
 		else:
 			_spawn_ai_kart(kart, race_rng, ai_index, ai_count)
 			ai_index += 1
@@ -221,18 +233,8 @@ func _spawn_karts() -> void:
 		_respawn_system.register_kart(kart, _get_respawn_transform)
 	_ai_context.player_kart = _player_kart
 
-func _load_driver_roster() -> void:
-	_drivers.clear()
-	for resource: Resource in ResourceScanner.scan_tres(DRIVER_DIRECTORY):
-		if resource is DriverData:
-			_drivers.append(resource as DriverData)
-
-func _driver_for_slot(slot: int, is_player: bool) -> DriverData:
-	if slot < _config.driver_roster.size():
-		return _config.driver_roster[slot]
-	if is_player and _config.player_driver != null:
-		return _config.player_driver
-	return _drivers[slot % _drivers.size()] if not _drivers.is_empty() else _config.player_driver
+func _player_name(player_index: int) -> String:
+	return "PlayerKart" if _config.human_count() == 1 else "PlayerKart%d" % (player_index + 1)
 
 func _make_ai_context() -> AIRaceContext:
 	var context: AIRaceContext = AIRaceContext.new()
@@ -244,8 +246,6 @@ func _make_ai_context() -> AIRaceContext:
 	context.get_countdown_phase_seconds = _countdown.get_phase_seconds
 	return context
 
-## Adds an `AIController` child driven by `RaceConfig.ai_difficulty`, staggering
-## each kart's AI tick by a fraction of the tick period (spec §26).
 func _spawn_ai_kart(kart: KartController, race_rng: RandomNumberGenerator, ai_index: int, ai_count: int) -> void:
 	var controller: AIController = AIController.new()
 	controller.name = "AIController"
@@ -257,13 +257,13 @@ func _spawn_ai_kart(kart: KartController, race_rng: RandomNumberGenerator, ai_in
 	controller.setup(kart, _track, _ai_context, _config.ai_difficulty, kart_rng, phase_offset)
 	_ai_controllers[kart.get_instance_id()] = controller
 
-func _make_player_provider(kart: KartController) -> InputProvider:
+func _make_player_provider(kart: KartController, player: PlayerSlot) -> InputProvider:
 	if _player_provider_factory.is_valid():
 		var candidate: Variant = _player_provider_factory.call(kart, _track.get_racing_line())
 		if candidate is InputProvider:
 			return candidate as InputProvider
 		push_error("RaceManager player provider factory must return InputProvider")
-	return PlayerInputProvider.new()
+	return PlayerInputProvider.new(player.device_id)
 
 func _make_scripted_provider(kart: KartController, speed_ratio: float) -> ScriptedRaceInputProvider:
 	var provider: ScriptedRaceInputProvider = ScriptedRaceInputProvider.new(kart, _track.get_racing_line(), speed_ratio)
@@ -296,10 +296,7 @@ func _on_kart_finished(kart: KartController, finish_time_seconds: float) -> void
 		kart.set_finished(ai_controller.get_input_provider())
 	else:
 		kart.set_finished(_make_scripted_provider(kart, FINISHED_SPEED_RATIO))
-	# With a human participant, only their finish starts the FINISHING wind-down
-	# (spec §14.1). Without one (RaceConfig.player_slot == -1, e.g. the sim),
-	# there is no player finish to wait for, so the first kart to finish does.
-	if (kart == _player_kart or _player_kart == null) and _state == RaceState.RACING:
+	if (_player_indices.has(kart.get_instance_id()) or _player_kart == null) and _state == RaceState.RACING:
 		_transition_to(RaceState.FINISHING)
 
 func _advance_countdown(delta: float) -> void:
@@ -309,9 +306,17 @@ func _advance_countdown(delta: float) -> void:
 		_transition_to(RaceState.RACING)
 
 func _advance_finishing(delta: float) -> void:
+	var finished_humans: int = RaceCompletion.count(_lap_tracker, _player_karts)
+	if finished_humans < _player_karts.size():
+		_finishing_elapsed = 0.0
+		return
 	_finishing_elapsed += delta
 	if _results_delay_remaining < 0.0:
-		if not finishing_complete(_finished_count(), _karts.size(), _finishing_elapsed, tuning.finish_timeout_seconds):
+		if not finishing_complete(
+			RaceCompletion.count(_lap_tracker, _karts), _karts.size(),
+			_finishing_elapsed, tuning.finish_timeout_seconds,
+			finished_humans, _player_karts.size(),
+		):
 			return
 		_results_delay_remaining = tuning.results_delay_seconds
 	_results_delay_remaining = maxf(0.0, _results_delay_remaining - delta)
@@ -329,13 +334,6 @@ func _finalize_results() -> void:
 	modes.finalize(_final_entries)
 	_transition_to(RaceState.RESULTS)
 	_results_screen.show_results(_final_entries, self)
-
-func _finished_count() -> int:
-	var count: int = 0
-	for kart: KartController in _karts:
-		if _lap_tracker.is_finished(kart):
-			count += 1
-	return count
 
 func _get_respawn_transform(kart: KartController) -> Transform3D:
 	return RespawnSystem.resolve_respawn_transform(kart, _lap_tracker, _track.get_racing_line(), _karts)
@@ -371,6 +369,7 @@ func _set_race_systems_active(active: bool) -> void:
 	_item_manager.set_physics_process(active and _config.items_enabled)
 
 func _clear_runtime() -> void:
+	_split_screen.clear_views()
 	_final_entries.clear()
 	_finishing_elapsed = 0.0
 	_results_delay_remaining = -1.0
@@ -383,6 +382,8 @@ func _clear_runtime() -> void:
 		if is_instance_valid(kart):
 			kart.free()
 	_karts.clear()
+	_player_karts.clear()
+	_player_indices.clear()
 	_ai_controllers.clear()
 	_player_kart = null
 	if is_instance_valid(_track):

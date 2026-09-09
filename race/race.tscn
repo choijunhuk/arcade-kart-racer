@@ -1,4 +1,4 @@
-[gd_scene load_steps=18 format=3]
+[gd_scene load_steps=19 format=3]
 
 [ext_resource type="Script" path="res://race/race_manager.gd" id="1_manager"]
 [ext_resource type="Script" path="res://race/lap_tracker.gd" id="2_laps"]
@@ -18,6 +18,7 @@
 [ext_resource type="PackedScene" path="res://effects/speed_lines.tscn" id="16_speed_lines"]
 
 [ext_resource type="Script" path="res://audio/race_audio.gd" id="17_audio"]
+[ext_resource type="Script" path="res://race/split_screen.gd" id="18_split"]
 
 [node name="RaceScene" type="Node3D"]
 script = ExtResource("1_manager")
@@ -60,6 +61,16 @@ current = true
 [node name="SpeedLines" parent="." instance=ExtResource("16_speed_lines")]
 
 [node name="HUD" parent="." instance=ExtResource("9_hud")]
+
+[node name="SplitScreen" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("18_split")
 
 [node name="PauseMenu" parent="." instance=ExtResource("10_pause")]
 

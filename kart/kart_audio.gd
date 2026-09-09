@@ -9,6 +9,7 @@ const SQUEAL_THRESHOLD: float = 0.02
 const IMPACT_COOLDOWN: float = 0.15
 const HIT_IDS: Array[StringName] = [&"impact_kart", &"hit_spin", &"hit_tumble", &"hit_squash"]
 const TIER_IDS: Array[StringName] = [&"drift_tier_1", &"drift_tier_2", &"drift_tier_3"]
+const SECONDARY_PLAYER_GAIN: float = 0.45
 
 @export var player_audio: bool = false
 
@@ -16,6 +17,8 @@ var _kart: KartController
 var _engine: AudioVoice
 var _squeal: AudioVoice
 var _impact_remaining: float = 0.0
+var _local_player_gain: float = 1.0
+var _controls_engine_filter: bool = false
 
 
 func _ready() -> void:
@@ -36,27 +39,37 @@ func _process(delta: float) -> void:
 	_impact_remaining = maxf(0.0, _impact_remaining - delta)
 	_engine = _loop(_engine, &"engine", AudioManagerService.PRIORITY_ENGINE, &"Engine")
 	if _owns(_engine, &"engine"):
-		_engine.update(1.0, engine_pitch(_kart.get_engine_pitch_ratio(), _kart.is_boosting()), _kart.global_position)
+		_engine.update(_local_player_gain, engine_pitch(_kart.get_engine_pitch_ratio(), _kart.is_boosting()), _kart.global_position)
 	var squeal: float = _kart.get_drift_squeal_ratio() if _kart.is_grounded() else 0.0
 	if squeal > SQUEAL_THRESHOLD:
 		_squeal = _loop(_squeal, &"drift_squeal", AudioManagerService.PRIORITY_SQUEAL, &"SFX")
 		if _owns(_squeal, &"drift_squeal"):
-			_squeal.update(squeal, 1.0, _kart.global_position)
+			_squeal.update(squeal * _local_player_gain, 1.0, _kart.global_position)
 	elif _owns(_squeal, &"drift_squeal"):
 		_squeal.stop()
-	if player_audio:
+	if _controls_engine_filter:
 		AudioManager.set_engine_offroad(_kart.get_terrain_id() != &"asphalt")
 
 
 ## Selects non-positional playback for the local player, including injected providers.
 func set_player_audio(enabled: bool) -> void:
+	set_local_player_mix(1.0 if enabled else 0.0, enabled)
+
+
+## Uses flat audio for a local human and attenuates non-primary engines.
+func set_local_player_mix(gain: float, controls_engine_filter: bool) -> void:
+	var enabled: bool = gain > 0.0
 	if enabled == player_audio:
+		_local_player_gain = clampf(gain, 0.0, 1.0) if enabled else 1.0
+		_controls_engine_filter = controls_engine_filter and enabled
 		return
 	if is_instance_valid(_kart):
 		AudioManager.pool.release_owner(_kart.get_instance_id())
-	if player_audio:
+	if _controls_engine_filter:
 		AudioManager.set_engine_offroad(false)
 	player_audio = enabled
+	_local_player_gain = clampf(gain, 0.0, 1.0) if enabled else 1.0
+	_controls_engine_filter = controls_engine_filter and enabled
 	_engine = null
 	_squeal = null
 

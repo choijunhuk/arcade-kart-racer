@@ -12,6 +12,8 @@ extends CanvasLayer
 
 var _manager: RaceManager
 var _pause_on_focus_loss: bool = true
+var _player_device_ids: PackedInt32Array = PackedInt32Array([PlayerInputProvider.DEVICE_ANY])
+var _pause_owner_device_id: int = PlayerSlot.KEYBOARD_DEVICE_ID
 
 
 func _ready() -> void:
@@ -32,22 +34,53 @@ func _ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if _manager == null or not event.is_action_pressed(&"pause"):
 		return
+	var device_id: int = _event_device_id(event)
+	if not _player_device_ids.has(PlayerInputProvider.DEVICE_ANY) and not _player_device_ids.has(device_id):
+		return
 	if _manager.get_state() == RaceState.PAUSED:
+		if _pause_owner_device_id != PlayerInputProvider.DEVICE_ANY and device_id != _pause_owner_device_id:
+			return
 		_manager.resume_race()
 	else:
+		_pause_owner_device_id = device_id
 		_manager.pause_race()
 	get_viewport().set_input_as_handled()
 
 
+func _input(event: InputEvent) -> void:
+	if _manager == null or _manager.get_state() != RaceState.PAUSED:
+		return
+	if not (event is InputEventKey or event is InputEventJoypadButton or event is InputEventJoypadMotion):
+		return # Mouse support remains shared while device navigation stays owned.
+	if _pause_owner_device_id == PlayerInputProvider.DEVICE_ANY or _event_device_id(event) == _pause_owner_device_id:
+		return
+	for action: StringName in [&"ui_accept", &"ui_cancel", &"ui_left", &"ui_right", &"ui_up", &"ui_down", &"pause"]:
+		if event.is_action(action):
+			get_viewport().set_input_as_handled()
+			return
+
+
 ## Attaches the owning race manager so pause can be toggled before the
 ## overlay is first shown.
-func bind(manager: RaceManager, pause_on_focus_loss: bool = true) -> void:
+func bind(
+	manager: RaceManager, pause_on_focus_loss: bool = true,
+	player_device_ids: PackedInt32Array = PackedInt32Array([PlayerInputProvider.DEVICE_ANY]),
+) -> void:
 	_manager = manager
 	_pause_on_focus_loss = pause_on_focus_loss
+	_player_device_ids = player_device_ids
+	if not _player_device_ids.is_empty():
+		_pause_owner_device_id = _player_device_ids[0]
+
+
+## Returns the local device whose pause event owns the active menu.
+func get_pause_owner_device_id() -> int:
+	return _pause_owner_device_id
 
 
 func _on_focus_exited() -> void:
 	if _pause_on_focus_loss and is_instance_valid(_manager):
+		_pause_owner_device_id = _player_device_ids[0] if not _player_device_ids.is_empty() else PlayerSlot.KEYBOARD_DEVICE_ID
 		_manager.pause_race()
 
 
@@ -99,3 +132,7 @@ func _wire_focus() -> void:
 func _on_menu_pressed() -> void:
 	if _manager != null:
 		_manager.back_to_menu()
+
+
+func _event_device_id(event: InputEvent) -> int:
+	return PlayerSlot.KEYBOARD_DEVICE_ID if event is InputEventKey else event.device

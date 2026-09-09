@@ -106,6 +106,7 @@ func _connect_controls() -> void:
 	# TODO(phase-13): Route enabled vibration to event-owned controller haptics.
 	_connect_toggle($Panel/VBox/Tabs/Accessibility/SpeedLinesToggle, &"accessibility", &"speed_lines")
 	_connect_toggle($Panel/VBox/Tabs/Accessibility/TierIconsToggle, &"accessibility", &"drift_tier_icons")
+	_connect_toggle($Panel/VBox/Tabs/Accessibility/MultiplayerMinimapToggle, &"accessibility", &"multiplayer_minimap_all")
 	_connect_toggle($Panel/VBox/Tabs/Gameplay/SpeedometerToggle, &"gameplay", &"speedometer")
 	($Panel/VBox/Tabs/Video/ResolutionOption as OptionButton).item_selected.connect(_on_resolution_selected)
 	($Panel/VBox/Tabs/Video/ParticleQualityOption as OptionButton).item_selected.connect(_on_particle_quality_selected)
@@ -136,6 +137,7 @@ func _sync_values() -> void:
 	_set_toggle($Panel/VBox/Tabs/Controls/Scroll/Rows/VibrationToggle, &"controls", &"vibration", true)
 	_set_toggle($Panel/VBox/Tabs/Accessibility/SpeedLinesToggle, &"accessibility", &"speed_lines", true)
 	_set_toggle($Panel/VBox/Tabs/Accessibility/TierIconsToggle, &"accessibility", &"drift_tier_icons", true)
+	_set_toggle($Panel/VBox/Tabs/Accessibility/MultiplayerMinimapToggle, &"accessibility", &"multiplayer_minimap_all", false)
 	_set_toggle($Panel/VBox/Tabs/Gameplay/SpeedometerToggle, &"gameplay", &"speedometer", true)
 	var resolution_value: Variant = SettingsManager.get_setting(&"video", &"resolution", Vector2i(1600, 900))
 	var resolution: Vector2i = resolution_value if resolution_value is Vector2i else Vector2i(1600, 900)

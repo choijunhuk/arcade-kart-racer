@@ -1,8 +1,8 @@
-# Turbo Circuit architecture — Phase 12
+# Turbo Circuit architecture — Phase 14
 
 This is the current-code contract for the expanded four-track game. Historical decisions and
 verification results live in `DEVLOG.md`; the product specification remains
-`KART_RACING_DEV_PROMPT.md`. Phase 12 adds content, Grand Prix and deterministic single-player lap ghosts.
+`KART_RACING_DEV_PROMPT.md`. Phase 14 adds device-owned local multiplayer over one shared race world.
 
 ## Boundaries and invariants
 
@@ -74,6 +74,7 @@ logs, not hidden by the soak gate.
 MainMenu -> ModeSelect -> DriverSelect -> KartSelect -> TrackSelect
   -> DifficultySelect -> RaceConfigBuilder -> pending_race_config -> race.tscn
   -> ResultsScreen -> restart / TrackSelect / MainMenu
+ModeSelect -> LocalLobby [2-4 device-owned panels] -> local RaceConfig -> race.tscn
 Race PauseMenu -> embedded SettingsMenu -> PauseMenu
 ```
 
@@ -89,6 +90,10 @@ stats to deep KartData duplicates, clamped to ±5%. Eight drivers, six karts (tw
 difficulties are live. Kart cards wrap in a three-column scrolling grid. The
 difficulty screen exposes items on/off; time trial forces one human and items off.
 Grand Prix skips individual track selection and uses the ordered four-track cup.
+Local Multiplayer enters `local_lobby.tscn`: keyboard is device -1/P1 by default,
+joypads join by device index, and every panel owns a driver/kart cursor plus ready
+state without using the viewport-global GUI focus owner. Two or more ready players
+start an eight-kart Ridgeline race; AI count is the field size minus human slots.
 
 `RaceHud` binds the player, lap/position trackers, item manager, racing line and
 roster. It owns rank/lap, countdown, wrong-way/threat banners, roulette/cooldown,
@@ -99,10 +104,13 @@ item panel starts below the top-right DebugOverlay.
 
 `ResultsScreen` builds rank-sorted driver/kart/total/best-lap/new-record rows and
 focuses Restart. Stable `RaceResults.Entry.kart_name` identifies the scene node;
-`kart_display_name` and `driver_name` are presentation fields. `PauseMenu` runs
+`kart_display_name` and `driver_name` are presentation fields. Every human row is
+highlighted and retains P1-P4 identity. `PauseMenu` runs
 ALWAYS while gameplay is paused, embeds Settings without changing scenes, and
 pauses local player races on the owning Window's `focus_exited` signal. Returning
-focus does not resume automatically. All-AI observer/profiling races keep running.
+focus does not resume automatically. Any joined device can pause the shared tree;
+navigation and resume remain owned by that device. All-AI observer/profiling races
+keep running.
 
 ## Race composition and state
 
@@ -112,8 +120,9 @@ race/race.tscn [RaceManager, Node3D]
 ├── LapTracker / PositionTracker / Countdown / RaceResults
 ├── RespawnSystem / KartCollisionResolver / ItemManager
 ├── RaceAudio / FeedbackEffects / HitStop / ParticleBudgetController
-├── Karts [PlayerKart + seven AI by default]
-├── RaceCamera / SpeedLines / HUD
+├── Karts [1-4 PlayerKarts + automatic AI remainder]
+├── SplitScreen [shared-world SubViewport per player]
+├── Observer RaceCamera / SpeedLines / HUD [all-AI only]
 └── PauseMenu [embedded SettingsMenu] / ResultsScreen
 ```
 
@@ -123,9 +132,11 @@ COUNTDOWN -> RACING emits `race_started`. Restart explicitly rebuilds from LOADI
 clearing dynamic karts/track, tracker registrations, items, countdown, rows and
 result state while preserving the manager/UI references.
 
-`RaceConfig` contains track, laps, kart_count, player_slot, difficulty, player kart
-and driver, items_enabled and seed. `player_slot = -1` is all AI; kart_count accepts
-1–12. `race_mode` selects single race, GP or time trial. Optional `kart_roster` and
+`RaceConfig.players` is the canonical one-to-four `PlayerSlot` roster: device id,
+driver id, kart id and grid slot. `human_count()` and `ai_count()` derive composition;
+legacy `player_slot` configs normalize into one keyboard slot, while `player_slot =
+-1` remains all AI. Kart count accepts 1–12. `race_mode` selects single race, GP,
+time trial or local multiplayer. Optional `kart_roster` and
 `driver_roster` supply stable per-grid-slot identities for a GP or mixed simulations;
 empty retains the selected player's kart class for the whole field. Driver mods
 are applied after choosing the slot's base kart. A player-provider factory remains
@@ -141,14 +152,16 @@ FINISHING timeout, results delay and ranking frequency.
 after all required gates. It owns cumulative race time, per-kart lap/checkpoint
 state, wrong-way dwell and finished times. `RaceResults` derives individual lap
 times from cumulative lap events, records item/hit counts, finalizes rank rows and
-persists only the human player's bests.
+persists every human's best to separate P1-P4 save profiles. P1 mirrors the legacy
+top-level best dictionaries consumed by the existing track menu.
 
 `PositionTracker` computes lap progress within the valid checkpoint window and
 uses active shortcut progress when applicable. It sorts at the configured 5 Hz
 using elapsed game seconds, including scaled simulations; hysteresis is 0.5 m.
-Finished karts rank by finish time. The player's finish starts FINISHING; with no
-player, the first AI finish does. All finished or the 15-second timeout closes the
-field, then the results delay runs. DNFs remain explicit negative result times.
+Finished karts rank by finish time. The first human finish starts FINISHING; with no
+humans, the first AI finish does. All karts finishing or the timeout measured from
+that first eligible finish closes the field, giving remaining humans the full
+margin. The results delay then runs; DNFs remain explicit negative result times.
 
 `RespawnSystem` drives fade/teleport/frozen phases from delta timers. It receives a
 callable resolving the last checkpoint's RespawnPoint, facing the racing line and
@@ -370,6 +383,14 @@ ray-based clipping, 0.15-second look-back, speed-squared FOV and trauma-squared
 shake. Settings scale shake/FOV to zero without disabling basic tracking. CameraFov
 and CameraShake are independently testable value models.
 
+`SplitScreen` creates full, horizontal-half, or quadrant layouts for one through
+four humans. Every SubViewport shares the race `World3D` but owns its current
+RaceCamera, HUD and SpeedLines, so cameras never compete for one viewport slot.
+Three-dimensional render scale is 1.0/0.85/0.70 for one/two/three-or-four views,
+multiplied by the user video scale; HUD canvases remain full resolution. The minimap
+is P1-only unless `accessibility.multiplayer_minimap_all` is enabled. Shared visual
+LOD selects the nearest player camera so an object needed by any view stays detailed.
+
 KartVisuals owns body tilt, wheel spin/steer, suspension, hit flash and trick/hit
 transforms. SkidStripBuffer is fixed-capacity; SkidMark emits an indexed world-space
 strip while remaining parented for lifecycle. Five GPU emitters per kart yield 40
@@ -389,7 +410,9 @@ RaceAudio binds player/laps and EventBus; KartAudio reads its owner; UiAudio att
 to menu/pause/results controls. SfxLibrary maps ids to streams/volume/pitch variance.
 41 SFX and three BGM tracks are deterministic original CC0 PCM placeholders; final
 asset replacement and listening/mix work are Phase 13. Engine low-pass uses the
-local player's terrain and affects the shared Engine bus. Headless skips device
+primary player's terrain and affects the shared Engine bus. Local human engines are
+2D voices; P1 uses full gain and other players use a 0.45 shared-mix gain. Countdown,
+race and UI adapters remain single instances. Headless skips device
 `.play()` only, preserving voice allocation, gain, pitch and lifetime logic.
 
 ## Verification and release evidence
@@ -410,14 +433,15 @@ local player's terrain and affects the shared Engine bus. Headless skips device
 - `scenes/test/drive_snapshot.tscn`: seven sandbox track indices; scene_snapshot
   captures an arbitrary scene. Windowed commands must run in the background with
   redirected logs when called from the restricted agent environment.
-- `tools/perf_check.sh 8 30` / `12 30`: real frame intervals after warmup, FPS,
+- `tools/perf_check.sh 8 30` / `12 30`, or `perf_probe.tscn -- --players N
+  --karts 8 --duration 30`: real frame intervals after warmup, FPS,
   worst frame, particle count and renderer. The warmup-boundary frame is excluded;
   frames above 33 ms and process/physics/node/draw-call monitors at the worst
   frame are retained for spike diagnosis. Headless cannot establish GPU timing,
   native focus/fullscreen delivery, PNG appearance or subjective driving/audio feel.
 
-Historical Phase 12 outcomes remain in DEVLOG. Current Phase 13 outcomes follow
-below and in its new report; no push, tag or delegated review is performed.
+Historical outcomes and the current Phase 14 headless/native acceptance split live
+in DEVLOG; no push, tag or delegated review is performed.
 
 ## Phase 13 assets and presentation
 

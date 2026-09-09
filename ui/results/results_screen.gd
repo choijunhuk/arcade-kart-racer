@@ -62,6 +62,8 @@ func _create_row(entry: RaceResults.Entry) -> HBoxContainer:
 	var row: HBoxContainer = HBoxContainer.new()
 	row.name = "Row%d" % entry.rank
 	row.add_theme_constant_override("separation", ROW_SEPARATION)
+	if entry.is_human:
+		row.modulate = Color(1.0, 0.88, 0.42, 1.0)
 	_add_cell(row, &"Position", str(entry.rank), POSITION_WIDTH)
 	_add_cell(row, &"Driver", entry.driver_name, NAME_WIDTH)
 	var kart_name: String = entry.kart_display_name if not entry.kart_display_name.is_empty() else entry.kart_name
