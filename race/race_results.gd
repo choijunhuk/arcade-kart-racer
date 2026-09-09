@@ -157,3 +157,10 @@ func _persist_player_results() -> void:
 		var player_id: int = entry.kart.get_instance_id()
 		var best_lap_ms: int = roundi(float(_best_laps.get(player_id, -1.0)) * 1000.0)
 		_save_manager.record_player_race_result(entry.player_number - 1, _track_id, best_lap_ms, entry.rank)
+
+## Releases a departed kart's records while preserving survivors' original grid slots.
+func unregister_kart(kart: KartController) -> void:
+	var id: int = kart.get_instance_id()
+	_player_karts.erase(kart)
+	for records: Dictionary in [_registered_ids, _grid_slots, _player_indices, _last_lap_total, _best_laps, _hit_counts, _item_counts]:
+		records.erase(id)

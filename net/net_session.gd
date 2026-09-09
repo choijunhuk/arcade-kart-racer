@@ -22,6 +22,7 @@ var ai_count: int = 6
 var laps: int = 1
 var seed: int = 15
 var _loaded: Array[int] = []
+var _pending_departures: Array[int] = []
 var _clock_ticks: int = 0
 var _closing: bool = false
 
@@ -83,6 +84,9 @@ func start_race() -> bool:
 ## Registers a loaded race and waits until all peers have matching scene nodes.
 func bind_race(value: NetRace) -> void:
 	race = value
+	for id: int in _pending_departures:
+		_player_left(id)
+	_pending_departures.clear()
 	if multiplayer.is_server():
 		_mark_loaded(SERVER_ID)
 	else:
@@ -121,6 +125,8 @@ func _physics_process(_delta: float) -> void:
 
 func _deliver(method: StringName, target: int, args: Array) -> void:
 	if peer != null and peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED:
+		if target != 0 and not multiplayer.get_peers().has(target):
+			return
 		rpc_id.callv([target, method] + args)
 
 func _new_player(id: int) -> Dictionary:
@@ -241,16 +247,40 @@ func _pong(sent: float, server: float) -> void:
 	clock.observe(sent, server, now())
 
 func _peer_disconnected(id: int) -> void:
-	if _closing or not multiplayer.is_server():
+	if _closing:
+		return
+	if id == SERVER_ID:
+		_server_disconnected()
+		return
+	if not multiplayer.is_server():
 		return
 	if automated and race != null and race.manager.get_state() == RaceState.RESULTS:
 		return # Test peers may depart after the results/metrics handshake.
 	if started:
-		send(&"_session_ended", 0, ["A player disconnected."], true)
-		_session_ended("A player disconnected.")
+		send(&"_player_left", 0, [id], true)
+		_player_left(id)
+	else:
+		players = players.filter(func(row: Dictionary) -> bool: return int(row["peer"]) != id)
+		_broadcast_lobby()
+
+@rpc("authority", "call_remote", "reliable")
+func _player_left(id: int) -> void:
+	if race == null:
+		if not _pending_departures.has(id):
+			_pending_departures.append(id)
 		return
-	players = players.filter(func(row: Dictionary) -> bool: return int(row["peer"]) != id)
-	_broadcast_lobby()
+	for index: int in range(players.size()):
+		if int(players[index]["peer"]) != id:
+			continue
+		if race != null:
+			race.remove_player(index)
+		players.remove_at(index)
+		_loaded.erase(id)
+		lobby_changed.emit()
+		if multiplayer.is_server() and not running and race != null and _loaded.size() == players.size():
+			send(&"_begin_race", 0, [], true)
+			_begin_race()
+		return
 
 func _connection_failed() -> void:
 	_session_ended("Could not connect to host.")

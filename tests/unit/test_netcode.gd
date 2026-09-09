@@ -197,3 +197,31 @@ func test_replica_rejects_external_hits_respawns_and_boosts() -> void:
 	_kart.teleport_for_respawn(Transform3D(Basis.IDENTITY, Vector3(100, 0, 0)))
 	_kart.request_boost(_kart.tuning.boost_pad_boost, &"boost_pad")
 	assert_eq(_kart.capture_state(), before)
+
+func test_state_codec_fixed_size_and_exact_reader_consumption() -> void:
+	for active: bool in [false, true]:
+		if active:
+			_kart.request_boost(_kart.tuning.boost_pad_boost, &"boost_pad")
+		var buffer: StreamPeerBuffer = StreamPeerBuffer.new()
+		NetStateCodec.write(buffer, _kart.capture_state())
+		assert_eq(buffer.get_position(), NetStateCodec.byte_size())
+		buffer.seek(0)
+		var decoded: Dictionary = NetStateCodec.read(buffer)
+		assert_eq(buffer.get_position(), NetStateCodec.byte_size())
+		assert_eq(buffer.get_available_bytes(), 0)
+		var rewritten: StreamPeerBuffer = StreamPeerBuffer.new()
+		NetStateCodec.write(rewritten, decoded)
+		assert_eq(rewritten.data_array, buffer.data_array)
+
+func test_respawn_snapshot_applies_teleport_without_replaying_falling_inputs() -> void:
+	_kart.begin_respawn()
+	_kart.teleport_for_respawn(Transform3D(Basis.IDENTITY, Vector3(0.0, 0.9, -20.0)))
+	var state: Dictionary = _kart.capture_state()
+	_kart.position = Vector3(41.19, -15.62, -27.70)
+	var prediction: NetPrediction = NetPrediction.new()
+	prediction.record(_frame(5931))
+	prediction.reconcile(_kart, state, 5930)
+	assert_eq(_kart.global_position, Vector3(0.0, 0.9, -20.0))
+	assert_eq(_kart.get_state(), KartState.RESPAWNING)
+	assert_true(prediction.frames.is_empty())
+	assert_eq(prediction.visual_offset, Vector3.ZERO)

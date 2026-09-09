@@ -14,6 +14,7 @@ var _start_ticks: Array[int] = []
 var _source: InputProvider
 var _input_tick: int = 0
 var _local: int = 0
+var _local_grid_slot: int = 0
 var _render_queue: Array[RaceSnapshot] = []
 var _has_render_sample: bool = false
 var _pending: RaceSnapshot
@@ -32,6 +33,7 @@ func configure(owner_race: RaceManager, owner_session: NetSession) -> void:
 	_state = NetRaceState.new(manager)
 	_karts = manager.get_karts()
 	_local = session.local_slot()
+	_local_grid_slot = _local
 	process_physics_priority = NetTuning.RACE_PROCESS_PRIORITY
 	for kart: KartController in _karts:
 		kart.set_physics_process(false)
@@ -69,6 +71,8 @@ func receive_input(sender: int, data: Dictionary) -> void:
 	var frame: InputFrame = InputFrame.from_dict(data)
 	for index: int in range(session.players.size()):
 		if int(session.players[index]["peer"]) == sender:
+			if bool(_karts[index].get("_finished")):
+				return
 			if _buffers[index].insert(frame) and _start_ticks[index] < 0:
 				_start_ticks[index] = tick + NetTuning.INPUT_DELAY
 			return
@@ -83,18 +87,19 @@ func _physics_process(_delta: float) -> void:
 		_client_step()
 
 func _server_step() -> void:
-	var frame: InputFrame = _next_input()
-	receive_input(NetSession.SERVER_ID, frame.to_dict())
+	if not bool(_karts[_local].get("_finished")):
+		var frame: InputFrame = _next_input()
+		receive_input(NetSession.SERVER_ID, frame.to_dict())
 	var acknowledgements: Array[int] = []
 	for index: int in range(_karts.size()):
 		var input: InputFrame
-		if index < session.players.size():
+		if index < session.players.size() and not bool(_karts[index].get("_finished")):
 			var target: int = tick - _start_ticks[index] + 1
 			input = _buffers[index].consume(target) if _start_ticks[index] >= 0 and target > 0 else InputFrame.zero()
 			acknowledgements.append(_buffers[index].last_processed_tick)
 		else:
 			input = _karts[index].input_provider.get_frame()
-			acknowledgements.append(0)
+			acknowledgements.append(_buffers[index].last_processed_tick if index < session.players.size() else 0)
 		_karts[index].step_input(input, NetTuning.STEP)
 	if tick % NetTuning.SNAPSHOT_INTERVAL == 0:
 		session.send(&"_snapshot", 0, [_state.capture(tick, acknowledgements).pack()], false)
@@ -106,8 +111,13 @@ func _client_step() -> void:
 	if _pending != null:
 		_apply_snapshot(_pending)
 		_pending = null
+	if bool(_karts[_local].get("_finished")):
+		return
 	var frame: InputFrame = _next_input()
 	session.send(&"_receive_input", NetSession.SERVER_ID, [frame.to_dict()], false)
+	if NetPrediction.requires_server_pose(_karts[_local].get_state()):
+		_update_countdown()
+		return
 	prediction.record(frame)
 	_karts[_local].step_input(frame, NetTuning.STEP)
 	_predicted_positions[frame.tick] = _karts[_local].global_position
@@ -139,7 +149,10 @@ func _apply_snapshot(snapshot: RaceSnapshot) -> void:
 		var position: Vector3 = Vector3(values[0], values[1], values[2])
 		if index == _local:
 			var ack: int = int(row["ack"])
-			if _predicted_positions.has(ack):
+			var server_state: int = int(state["components"]["."]["state"])
+			if NetPrediction.requires_server_pose(server_state) or NetPrediction.requires_server_pose(_karts[index].get_state()):
+				_predicted_positions.clear()
+			elif _predicted_positions.has(ack):
 				_measure(index, _predicted_positions[ack].distance_to(position))
 			prediction.reconcile(_karts[index], state, ack)
 		else:
@@ -167,7 +180,7 @@ func _measure(index: int, error: float) -> void:
 
 func _receive_event(kind: String, args: Array) -> void:
 	if kind == "results":
-		manager.apply_network_results(NetResults.unpack(args, _local))
+		manager.apply_network_results(NetResults.unpack(args, _local_grid_slot))
 
 func _update_countdown() -> void:
 	if not session.clock.initialized or _go_server_time <= 0.0 or manager.get_state() != RaceState.COUNTDOWN:
@@ -190,3 +203,17 @@ func _advance_render_samples(render_time: float) -> void:
 			var pose: Transform3D = Transform3D(Basis(Vector3.UP, float(state["rotation"][1])), Vector3(pos[0], pos[1], pos[2]))
 			_interpolators[index].push(snapshot.server_seconds, pose)
 		_has_render_sample = true
+
+## Removes the departed peer's transport slot while retaining result grid identity.
+func remove_player(index: int) -> void:
+	var kart: KartController = _karts[index]
+	manager.remove_network_player(kart)
+	_karts.remove_at(index)
+	_buffers.remove_at(index)
+	_start_ticks.remove_at(index)
+	_interpolators.remove_at(index)
+	if index < _local:
+		_local -= 1
+	_pending = null
+	_render_queue.clear()
+	_has_render_sample = false

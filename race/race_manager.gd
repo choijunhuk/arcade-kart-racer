@@ -78,26 +78,20 @@ func _physics_process(delta: float) -> void:
 func configure(config: RaceConfig, player_provider_factory: Callable = Callable()) -> void:
 	_config = config
 	_player_provider_factory = player_provider_factory
-## Returns the current RaceState value.
 func get_state() -> int:
 	return _state
-## Returns registered karts in grid-slot order.
 func get_karts() -> Array[KartController]:
 	return _karts.duplicate()
-## Returns local human karts in P1-P4 order.
 func get_human_karts() -> Array[KartController]:
 	return _player_karts.duplicate()
-## Returns finalized result entries in rank order.
 func get_results() -> Array[RaceResults.Entry]:
 	return _final_entries.duplicate()
-## Restarts the same config without replacing this manager instance.
 func restart() -> void:
 	if GameState.is_networked:
 		back_to_menu()
 		return
 	get_tree().paused = false
 	_begin_loading(true)
-## Pauses the SceneTree only from COUNTDOWN or RACING.
 func pause_race() -> void:
 	if GameState.is_networked:
 		return
@@ -106,30 +100,25 @@ func pause_race() -> void:
 	_paused_from_state = _state
 	_transition_to(RaceState.PAUSED)
 	get_tree().paused = true
-## Restores the exact state from which the race was paused.
 func resume_race() -> void:
 	if _state != RaceState.PAUSED:
 		return
 	get_tree().paused = false
 	_transition_to(_paused_from_state)
-## Leaves the race through GameState's validated scene-change helper.
 func back_to_menu() -> void:
 	if GameState.net_session != null:
 		GameState.net_session.close()
 	get_tree().paused = false
 	GameState.change_scene("res://scenes/main.tscn")
-## Leaves results for the data-driven track selection screen.
 func back_to_track_select() -> void:
 	if GameState.is_networked:
 		back_to_menu()
 		return
 	get_tree().paused = false
 	GameState.change_scene("res://ui/menus/track_select.tscn")
-## Returns whether a requested state edge belongs to the Phase 5 table.
 static func can_transition(from_state: int, to_state: int) -> bool:
 	var allowed: Array = LEGAL_TRANSITIONS.get(from_state, []) as Array
 	return allowed.has(to_state)
-## Waits for all humans before applying the AI finish margin.
 static func finishing_complete(
 	finished_count: int, kart_count: int, elapsed: float, timeout: float,
 	finished_human_count: int = 1, human_count: int = 1,
@@ -213,7 +202,7 @@ func _spawn_karts() -> void:
 		kart.set_driver_data(driver)
 		var kart_audio: KartAudio = kart.get_node("KartAudio") as KartAudio
 		if is_player and (GameState.net_session == null or slot == GameState.net_session.local_slot()):
-			var is_primary: bool = _player_karts.is_empty()
+			var is_primary: bool = slot == GameState.net_session.local_slot() if GameState.net_session != null else _player_karts.is_empty()
 			kart_audio.set_local_player_mix(1.0 if is_primary else KartAudio.SECONDARY_PLAYER_GAIN, is_primary)
 		else:
 			kart_audio.set_player_audio(false)
@@ -390,10 +379,21 @@ func apply_network_state(value: int) -> void:
 	if previous == RaceState.COUNTDOWN and value == RaceState.RACING:
 		EventBus.countdown_tick.emit(0)
 		EventBus.race_started.emit()
-## Displays only server-finalized results.
 func apply_network_results(entries: Array[RaceResults.Entry]) -> void:
 	if not network_replica:
 		return
 	_final_entries = entries
 	_force_state(RaceState.RESULTS)
 	_results_screen.show_results(entries, self)
+
+## Drops a departed human without resetting the surviving race services.
+func remove_network_player(kart: KartController) -> void:
+	for service: Node in [_lap_tracker, _position_tracker, _respawn_system, _collision_resolver, _item_manager, _countdown, _race_results]:
+		service.unregister_kart(kart)
+	_karts.erase(kart)
+	_player_karts.erase(kart)
+	_player_indices.erase(kart.get_instance_id())
+	kart.set_input_provider(InputProvider.new())
+	kart.free()
+	if _state == RaceState.RACING and RaceCompletion.count(_lap_tracker, _player_karts) == _player_karts.size():
+		_transition_to(RaceState.FINISHING)

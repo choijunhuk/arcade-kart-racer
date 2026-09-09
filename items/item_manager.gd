@@ -102,6 +102,10 @@ func register_kart(kart: KartController) -> void:
 func unregister_kart(kart: KartController) -> void:
 	if kart == null:
 		return
+	for item: ItemBase in _live_items.duplicate():
+		if item.owner_kart == kart:
+			item.expire()
+	_flush_finished()
 	_karts.erase(kart)
 	_slots.erase(kart.get_instance_id())
 	_cooldowns.erase(kart.get_instance_id())

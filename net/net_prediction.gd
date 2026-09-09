@@ -20,6 +20,11 @@ func reconcile(kart: KartController, state: Dictionary, acknowledged: int) -> vo
 	_last_ack = acknowledged
 	var before: Vector3 = kart.global_position + visual_offset
 	kart.apply_state(state)
+	if requires_server_pose(int(state["components"]["."]["state"])):
+		frames.clear()
+		visual_offset = Vector3.ZERO
+		_remaining = 0.0
+		return
 	while not frames.is_empty() and frames[0].tick <= acknowledged:
 		frames.pop_front()
 	for frame: InputFrame in frames:
@@ -34,3 +39,7 @@ func advance_visual(delta: float) -> Vector3:
 	visual_offset *= next / _remaining if _remaining > 0.0 else 0.0
 	_remaining = next
 	return visual_offset
+
+## Server-owned teleports, freezes and post-finish driving are not locally replayed.
+static func requires_server_pose(kart_state: int) -> bool:
+	return kart_state in [KartState.RESPAWNING, KartState.FROZEN, KartState.FINISHED]
