@@ -149,6 +149,25 @@ func test_save_manager_keeps_separate_best_laps_for_p1_and_p2() -> void:
 	assert_eq(int(save.call("get_player_best_lap_ms", 1, &"test_loop")), 12_000)
 
 
+func test_perf_probe_accepts_named_player_and_kart_counts() -> void:
+	var script: GDScript = load("res://scenes/test/perf_probe.gd") as GDScript
+	assert_true(script.has_method("parse_options"))
+	if not script.has_method("parse_options"):
+		return
+	var options: Dictionary = script.call(
+		"parse_options", PackedStringArray(["--players", "4", "--karts", "8", "--duration", "5"]),
+	) as Dictionary
+	assert_eq(int(options["players"]), 4)
+	assert_eq(int(options["karts"]), 8)
+	assert_almost_eq(float(options["duration"]), 5.0, 0.001)
+
+
+func test_split_screen_render_scale_decreases_for_more_viewports() -> void:
+	assert_almost_eq(SplitScreen.render_scale_for_players(1, 1.0), 1.0, 0.001)
+	assert_almost_eq(SplitScreen.render_scale_for_players(2, 1.0), 0.85, 0.001)
+	assert_almost_eq(SplitScreen.render_scale_for_players(4, 1.0), 0.70, 0.001)
+
+
 func _layout_rects(player_count: int) -> Array:
 	var exists: bool = ResourceLoader.exists(SPLIT_SCREEN_PATH)
 	assert_true(exists, "SplitScreen script must exist")

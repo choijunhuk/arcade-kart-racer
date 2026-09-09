@@ -15,7 +15,7 @@ const HIGH_QUALITY_RATIO: float = 1.0
 
 @export var tuning: FeelTuning = preload("res://data/tuning/feel_default.tres")
 
-var _camera: Camera3D
+var _cameras: Array[Camera3D] = []
 var _registrations: Array[Registration] = []
 
 
@@ -31,7 +31,12 @@ func _exit_tree() -> void:
 
 ## Caches kart/effect references, validates hard caps, and starts LOD updates.
 func configure(karts: Array[KartController], camera: Camera3D) -> void:
-	_camera = camera
+	configure_cameras(karts, [camera])
+
+
+## Applies shared visual LOD from the nearest of all active player cameras.
+func configure_cameras(karts: Array[KartController], cameras: Array[Camera3D]) -> void:
+	_cameras = cameras.duplicate()
 	_registrations.clear()
 	var counts: PackedInt32Array = PackedInt32Array()
 	for kart: KartController in karts:
@@ -50,20 +55,26 @@ func configure(karts: Array[KartController], camera: Camera3D) -> void:
 
 
 func _process(_delta: float) -> void:
-	if _camera == null:
+	if _cameras.is_empty():
 		return
 	for registration: Registration in _registrations:
 		if not is_instance_valid(registration.kart):
 			continue
-		registration.visuals.set_detail_tier(QualityTier.lod(_camera.global_position.distance_to(registration.kart.global_position)))
-		var enabled: bool = ParticleBudget.within_lod_distance(
-			_camera.global_position, registration.kart.global_position,
-			tuning.particle_lod_distance,
-		)
+		var distance: float = _nearest_camera_distance(registration.kart.global_position)
+		registration.visuals.set_detail_tier(QualityTier.lod(distance))
+		var enabled: bool = distance <= tuning.particle_lod_distance
 		if registration.drift_effects != null:
 			registration.drift_effects.set_lod_enabled(enabled)
 		if registration.boost_effects != null:
 			registration.boost_effects.set_lod_enabled(enabled)
+
+
+func _nearest_camera_distance(world_position: Vector3) -> float:
+	var nearest: float = INF
+	for camera: Camera3D in _cameras:
+		if is_instance_valid(camera):
+			nearest = minf(nearest, camera.global_position.distance_to(world_position))
+	return nearest
 
 
 ## Maps the three UI quality steps to presentation density ratios.

@@ -56,6 +56,10 @@ text = "SINGLE RACE"
 layout_mode = 2
 text = "GRAND PRIX"
 
+[node name="LocalMultiplayerButton" type="Button" parent="Panel/VBox"]
+layout_mode = 2
+text = "LOCAL MULTIPLAYER"
+
 [node name="BackButton" type="Button" parent="Panel/VBox"]
 layout_mode = 2
 text = "BACK"

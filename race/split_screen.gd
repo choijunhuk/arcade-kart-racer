@@ -14,7 +14,6 @@ class PlayerView extends RefCounted:
 const CAMERA_SCENE: PackedScene = preload("res://camera/race_camera.tscn")
 const HUD_SCENE: PackedScene = preload("res://ui/hud/hud.tscn")
 const SPEED_LINES_SCENE: PackedScene = preload("res://effects/speed_lines.tscn")
-const MIN_VIEWPORT_SIZE: Vector2i = Vector2i(320, 180)
 const MAX_LOCAL_PLAYERS: int = 4
 const TWO_PLAYER_RENDER_SCALE: float = 0.85
 const QUAD_RENDER_SCALE: float = 0.70
@@ -130,6 +129,7 @@ func _create_view(shared_world: World3D, index: int) -> PlayerView:
 	view.viewport.name = "Viewport"
 	view.viewport.world_3d = shared_world
 	view.viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	view.viewport.scaling_3d_scale = _render_scale
 	view.container.add_child(view.viewport)
 	view.camera = CAMERA_SCENE.instantiate() as RaceCamera
 	view.camera.name = "RaceCamera"
@@ -151,8 +151,3 @@ func _resize_views() -> void:
 		var view: PlayerView = _views[index]
 		view.container.position = rect.position * output
 		view.container.size = rect.size * output
-		var scaled: Vector2 = view.container.size * _render_scale
-		view.viewport.size = Vector2i(
-			maxi(MIN_VIEWPORT_SIZE.x, roundi(scaled.x)),
-			maxi(MIN_VIEWPORT_SIZE.y, roundi(scaled.y)),
-		)
