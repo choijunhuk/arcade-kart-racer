@@ -21,6 +21,17 @@ var automated: bool = false
 var ai_count: int = 6
 var laps: int = 1
 var seed: int = 15
+## Dedicated headless server (spec item 3): occupies no player row/kart.
+## Independent of `automated` ("this is a scripted test harness").
+var dedicated: bool = false
+var max_players: int = NetTuning.MAX_PLAYERS
+## "" keeps the default track; only the dedicated server CLI sets this.
+var track_id: String = ""
+## SHA-256 of the session password ("" = none); plaintext is never stored
+## or logged (spec item 6).
+var password_hash: String = ""
+var _password_attempt_hash: String = ""
+var _input_limiter: NetRateLimiter = NetRateLimiter.new()
 var _loaded: Array[int] = []
 var _pending_departures: Array[int] = []
 var _clock_ticks: int = 0
@@ -34,26 +45,36 @@ func _ready() -> void:
 	multiplayer.connection_failed.connect(_connection_failed)
 	multiplayer.server_disconnected.connect(_server_disconnected)
 
-## Opens a LAN listen server, with no TLS or extra autoload.
-func host(port: int = NetTuning.PORT) -> Error:
+## Opens a listen server, with no TLS or extra autoload. `dedicated` must be
+## set before calling so a headless server never occupies a player row.
+func host(port: int = NetTuning.PORT, max_players_value: int = NetTuning.MAX_PLAYERS) -> Error:
 	peer = ENetMultiplayerPeer.new()
-	var error: Error = peer.create_server(port, NetTuning.MAX_PLAYERS - 1, NetTuning.CHANNEL_COUNT)
+	var error: Error = peer.create_server(port, max_players_value - 1, NetTuning.CHANNEL_COUNT)
 	if error != OK:
 		return error
 	multiplayer.multiplayer_peer = peer
 	GameState.is_networked = true
-	players = [_new_player(SERVER_ID)]
+	max_players = max_players_value
+	players = [] if dedicated else [_new_player(SERVER_ID)]
 	lobby_changed.emit()
 	return OK
 
-## Connects to the supplied LAN address; completion arrives through lobby_changed.
-func join(ip: String, port: int = NetTuning.PORT) -> Error:
+## Connects to the supplied address (LAN or internet host); completion
+## arrives through lobby_changed. `password` is hashed locally, never sent
+## or logged in cleartext (spec item 6).
+func join(ip: String, port: int = NetTuning.PORT, password: String = "") -> Error:
 	peer = ENetMultiplayerPeer.new()
 	var error: Error = peer.create_client(ip, port, NetTuning.CHANNEL_COUNT)
 	if error == OK:
 		multiplayer.multiplayer_peer = peer
 		GameState.is_networked = true
+		_password_attempt_hash = password.sha256_text() if not password.is_empty() else ""
 	return error
+
+## Sets the session password as its hash only (spec item 6: hashed compare,
+## never logged). Pass "" to clear (no password required).
+func set_password(plain: String) -> void:
+	password_hash = plain.sha256_text() if not plain.is_empty() else ""
 
 ## Resolves this process's grid index from the server-owned roster.
 func local_slot() -> int:
@@ -69,17 +90,21 @@ func select(driver: String, kart: String, ready: bool) -> void:
 	else:
 		send(&"_selection", SERVER_ID, [driver, kart, ready], true)
 
-## Starts only with two-to-four ready participants; late joins are refused.
-func start_race() -> bool:
-	if not multiplayer.is_server() or started or players.size() < 2:
+## Starts once every participant is ready (two-to-four for a listen server,
+## one-plus for a dedicated server, since it occupies no row itself); late
+## joins are refused. `force` skips the all-ready check (dedicated server
+## grace-timeout auto-start, spec item 3).
+func start_race(force: bool = false) -> bool:
+	if not multiplayer.is_server() or started or players.size() < (1 if dedicated else 2):
 		return false
-	for row: Dictionary in players:
-		if not bool(row["ready"]):
-			return false
+	if not force:
+		for row: Dictionary in players:
+			if not bool(row["ready"]):
+				return false
 	started = true
 	peer.refuse_new_connections = true
-	send(&"_prepare_race", 0, [players, ai_count, laps, seed], true)
-	_prepare_race(players, ai_count, laps, seed)
+	send(&"_prepare_race", 0, [players, ai_count, laps, seed, track_id], true)
+	_prepare_race(players, ai_count, laps, seed, track_id)
 	return true
 
 ## Repeats preparation only for peers whose scene-load acknowledgement is missing.
@@ -89,7 +114,23 @@ func retry_start() -> void:
 	for row: Dictionary in players:
 		var id: int = int(row["peer"])
 		if id != SERVER_ID and not _loaded.has(id):
-			send(&"_prepare_race", id, [players, ai_count, laps, seed], true)
+			send(&"_prepare_race", id, [players, ai_count, laps, seed, track_id], true)
+
+## Dedicated-server-only: reopens the lobby after RESULTS, keeping already-
+## connected peers on the same ENet session (spec item 3).
+func restart_to_lobby() -> void:
+	if not multiplayer.is_server() or not dedicated:
+		return
+	started = false
+	running = false
+	race = null
+	_preparing = false
+	_loaded.clear()
+	peer.refuse_new_connections = false
+	for row: Dictionary in players:
+		row["ready"] = false
+	send(&"_lobby", 0, [players], true)
+	lobby_changed.emit()
 
 ## Registers a loaded race and waits until all peers have matching scene nodes.
 func bind_race(value: NetRace) -> void:
@@ -145,10 +186,8 @@ func _deliver(method: StringName, target: int, args: Array, reliable: bool) -> v
 		rpc_id.callv([target, method] + args)
 
 func _new_player(id: int) -> Dictionary:
-	var drivers: Array[Resource] = ResourceScanner.scan_tres(LocalLobby.DRIVER_DIRECTORY)
-	var karts: Array[Resource] = ResourceScanner.scan_tres(LocalLobby.KART_DIRECTORY)
-	return {"peer": id, "driver": String((drivers[0] as DriverData).id),
-		"kart": String((karts[0] as KartData).id), "ready": automated}
+	return {"peer": id, "driver": NetContentCatalog.default_driver_id(),
+		"kart": NetContentCatalog.default_kart_id(), "ready": automated}
 
 func _peer_connected(id: int) -> void:
 	if not multiplayer.is_server() or started:
@@ -158,12 +197,13 @@ func _peer_connected(id: int) -> void:
 
 func _connected() -> void:
 	send(&"_ping", SERVER_ID, [now()], true)
+	send(&"_handshake", SERVER_ID, [String(ProjectSettings.get_setting("application/config/version", "")), _password_attempt_hash], true)
 	if automated:
 		var row: Dictionary = _new_player(multiplayer.get_unique_id())
 		select(row["driver"], row["kart"], true)
 
 func _update_player(id: int, driver: String, kart: String, ready: bool) -> void:
-	if started or not _catalog_has(LocalLobby.DRIVER_DIRECTORY, driver) or not _catalog_has(LocalLobby.KART_DIRECTORY, kart):
+	if started or not NetContentCatalog.has(LocalLobby.DRIVER_DIRECTORY, driver) or not NetContentCatalog.has(LocalLobby.KART_DIRECTORY, kart):
 		return
 	for row: Dictionary in players:
 		if int(row["peer"]) == id:
@@ -171,12 +211,6 @@ func _update_player(id: int, driver: String, kart: String, ready: bool) -> void:
 			row["kart"] = kart
 			row["ready"] = ready
 	_broadcast_lobby()
-
-func _catalog_has(directory: String, id: String) -> bool:
-	for resource: Resource in ResourceScanner.scan_tres(directory):
-		if String(resource.get("id")) == id:
-			return true
-	return false
 
 func _broadcast_lobby() -> void:
 	send(&"_lobby", 0, [players], true)
@@ -193,7 +227,7 @@ func _lobby(roster: Array) -> void:
 	lobby_changed.emit()
 
 @rpc("authority", "call_remote", "reliable")
-func _prepare_race(roster: Array, bots: int, lap_count: int, race_seed: int) -> void:
+func _prepare_race(roster: Array, bots: int, lap_count: int, race_seed: int, race_track_id: String = "") -> void:
 	if _preparing or race != null:
 		if not multiplayer.is_server() and race != null:
 			send(&"_race_loaded", SERVER_ID, [], true)
@@ -203,6 +237,7 @@ func _prepare_race(roster: Array, bots: int, lap_count: int, race_seed: int) -> 
 	ai_count = clampi(bots, 0, RaceSnapshot.MAX_KARTS - players.size())
 	laps = clampi(lap_count, 1, 9)
 	seed = race_seed
+	track_id = race_track_id
 	started = true
 	var slots: Array[PlayerSlot] = []
 	for index: int in range(players.size()):
@@ -212,12 +247,31 @@ func _prepare_race(roster: Array, bots: int, lap_count: int, race_seed: int) -> 
 		slot.driver_id = StringName(players[index]["driver"])
 		slot.kart_id = StringName(players[index]["kart"])
 		slots.append(slot)
-	var config: RaceConfig = RaceConfigBuilder.build_local(slots, LocalLobby.DEFAULT_TRACK, LocalLobby.DEFAULT_DIFFICULTY, slots.size() + ai_count)
+	var config: RaceConfig = RaceConfigBuilder.build_local(slots, NetContentCatalog.resolve_track(race_track_id), LocalLobby.DEFAULT_DIFFICULTY, slots.size() + ai_count)
 	config.laps = laps
 	config.seed = seed
 	GameState.pending_race_config = config
 	GameState.current_mode = GameState.Mode.RACE
 	get_tree().change_scene_to_file.call_deferred(RACE_PATH)
+
+## Validates a newly connected peer's version/password (spec item 6);
+## rejection never logs the password itself.
+@rpc("any_peer", "call_remote", "reliable")
+func _handshake(client_version: String, password_attempt: String) -> void:
+	if not multiplayer.is_server():
+		return
+	var id: int = multiplayer.get_remote_sender_id()
+	var expected_version: String = String(ProjectSettings.get_setting("application/config/version", ""))
+	var reason: String = NetHandshake.reject_reason(client_version, expected_version, password_attempt, password_hash)
+	if not reason.is_empty():
+		_reject_peer(id, reason)
+
+func _reject_peer(id: int, message: String) -> void:
+	send(&"_session_ended", id, [message], true)
+	players = players.filter(func(row: Dictionary) -> bool: return int(row["peer"]) != id)
+	_input_limiter.remove(id)
+	_broadcast_lobby()
+	multiplayer.disconnect_peer(id)
 
 @rpc("any_peer", "call_remote", "reliable")
 func _race_loaded() -> void:
@@ -241,10 +295,19 @@ func _begin_race() -> void:
 	if race != null:
 		race.begin()
 
+## Rate-limited (spec item 6) against a runaway/hostile peer flooding input.
+## A sender can only ever supply input for its own roster slot: `race`
+## resolves the slot from the RPC sender id, never client-sent data, so
+## spoofing another slot is already structurally impossible (see
+## NetRace._receive_input_frame).
 @rpc("any_peer", "call_remote", "unreliable_ordered", 1)
 func _receive_input(data: Dictionary) -> void:
-	if multiplayer.is_server() and running and race != null:
-		race.receive_input(multiplayer.get_remote_sender_id(), data)
+	if not multiplayer.is_server() or not running or race == null:
+		return
+	var sender: int = multiplayer.get_remote_sender_id()
+	if not _input_limiter.allow(sender, now()):
+		return
+	race.receive_input(sender, data)
 
 @rpc("authority", "call_remote", "unreliable_ordered", 2)
 func _snapshot(bytes: PackedByteArray) -> void:
@@ -274,6 +337,7 @@ func _peer_disconnected(id: int) -> void:
 		return
 	if not multiplayer.is_server():
 		return
+	_input_limiter.remove(id)
 	if automated and race != null and race.manager.get_state() == RaceState.RESULTS:
 		return # Test peers may depart after the results/metrics handshake.
 	if started:
@@ -318,9 +382,12 @@ func _session_ended(message: String) -> void:
 	if not automated:
 		get_tree().change_scene_to_file.call_deferred("res://scenes/main.tscn")
 
+## Broadened beyond `automated` so a dedicated server (never automated,
+## spec item 3) can relay the "test_done" ack to automated test clients
+## joining it (tools/run_server_test.sh); a no-op for real play otherwise.
 @rpc("any_peer", "call_remote", "reliable")
 func _test_report(report: Dictionary) -> void:
-	if automated and multiplayer.is_server():
+	if multiplayer.is_server():
 		test_report_received.emit(report)
 
 func _exit_tree() -> void:

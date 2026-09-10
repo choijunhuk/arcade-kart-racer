@@ -125,7 +125,9 @@ func _physics_process(_delta: float) -> void:
 		_client_step()
 
 func _server_step() -> void:
-	if not _karts[_local].is_finished():
+	# `_local` is -1 on a dedicated server (spec item 3: server slot has no
+	# kart), which only ever plays host/AI karts, never a local human.
+	if _local >= 0 and not _karts[_local].is_finished():
 		var frame: InputFrame = _next_input()
 		receive_input(NetSession.SERVER_ID, frame.to_dict())
 	var acknowledgements: Array[int] = []

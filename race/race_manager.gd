@@ -141,7 +141,7 @@ func _begin_loading(is_restart: bool) -> void:
 		_register_track_elements()
 	_race_results.setup_players(_config.track.id, _karts, _player_karts)
 	var local_players: Array[KartController] = _player_karts
-	if GameState.net_session != null:
+	if GameState.net_session != null and GameState.net_session.local_slot() >= 0:
 		local_players = [_karts[GameState.net_session.local_slot()]]
 	_audio.configure(local_players[0] if not local_players.is_empty() else null, _config.laps, _config.track.bgm_id)
 	_countdown.setup(tuning, _karts)
@@ -150,6 +150,7 @@ func _begin_loading(is_restart: bool) -> void:
 		_item_manager, _track, _camera, _hud, _speed_lines, _split_screen, _particle_budget,
 	)
 	modes.setup(_config, _player_kart, _track, primary_hud)
+	if GameState.is_networked and not multiplayer.is_server(): primary_hud.bind_network(GameState.net_session)
 	_pause_menu.bind(
 		self, _player_kart != null and not GameState.automation_mode and not GameState.is_networked,
 		_config.player_device_ids(),

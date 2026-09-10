@@ -120,6 +120,25 @@ func test_server_state_resets_to_lobby_if_everyone_leaves_during_countdown() -> 
 	state.update(0.1, 0, 0)
 	assert_eq(state.state, NetServerState.State.LOBBY)
 
+func test_handshake_accepts_matching_version_and_no_password() -> void:
+	assert_eq(NetHandshake.reject_reason("0.5.0", "0.5.0", "", ""), "")
+
+func test_handshake_rejects_version_mismatch() -> void:
+	var reason: String = NetHandshake.reject_reason("0.4.0", "0.5.0", "", "")
+	assert_true(reason.findn("version") >= 0)
+
+func test_handshake_ignores_version_when_host_has_none_set() -> void:
+	assert_eq(NetHandshake.reject_reason("anything", "", "", ""), "")
+
+func test_handshake_rejects_wrong_password_hash() -> void:
+	var expected: String = "secret".sha256_text()
+	assert_eq(NetHandshake.reject_reason("0.5.0", "0.5.0", expected, expected), "")
+	var reason: String = NetHandshake.reject_reason("0.5.0", "0.5.0", "wrong".sha256_text(), expected)
+	assert_true(reason.findn("password") >= 0)
+
+func test_handshake_ignores_password_when_host_requires_none() -> void:
+	assert_eq(NetHandshake.reject_reason("0.5.0", "0.5.0", "anything", ""), "")
+
 func test_server_state_finish_and_restart_returns_to_lobby() -> void:
 	var state: NetServerState = NetServerState.new()
 	state.update(0.1, 1, 1)

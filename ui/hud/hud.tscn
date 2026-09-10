@@ -237,3 +237,48 @@ mouse_filter = 2
 theme = ExtResource("4_theme")
 value = 100.0
 fill_mode = 4
+
+[node name="NetQualityLabel" type="Label" parent="."]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -260.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = 34.0
+grow_horizontal = 0
+mouse_filter = 2
+theme = ExtResource("4_theme")
+theme_override_font_sizes/font_size = 16
+text = "PING --ms  LOSS 0"
+horizontal_alignment = 2
+visible = false
+
+[node name="ReconnectingOverlay" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 0.55)
+visible = false
+
+[node name="ReconnectingLabel" type="Label" parent="ReconnectingOverlay"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -220.0
+offset_top = -30.0
+offset_right = 220.0
+offset_bottom = 30.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("4_theme")
+theme_override_colors/font_color = Color(1, 0.82, 0.14, 1)
+theme_override_font_sizes/font_size = 36
+text = "RECONNECTING…"
+horizontal_alignment = 1
+vertical_alignment = 1
