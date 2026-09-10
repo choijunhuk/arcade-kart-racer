@@ -13,6 +13,9 @@ const TIMEOUT_MS: int = 3000
 
 var _thread: Thread
 var _mapped_port: int = -1
+## Set when release_and_free() arrives while a worker thread is still running:
+## the thread's deferred callback frees the node instead of touching state.
+var _release_pending: bool = false
 
 
 ## Starts discovery + port mapping for `port` on a worker thread.
@@ -31,8 +34,13 @@ func map_port(port: int) -> void:
 ## itself onto the persistent GameState owner first and the removal is
 ## fire-and-forget, reporting only a log line.
 func release_and_free() -> void:
-	if _mapped_port < 0 or (_thread != null and _thread.is_alive()):
-		queue_free()
+	if _thread != null and _thread.is_alive():
+		# A discovery thread is mid-flight and will call back into this node;
+		# let it finish and free us there rather than freeing under it.
+		_release_pending = true
+		return
+	if _mapped_port < 0:
+		_free_thread_and_self()
 		return
 	var port: int = _mapped_port
 	_mapped_port = -1
@@ -53,6 +61,11 @@ func _run_removal(port: int) -> void:
 
 func _finish_removal(port: int, removed: bool) -> void:
 	print("UPNP_UNMAP port=%d removed=%s" % [port, removed])
+	_free_thread_and_self()
+
+
+## Joins the worker thread (if any) and frees this node exactly once.
+func _free_thread_and_self() -> void:
 	if _thread != null:
 		_thread.wait_to_finish()
 		_thread = null
@@ -87,9 +100,16 @@ func _finish(result: Dictionary) -> void:
 	if _thread != null:
 		_thread.wait_to_finish()
 		_thread = null
+	if _release_pending:
+		# Caller left the lobby while discovery was running: drop the mapping
+		# we just created (if any) and free, instead of emitting into a dead UI.
+		_release_pending = false
+		release_and_free()
+		return
 	mapping_finished.emit(result)
 
 
 func _exit_tree() -> void:
 	if _thread != null and _thread.is_alive():
 		_thread.wait_to_finish()
+		_thread = null

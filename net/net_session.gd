@@ -179,8 +179,14 @@ func _service_peers() -> void:
 ## A connected peer is not a joined player yet: it holds no roster row (and so
 ## no kart) until its handshake passes, and is kicked if it never sends one.
 func _peer_connected(id: int) -> void:
-	if multiplayer.is_server() and not started:
-		_gate.track(id, now())
+	if not multiplayer.is_server():
+		return
+	# Track unconditionally: a peer whose connection lands after the race has
+	# started must still get a deadline, otherwise it holds a slot forever
+	# without ever handshaking (and so never becomes kickable).
+	_gate.track(id, now())
+	if started:
+		_reject_peer(id, "Match already started.")
 
 func _admit_peer(id: int) -> void:
 	if not started and _roster.add(id, automated):
