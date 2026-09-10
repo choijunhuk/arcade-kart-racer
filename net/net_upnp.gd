@@ -23,16 +23,40 @@ func map_port(port: int) -> void:
 	_thread.start(_run.bind(port))
 
 
-## Best-effort removal of a mapping created by `map_port` (spec: remove on
-## session end). Synchronous but bounded by the same discovery timeout.
-func remove_mapping() -> void:
-	if _mapped_port < 0:
+## Releases the mapping created by `map_port` and frees this node once the
+## router has answered. Discovery costs up to TIMEOUT_MS, so it runs on the
+## same worker-thread pattern `map_port` uses rather than on the UI thread
+## (spec item 1: never block the UI on router discovery); the caller is
+## typically a lobby that is about to change scene, so the node reparents
+## itself onto the persistent GameState owner first and the removal is
+## fire-and-forget, reporting only a log line.
+func release_and_free() -> void:
+	if _mapped_port < 0 or (_thread != null and _thread.is_alive()):
+		queue_free()
 		return
 	var port: int = _mapped_port
 	_mapped_port = -1
+	if get_parent() != null:
+		get_parent().remove_child(self)
+	GameState.add_child(self)
+	_thread = Thread.new()
+	_thread.start(_run_removal.bind(port))
+
+
+func _run_removal(port: int) -> void:
 	var upnp: UPNP = UPNP.new()
+	var removed: bool = false
 	if upnp.discover(TIMEOUT_MS) == UPNP.UPNP_RESULT_SUCCESS:
-		upnp.delete_port_mapping(port, "UDP")
+		removed = upnp.delete_port_mapping(port, "UDP") == UPNP.UPNP_RESULT_SUCCESS
+	call_deferred("_finish_removal", port, removed)
+
+
+func _finish_removal(port: int, removed: bool) -> void:
+	print("UPNP_UNMAP port=%d removed=%s" % [port, removed])
+	if _thread != null:
+		_thread.wait_to_finish()
+		_thread = null
+	queue_free()
 
 
 func _run(port: int) -> void:

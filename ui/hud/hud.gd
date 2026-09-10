@@ -107,7 +107,9 @@ func _on_snapshot_received(_snapshot: RaceSnapshot) -> void:
 
 func _update_net_quality() -> void:
 	var rtt_ms: int = roundi(_net_session.clock.rtt_seconds * 1000.0)
-	_net_quality_label.text = "PING %dms  LOSS %d" % [rtt_ms, _net_session.conditions.dropped]
+	# Real measured loss (snapshot sequence gaps), not the synthetic harness
+	# drop counter this process injected itself (spec item 5).
+	_net_quality_label.text = "PING %dms  LOSS %.1f%%" % [rtt_ms, _net_session.get_loss_estimate() * 100.0]
 	var gap: float = NetSession.now() - _last_snapshot_time
 	_reconnecting_overlay.visible = gap > RECONNECT_GAP_SECONDS
 

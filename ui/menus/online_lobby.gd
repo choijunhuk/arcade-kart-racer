@@ -97,7 +97,8 @@ func _build_status_row() -> void:
 ## Closes the connection and releases any UPnP mapping/relay proxy before leaving.
 func go_back() -> void:
 	if _upnp != null:
-		_upnp.remove_mapping()
+		_upnp.release_and_free()
+		_upnp = null
 	if _relay_client != null:
 		_relay_client.stop()
 	if _session != null:

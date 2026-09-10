@@ -86,7 +86,7 @@ func _run_race(latency: float, loss: float, burst_start: int, native_start: bool
 		slot.driver_id = &"nova"
 		slot.kart_id = &"medium"
 		if native_start:
-			var defaults: Dictionary = host._new_player(index + 1)
+			var defaults: Dictionary = host._roster.new_row(index + 1, true)
 			slot.driver_id = StringName(defaults["driver"])
 			slot.kart_id = StringName(defaults["kart"])
 		slots.append(slot)
