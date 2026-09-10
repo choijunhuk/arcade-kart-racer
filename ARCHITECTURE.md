@@ -617,3 +617,78 @@ Validation limits: this sandbox rejects UDP bind, including 127.0.0.1 with an
 automatically chosen free port. Actual host/client loopback, LAN completion and
 latency error bounds are pending. Native visual/audio/controller acceptance and
 the two independent sensitive-path reviews remain outside this solo headless run.
+
+## Net: internet play, UPnP, relay, dedicated server (Phase 16)
+
+Builds on the Phase 15 server-authoritative design above without redesigning
+prediction/snapshots; every addition below is either transport/lobby state or
+sits entirely outside `NetSession`/`NetRace`.
+
+- **UPnP** (`net/net_upnp.gd`, `NetUpnp`): a `Thread`-backed best-effort
+  `UPNP.discover()` / `add_port_mapping(port, port, "TurboCircuit", "UDP")` /
+  `query_external_address()`, 3s discovery timeout, never touching the main
+  thread beyond a `call_deferred` result. `remove_mapping()` best-effort
+  deletes the mapping on session end. No `[network]`/TLS project setting is
+  added; UPnP is plain client code against the engine's `UPNP` class.
+- **Join code** (`net/join_code.gd`, `NetJoinCode`): packs 4 IPv4 octets + a
+  16-bit port into 48 payload bits plus a 2-bit checksum (50 bits, zero
+  padding), rendered as exactly 10 Crockford base32 characters. Decoding
+  validates length, alphabet and checksum before returning `{ip, port}`; any
+  failure returns `{}`. The online lobby's JOIN field accepts either a code
+  (`NetJoinCode.looks_like_code`) or a raw `ip[:port]`.
+- **Dedicated server** (`net/net_server_run.gd` + `net/net_server_state.gd`,
+  driven from `scenes/main.gd`'s `--server` path): `NetSession.dedicated`
+  makes `host()` skip adding a server player row (`players = []`), and
+  `NetRace._server_step()`/`RaceManager._begin_loading()` guard every
+  `local_slot()`-indexed read behind `>= 0` so a kart-less server never
+  indexes another peer's kart. `start_race(force: bool)` keeps its existing
+  all-ready gate for `force=false` (normal listen-server Start button and the
+  automated-loopback auto-start, both unchanged) and only skips it when a
+  dedicated server force-starts. `NetServerState` is a pure, tick-driven
+  LOBBY→COUNTDOWN→RUNNING machine (unit-tested): COUNTDOWN begins once
+  `human_count >= 1`, and RUNNING begins once at least one peer is ready and
+  either everyone is ready or a 20s grace elapses. After RESULTS plus a 3s
+  grace, `NetSession.restart_to_lobby()` resets `started`/`running`/`race`/
+  `_loaded`/ready flags and re-broadcasts the roster without recreating the
+  ENet peer, so already-connected clients are kept, not dropped.
+- **Relay** (`net/net_relay_rooms.gd` pure pairing + `net/net_relay_server.gd`
+  the public `--relay` process + `net/net_relay_client.gd` a local loopback
+  proxy): both the hosting and the joining machine run a `NetRelayClient`
+  that bridges a `127.0.0.1` endpoint (where the real `ENetMultiplayerPeer`
+  listens or connects) to a public `NetRelayServer` over `PacketPeerUDP`/
+  `UDPServer`. Each side announces a shared room code with a `TCRELAY1:`
+  HELLO; the relay only ever pairs and forwards opaque bytes, never parsing
+  ENet frames. `NetRelayRooms` (the room-code pairing table) is pure and
+  unit-tested independent of any socket. The live UDP forwarding path itself
+  is not exercised by an automated multi-host test (out of scope for a
+  single-machine headless run); `tools/run_server_test.sh` and
+  `tools/run_net_test.sh` cover direct ENet, not the relay path.
+- **Version/password handshake** (`net/net_handshake.gd`, pure；wired into
+  `NetSession._handshake`): on `connected_to_server`, a client reliably sends
+  `(ProjectSettings "application/config/version", sha256(password))`. The
+  server compares against its own version and `password_hash` (also a
+  SHA-256; the plaintext password is never stored or logged) and, on
+  mismatch, replies with a targeted `_session_ended(reason)` then
+  `multiplayer.disconnect_peer(id)` — only that one peer is dropped, not the
+  whole lobby. `project.godot` now sets `application/config/version`.
+- **Robustness**: `NetRateLimiter` (pure token bucket) throttles
+  `NetSession._receive_input` per sender id. A sender can only ever supply
+  input for its own roster slot because the slot is resolved server-side
+  from the RPC sender id (`NetRace._receive_input_frame`), never from
+  client-supplied data — already structurally impossible before Phase 16,
+  now documented and covered by the existing input-handling tests. `host()`
+  takes an explicit `max_players_value` (dedicated server default 8, capped
+  at `RaceSnapshot.MAX_KARTS`) instead of the hardcoded LAN constant.
+- **Connection quality UI**: `RaceHud.bind_network()` (client-only, never the
+  host/dedicated server) shows PING/LOSS from `NetClock.rtt_seconds` /
+  `NetDebugConditions.dropped`, and a full-screen "RECONNECTING…" overlay
+  when the gap since the last applied snapshot exceeds 2s. The online lobby
+  shows UPnP mapped/failed status with the exact port to forward manually,
+  a HOST CODE label with a clipboard copy button
+  (`DisplayServer.clipboard_set`), and an optional relay/room-code/password
+  row.
+
+API references: [UPNP](https://docs.godotengine.org/en/stable/classes/class_upnp.html),
+[PacketPeerUDP](https://docs.godotengine.org/en/stable/classes/class_packetpeerudp.html),
+[UDPServer](https://docs.godotengine.org/en/stable/classes/class_udpserver.html),
+[SceneMultiplayer.disconnect_peer](https://docs.godotengine.org/en/stable/classes/class_scenemultiplayer.html).

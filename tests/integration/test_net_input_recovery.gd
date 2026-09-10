@@ -81,6 +81,11 @@ func test_client_recovers_two_dropped_packets_with_three_tick_batch() -> void:
 	# correctly withholds throttle while FROZEN (pre-countdown); release the
 	# kart first so its frames carry genuine driving signal to batch/resend.
 	_manager.get_karts()[0].set_frozen(false)
+	# That pipeline computes its frame in its own `_physics_process`, and
+	# NetRace deliberately runs after it (RACE_PROCESS_PRIORITY). Stepping the
+	# adapter by hand skips that ordering, so let one real physics frame run
+	# first — otherwise the provider is still holding its initial zero frame.
+	await wait_physics_frames(2)
 	for index: int in range(4):
 		network._client_step()
 	var packet: Dictionary = _session.packets.back()

@@ -5,7 +5,9 @@ Mario Kart에서 *시스템과 플레이 감각*만 영감을 받은 **완전 �
 
 ## 이 레포의 현재 상태
 
-**Phase 15 — LAN 네트워크 구현, 실제 ENet/LAN 검증 및 독립 리뷰 대기.** 현재 검증 결과와
+**Phase 16 — 인터넷 플레이(LAN → 인터넷): UPnP 자동 포트 포워딩, 호스트 코드,
+전용 headless 서버, 릴레이(옵션), 연결 품질 HUD, 견고성(레이트 리밋/버전·비밀번호
+검사).** 실제 ENet/LAN 검증 및 독립 리뷰는 여전히 대기 중이다. 현재 검증 결과와
 네이티브 창 제한은 [DEVLOG](DEVLOG.md), 에셋별 교체/유지 사유는
 [placeholder ledger](docs/phase13_asset_ledger.md)를 참조한다.
 
@@ -343,3 +345,37 @@ NET_TEST_LABEL=latency tools/run_net_test.sh --net-latency 100 --net-loss 0.02
 리모트 카트는 보간 대상이며 로컬 예측 통계로 보고하지 않는다.
 현재 실행 샌드박스는 UDP bind 자체를 거부하여 두 조건 모두 호스트 생성에서 차단되었다.
 LAN 완주·지연 오차 수치·창 모드 조작감은 아직 검증되지 않았다.
+
+## 인터넷 플레이 (Phase 16)
+
+같은 LAN이 아니어도, 같은 버전의 빌드를 실행하는 두 사람이 인터넷으로 만날 수 있다.
+
+1. 호스트: **ONLINE → HOST**. 라우터가 UPnP를 지원하면 포트가 자동으로 열리고
+   **HOST CODE**(10자 코드, 예 `4F7QK2M9XR`)가 표시된다. UPnP가 없으면
+   "UPnP unavailable — forward UDP port N manually" 안내와 함께 해당 UDP 포트를
+   라우터에서 수동으로 포워딩해야 한다.
+2. 참가자: **ONLINE → JOIN** 입력란에 호스트 코드 또는 `ip[:port]`를 입력한다.
+   호스트가 비밀번호를 설정했다면 같은 비밀번호를 입력한다.
+3. 이중 NAT 등으로 포트 포워딩이 불가능하면, 공인 IP를 가진 아무 VPS/PC에서
+   `tools/run_server.sh` 대신 릴레이 프로세스를 띄우고(아래) 로비의
+   "Use relay ip:port"와 방 코드를 양쪽에 동일하게 입력한다.
+4. 전용 서버로도 플레이할 수 있다: `tools/run_server.sh --port 24565 --track track_01 --laps 2 --ai 2 --max-players 8`.
+   서버는 사람이 아니라 카트 슬롯이 없는 순수 진행자다. 1명 이상이 READY되고
+   전원 READY 또는 20초가 지나면 자동 시작하며, 결과 화면 이후 자동으로
+   빈 로비로 돌아가 접속을 유지한 채 다음 경기를 받는다.
+
+레이스 중 HUD 우상단에 PING/LOSS가 표시되고, 스냅샷이 2초 이상 끊기면
+"RECONNECTING…" 오버레이가 뜬다. 버전이 다른 클라이언트, 틀린 비밀번호,
+정원 초과 접속은 접속 직후 사유 메시지와 함께 거부된다.
+
+자동 검증(전용 서버 + 자동 조종 클라이언트 2명, 1랩 완주 후 서버가 로비로 복귀):
+
+```sh
+tools/run_server_test.sh
+```
+
+릴레이는 순수 UDP 포워더로, 어떤 무료 VPS나 항상 켜진 PC에서도 돌릴 수 있다:
+
+```sh
+tools/run_relay.sh --port 24565
+```

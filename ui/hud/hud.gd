@@ -26,7 +26,13 @@ const PERCENT_MAX: float = 100.0
 @onready var _minimap: RaceMinimap = $Minimap
 @onready var _speedometer: PanelContainer = $Speedometer
 @onready var _speed_label: Label = $Speedometer/SpeedLabel
+@onready var _net_quality_label: Label = $NetQualityLabel
+@onready var _reconnecting_overlay: Control = $ReconnectingOverlay
 
+const RECONNECT_GAP_SECONDS: float = 2.0
+
+var _net_session: NetSession
+var _last_snapshot_time: float = -1.0
 var _player_kart: KartController
 var _lap_tracker: LapTracker
 var _position_tracker: PositionTracker
@@ -82,6 +88,30 @@ func _process(delta: float) -> void:
 		var best: String = "--" if _time_trial.best_seconds() < 0.0 else "%.3f" % _time_trial.best_seconds()
 		var ghost_delta: String = "--" if _time_trial.best == null else "%+.3f" % _time_trial.delta_seconds()
 		_time_label.text = "TIME %.3f\nBEST %s\nGHOST %s" % [_time_trial.current_seconds(), best, ghost_delta]
+	if _net_session != null:
+		_update_net_quality()
+
+
+## Shows ping/loss and a "reconnecting" overlay for a networked client
+## (spec item 5); never bound for the host/dedicated server or offline play.
+func bind_network(session: NetSession) -> void:
+	_net_session = session
+	_last_snapshot_time = NetSession.now()
+	_net_quality_label.visible = true
+	session.snapshot_received.connect(_on_snapshot_received)
+
+
+func _on_snapshot_received(_snapshot: RaceSnapshot) -> void:
+	_last_snapshot_time = NetSession.now()
+
+
+func _update_net_quality() -> void:
+	var rtt_ms: int = roundi(_net_session.clock.rtt_seconds * 1000.0)
+	# Real measured loss (snapshot sequence gaps), not the synthetic harness
+	# drop counter this process injected itself (spec item 5).
+	_net_quality_label.text = "PING %dms  LOSS %.1f%%" % [rtt_ms, _net_session.get_loss_estimate() * 100.0]
+	var gap: float = NetSession.now() - _last_snapshot_time
+	_reconnecting_overlay.visible = gap > RECONNECT_GAP_SECONDS
 
 
 ## Binds the HUD to read-only race participants and tracker APIs. `player_kart`
@@ -145,6 +175,8 @@ func _exit_tree() -> void:
 		EventBus.threat_warning.disconnect(_on_threat_warning)
 	if EventBus.position_changed.is_connected(_on_position_changed):
 		EventBus.position_changed.disconnect(_on_position_changed)
+	if _net_session != null and _net_session.snapshot_received.is_connected(_on_snapshot_received):
+		_net_session.snapshot_received.disconnect(_on_snapshot_received)
 
 
 func _on_countdown_tick(value: int) -> void:

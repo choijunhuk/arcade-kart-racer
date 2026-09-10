@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5 — Phase 16 (internet play, free infrastructure only)
+
+- Add best-effort UPnP auto port-forward (threaded, 3s timeout) and a 10-character Crockford base32 host join code with checksum.
+- Add a dedicated, kart-less headless server (`--server`) with tick-based auto-start (all-ready or 20s grace) and an automatic restart-to-lobby after RESULTS that keeps connected peers.
+- Add an optional pure-UDP relay (`--relay`) plus a local loopback proxy for double-NAT hosts/clients, paired by room code; documented to run on any free VPS or always-on PC.
+- Add HUD ping/loss and a "Reconnecting…" overlay on a >2s snapshot gap, and lobby UPnP status/host-code/copy/relay/password controls.
+- Add a join handshake (protocol version + hashed session password) that rejects mismatched peers by message without logging the password, and a server-side input rate limiter.
+- Add `tools/run_server.sh`, `tools/run_relay.sh`, `tools/run_server_test.sh` (dedicated server + 2 automated clients complete a race and the server loops back to lobby).
+
 ## v0.4 — Phase 15 (unreleased; ENet/LAN acceptance and independent reviews pending)
 
 - Add an ENet LAN lobby, server-owned player selection/ready/start and load barrier.
