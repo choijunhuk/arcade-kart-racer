@@ -7,6 +7,11 @@ const SHUTDOWN_SECONDS: float = 1.0
 const MEAN_LIMIT: float = 0.5
 const START_RETRY_SECONDS: float = 1.0
 const PROGRESS_SECONDS: float = 5.0
+## Fail-fast guard (spec: don't wait the full timeout) — a human loitering
+## under this speed for this long during RACING/FINISHING means the harness
+## driver is stuck (e.g. off the road at the lap seam), not just slow.
+const STALL_SPEED_THRESHOLD: float = 1.0
+const STALL_SECONDS: float = 15.0
 var session: NetSession
 var _started_at: float = 0.0
 var _reported: bool = false
@@ -16,6 +21,7 @@ var _clock_reported: bool = false
 var _recent_events: Array[Dictionary] = []
 var _next_start_retry: float = 0.0
 var _next_progress: float = 0.0
+var _stall_elapsed: Dictionary[int, float] = {}
 const STATE_NAMES: Array[String] = ["LOADING", "COUNTDOWN", "RACING", "FINISHING", "RESULTS", "PAUSED"]
 
 ## Installs the command-line headless test on the persistent GameState owner.
@@ -39,7 +45,7 @@ func _role() -> String:
 func _state_changed(_old_state: int, state: int) -> void:
 	print("NET_STATE role=%s state=%s" % [_role(), STATE_NAMES[state]])
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	var now: float = NetSession.now()
 	if now >= _next_start_retry:
 		session.retry_start()
@@ -57,9 +63,13 @@ func _physics_process(_delta: float) -> void:
 		session.close()
 		get_tree().quit(1)
 		return
-	if multiplayer.is_server() and session.race != null and session.race.manager.get_state() == RaceState.RACING and now >= _next_progress:
-		_log_progress()
-		_next_progress = now + PROGRESS_SECONDS
+	if multiplayer.is_server() and session.race != null:
+		var state: int = session.race.manager.get_state()
+		if state == RaceState.RACING and now >= _next_progress:
+			_log_progress()
+			_next_progress = now + PROGRESS_SECONDS
+		if (state == RaceState.RACING or state == RaceState.FINISHING) and _check_stalls(delta):
+			return
 	if session.race == null or _reported or session.race.manager.get_state() != RaceState.RESULTS:
 		return
 	_reported = true
@@ -142,6 +152,30 @@ func _disconnected(message: String) -> void:
 		push_error("NET_TEST disconnected: " + message)
 		get_tree().quit(1)
 
+## Fails fast (spec: not the full TIMEOUT_SECONDS) once a human kart's speed
+## stays under STALL_SPEED_THRESHOLD for STALL_SECONDS while the race is
+## still live. A kart that already finished is left out: cruising slowly
+## while waiting for the others is expected there, not a stall.
+func _check_stalls(delta: float) -> bool:
+	var karts: Array[KartController] = session.race.manager.get_karts()
+	for index: int in range(mini(karts.size(), session.players.size())):
+		var kart: KartController = karts[index]
+		if kart.is_finished() or kart.get_speed() >= STALL_SPEED_THRESHOLD:
+			_stall_elapsed[index] = 0.0
+			continue
+		var elapsed: float = float(_stall_elapsed.get(index, 0.0)) + delta
+		_stall_elapsed[index] = elapsed
+		if elapsed < STALL_SECONDS:
+			continue
+		var pos: Vector3 = kart.global_position
+		print("NET_STALL kart=%s tick=%d elapsed=%.1f speed=%.3f position=[%.2f,%.2f,%.2f]" % [
+			kart.name, session.race.tick, elapsed, kart.get_speed(), pos.x, pos.y, pos.z])
+		push_error("NET_STALL: %s stalled for %.1fs" % [kart.name, elapsed])
+		session.close()
+		get_tree().quit(1)
+		return true
+	return false
+
 func _log_progress() -> void:
 	var race: NetRace = session.race
 	var manager: RaceManager = race.manager
@@ -162,6 +196,7 @@ func _log_progress() -> void:
 		_check_checkpoint_progress(kart, laps, racing_line, checkpoints, race.tick)
 		rows.append({"name": String(kart.name), "lap": laps.get_lap(kart),
 			"checkpoint": laps.get_next_checkpoint_index(kart), "progress": positions.get_progress(kart),
+			"real_progress": _real_progress(kart, racing_line),
 			"speed": kart.get_speed(), "state": kart.get_state(),
 			"last_input_tick": buffer.last_received_tick if human else -1,
 			"input_age_ticks": maxi(0, target - buffer.last_received_tick) if human else -1,
@@ -170,9 +205,21 @@ func _log_progress() -> void:
 			"throttle": kart.get_throttle_input(), "brake": kart.get_brake_input(),
 			"position": [kart.global_position.x, kart.global_position.y, kart.global_position.z]})
 	for row: Dictionary in rows:
-		print("NET_PROGRESS tick=%d kart=%s lap=%d cp=%d progress=%.3f speed=%.3f state=%d last_input_tick=%d input_age=%d details=%s" % [
-			race.tick, row["name"], row["lap"], row["checkpoint"], row["progress"], row["speed"], row["state"],
+		print("NET_PROGRESS tick=%d kart=%s lap=%d cp=%d progress=%.3f real_progress=%.3f speed=%.3f state=%d last_input_tick=%d input_age=%d details=%s" % [
+			race.tick, row["name"], row["lap"], row["checkpoint"], row["progress"], row["real_progress"], row["speed"], row["state"],
 			row["last_input_tick"], row["input_age_ticks"], JSON.stringify(row)])
+
+## Real position-based lap fraction (RacingLine offset / lap length),
+## independent of PositionTracker's checkpoint-window clamp — that clamp is
+## not a reliable progress signal (spec: it can read "nearly done" for a kart
+## parked just past a checkpoint window), so NET_PROGRESS carries both.
+func _real_progress(kart: KartController, racing_line: RacingLine) -> float:
+	if racing_line == null:
+		return 0.0
+	var length: float = racing_line.length()
+	if length <= 0.0:
+		return 0.0
+	return racing_line.offset_at(kart.global_position) / length
 
 ## Diagnostic-only regression guard (spec item A): logs when a kart's world
 ## position has physically passed a checkpoint's racing-line offset by more

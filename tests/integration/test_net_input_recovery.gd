@@ -77,6 +77,10 @@ func test_due_inputs_survive_skipped_consumer_tick() -> void:
 
 func test_client_recovers_two_dropped_packets_with_three_tick_batch() -> void:
 	var network: NetRace = _manager.network
+	# The automated local source is now the real AIController pipeline, which
+	# correctly withholds throttle while FROZEN (pre-countdown); release the
+	# kart first so its frames carry genuine driving signal to batch/resend.
+	_manager.get_karts()[0].set_frozen(false)
 	for index: int in range(4):
 		network._client_step()
 	var packet: Dictionary = _session.packets.back()

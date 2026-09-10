@@ -44,7 +44,7 @@ func configure(owner_race: RaceManager, owner_session: NetSession) -> void:
 		_buffers.append(NetInputBuffer.new())
 		_start_ticks.append(-1)
 		_interpolators.append(NetInterpolator.new())
-	_source = ScriptedRaceInputProvider.new(_karts[_local], (manager.get_node("Track") as TrackRoot).get_racing_line()) if session.automated else PlayerInputProvider.new()
+	_source = _build_automated_source(manager.get_node("Track") as TrackRoot) if session.automated else PlayerInputProvider.new()
 	var events: NetEvents = NetEvents.new()
 	add_child(events)
 	events.configure(session, _karts)
@@ -56,6 +56,32 @@ func configure(owner_race: RaceManager, owner_session: NetSession) -> void:
 	session.snapshot_received.connect(_receive_snapshot)
 	session.event_received.connect(_receive_event)
 	session.bind_race(self)
+
+## Drives an automated net-test human with the same proven AIController /
+## AINavigator / AIDriver pipeline real bots use (spec: harness fix, netcode
+## untouched), instead of a bare racing-line follower. That follower used to
+## lose the plot at the start/finish seam and loiter off the road, so its
+## kart never tripped checkpoint 0 and the race hung in FINISHING forever.
+## Reads THIS peer's own local kart (the authoritative kart on the host, the
+## locally predicted kart on the client) and feeds its frames through the
+## normal `_source.get_frame()` -> network input path, unchanged.
+func _build_automated_source(track: TrackRoot) -> InputProvider:
+	var kart: KartController = _karts[_local]
+	var context: AIRaceContext = AIRaceContext.new()
+	context.racing_line = track.get_racing_line()
+	context.track = track
+	context.position_tracker = manager.get_node("PositionTracker") as PositionTracker
+	context.item_manager = manager.get_node("ItemManager") as ItemManager
+	context.player_kart = kart
+	context.request_respawn = (manager.get_node("RespawnSystem") as RespawnSystem).request_respawn
+	context.get_countdown_phase_seconds = (manager.get_node("Countdown") as Countdown).get_phase_seconds
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = session.seed + _local + 1
+	var controller: AIController = AIController.new()
+	controller.name = "NetHumanAIController"
+	kart.add_child(controller)
+	controller.setup(kart, track, context, LocalLobby.DEFAULT_DIFFICULTY, rng)
+	return controller.get_input_provider()
 
 ## Starts the authoritative countdown only after every participant has loaded.
 func begin() -> void:
