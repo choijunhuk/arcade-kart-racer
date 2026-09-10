@@ -1,4 +1,4 @@
-# Turbo Circuit architecture — Phase 14
+# Turbo Circuit architecture — Phase 15
 
 This is the current-code contract for the expanded four-track game. Historical decisions and
 verification results live in `DEVLOG.md`; the product specification remains
@@ -484,3 +484,136 @@ Phase 13 additionally buries the hills ramp leading top edge below the floor by
 lowering the ramp/ledge/jump assembly together 0.2m. The same seeded 8-kart race
 changes from 4,387 wall contacts with DNFs to eight contacts and all finishers.
 GhostRecording version 3 rejects earlier content recordings after this change.
+
+## Net: LAN server authority (Phase 15)
+
+`GameState.net_session` owns an ordinary `NetSession` child at the identical
+`/root/GameState/NetSession` RPC path on all peers. No autoload or project
+network/TLS setting is added. The selected design is the Phase 15 brief and spec §28.
+
+- ENet server id 1 owns a roster of 2–4 peers, content-id selections and ready flags.
+  Clients cannot select another peer's kart; sender identity comes from the RPC.
+  Host-only Start distributes roster, AI count, laps and item RNG seed. Each peer
+  loads the ordinary race scene, acknowledges it, and waits at the load barrier.
+- The server runs all human/AI kart physics and all existing item, collision,
+  checkpoint, lap, rank, respawn, countdown and results owners. `NetRace` steps
+  karts at 60Hz after AI decisions. Other race systems retain their fixed-tick
+  ownership. Local host input goes through the same two-tick buffer.
+- Client input ticks are per-peer monotonically increasing sequences. First
+  received input establishes that peer's server consumption origin; two server
+  ticks later consumption starts at input tick 1, then advances once per tick.
+  Duplicate/already-applied/out-of-window/nonfinite inputs are rejected. A newer
+  input arriving after its scheduled tick can still replace repeated controls;
+  consumption selects the newest due input without waiting on holes. Missing
+  frames repeat held levels and clear item/drift edges. Acknowledgement advances
+  even through misses because the server has decided those ticks. History is 240 ticks.
+- Channel 0: reliable lobby, loading, clock probes, events and results. Channel 1:
+  unreliable-ordered batches containing the last three input dictionaries,
+  retained independently of prediction history through hits/respawns.
+  Channel 2: unreliable-ordered packed
+  snapshots every three server ticks. All RPC receivers have explicit authority
+  annotations. Network payloads never select file paths or instantiate objects.
+- A client disables autonomous kart processing and creates no AI controllers.
+  It predicts only its own kart using `step_input()`, restores `capture_state()` /
+  `apply_state()` at the server acknowledgement, and replays every later buffered
+  input. Replay mutes EventBus and does not consume item edges. External hits,
+  respawns, pad/item boosts and launches wait for the server.
+- State reuses the existing explicit `KartReplayState` allowlist, with slipstream
+  timers added at the network boundary. Drift stepping takes the actual passed
+  fixed delta. Correction decays through a visual transform in 0.1s; errors over
+  3m snap. KartVisuals composes this transform with suspension/trick/hit animation.
+- Remote snapshots wait in a bounded render queue. A two-sample interpolator
+  selects endpoints around estimated server-now minus 100ms, lerps position and
+  shortest-arc yaw, and extrapolates at most 50ms. Bodies retain server state while
+  visuals render delayed poses. Transport clocks use monotonic timestamps only;
+  gameplay clocks continue to use fixed delta/ticks. Clock probes estimate RTT/2
+  offset and drive the client countdown display.
+- `NetRaceState` applies explicit lap/rank/item/cooldown reads to existing HUD
+  owners; it never enables their client adjudication. `NetEvents` mirrors server
+  EventBus signals with grid indices instead of object instance ids. Final results
+  are reliable and cannot be overwritten by a delayed snapshot. `NetTrackEvents`
+  mirrors pickup availability so clients never collect or respawn boxes locally.
+- `NetProjectiles` copies only authored mesh/transform descendants for active
+  projectiles and persistent item effects, keyed by server activation ids. Client
+  views have no item scripts, Areas, or collision shapes. Seeded ItemManager remains
+  server-only. HitStop sees `GameState.is_networked`; online pauses cannot stop
+  the shared race. SplitScreen/RaceAudio/KartAudio bind just the local player.
+- Server RespawnSystem registrations for network humans also measure horizontal
+  body travel: throttle against a wall can raise scalar drivetrain speed without
+  moving the kart. This keeps the existing stuck timer effective under contact;
+  repeated wall/self BUMP hits do not reset that timer for these server-owned
+  humans (a kart jammed against a wall keeps re-triggering BUMP). Item-hit
+  chains (SPIN_OUT/TUMBLE) are a different cause — the kart is legitimately
+  incapacitated, not stuck — so those keep resetting the timer even for network
+  humans. Client replicas cannot initiate recovery. The network test runner
+  prints each kart's progress and input age every five seconds during RACING,
+  plus a diagnostic-only `NET_CP_MISS` line if a kart's world position has
+  passed a checkpoint's racing-line offset by more than one checkpoint's worth
+  of slack while LapTracker's own last-hit record has not kept up.
+- Main menu Online enters `online_lobby.tscn`, reusing LocalLobby's panel builder
+  and theme. Host/Join use IP and port 24565, driver/kart selectors, ready, host
+  Start and Back. A lobby departure removes its row; departure during a race
+  ends the session and returns peers to the menu. Host departure does the same.
+
+### Snapshot binary layout (version 3, little endian)
+
+`StreamPeerBuffer` writes the records below without Variant/object serialization.
+The wire packet is version u8, decoded length u16, compressed length u16, then
+Godot's built-in Zstandard compression of those records. Each snapshot is
+independent: loss does not invalidate subsequent snapshots. Compression is
+lossless, preserving the prediction timers and effective kart stats.
+
+| Part | Layout |
+|---|---|
+| Header (26 bytes) | version u8, server tick u32, monotonic seconds f64, race state u8, race seconds f32, countdown seconds f32, chunk index u8, chunk count u8, kart count u8, item-entity count u8 |
+| Kart state (202 bytes) | XYZ i32 centimetres, yaw i16 milliradians; normal/up/velocity f32 vectors; nine effective kart stats f32; allowlisted component bool u8 / enum i16 / timer f32; fixed boost tail and slipstream state; then a roster-slot u8 |
+| Kart metadata (24 bytes) | acknowledged input tick u32; lap/rank/next-checkpoint/item-index u8; roulette/cooldown/finish-time/progress f32 |
+| Item entity (25 bytes) | activation id u32, catalog id u8, XYZ i32 centimetres, XYZ rotation i16 milliradians, owner grid slot u16 |
+
+`RaceSnapshot.pack()` still emits one whole packet (chunk index 0, chunk count
+1) for the common roster size. A busy race (many karts/items) instead calls
+`pack_chunked()`: karts and item entities are greedily grouped, in order, into
+however many chunks are needed to stay under a conservative raw-byte budget
+per chunk (so compression only ever shrinks further, never risking the
+transport's size limit), each carrying the full header plus its own kart/item
+subset. The explicit per-kart roster slot lets a receiver place rows without
+assuming a contiguous full array. `NetRace` buffers chunks by tick until every
+sibling has arrived, then merges and slot-sorts them into one logical snapshot
+before applying it; a chunk lost to unreliable delivery drops only that tick's
+snapshot, exactly like today's single-packet loss. `NetSession._deliver` still
+rejects (and reports a test-visible error for) any single unreliable argument
+whose serialized size plus a 64-byte RPC framing reserve exceeds 1,200 bytes —
+now a defensive backstop, since chunking keeps normal snapshot traffic under it
+regardless of roster/item count — and this limit also still covers inputs.
+Decode bounds the allocation before decompression, then checks version, counts,
+chunk index/count, exact length, finite values and the replay schema. Empty
+item index is zero; the sorted shared item catalog uses one-based indices.
+Position error is ≤0.005m per axis, yaw error ≤0.0005rad (subject to float
+precision).
+
+Lap/finish/results, item grants/hits and countdown ticks use the reliable
+authority event RPC. Countdown ticks share a descending-value filter with local
+clock prediction so delayed delivery cannot repeat or rewind countdown sounds.
+A replica's own COUNTDOWN-to-RACING transition (observed off an unreliable
+snapshot, which can arrive before the reliable 3-2-1 tick events under real
+latency) emits its countdown-zero through that same filter rather than
+straight to `EventBus`, so late reliable ticks arriving afterwards cannot
+replay 3/2/1 past GO or duplicate the zero.
+
+`NetDebugConditions` delays outgoing transport calls and drops seeded unreliable
+traffic; reliable messages are delayed but preserved. `--net-latency 100` adds
+100ms **per direction**, approximately 200ms RTT. `NetTestRun` requires both real
+processes to reach RESULTS with all karts finished, then reports historical
+pre-reconciliation position error at the same acknowledged input tick for each
+client-predicted kart. Missing samples fail. Remote interpolation is not reported
+as prediction. `tools/run_net_test.sh` captures logs, bounds runtime, and reaps both
+children on success/failure/signals. Adapter tests do not replace this ENet gate.
+
+API references: [ENetMultiplayerPeer](https://docs.godotengine.org/en/latest/classes/class_enetmultiplayerpeer.html),
+[RPC channels and authority](https://docs.godotengine.org/en/latest/tutorials/networking/high_level_multiplayer.html),
+[StreamPeerBuffer](https://docs.godotengine.org/en/latest/classes/class_streampeerbuffer.html).
+
+Validation limits: this sandbox rejects UDP bind, including 127.0.0.1 with an
+automatically chosen free port. Actual host/client loopback, LAN completion and
+latency error bounds are pending. Native visual/audio/controller acceptance and
+the two independent sensitive-path reviews remain outside this solo headless run.

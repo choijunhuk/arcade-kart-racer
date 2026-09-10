@@ -6,6 +6,7 @@ const SETTINGS_PATH: String = "res://ui/menus/settings_menu.tscn"
 
 @onready var _play_button: Button = $Panel/VBox/PlayButton
 @onready var _time_trial_button: Button = $Panel/VBox/TimeTrialButton
+@onready var _online_button: Button = $Panel/VBox/OnlineButton
 @onready var _settings_button: Button = $Panel/VBox/SettingsButton
 @onready var _quit_button: Button = $Panel/VBox/QuitButton
 
@@ -17,8 +18,11 @@ func _ready() -> void:
 	_play_button.pressed.connect(go_to.bind(MODE_SELECT_PATH))
 	_time_trial_button.pressed.connect(_start_time_trial)
 	_settings_button.pressed.connect(go_to.bind(SETTINGS_PATH))
+	_online_button.pressed.connect(go_to.bind("res://ui/menus/online_lobby.tscn"))
+	($Panel/VBox/NetworkMessage as Label).text = GameState.network_message
+	GameState.network_message = ""
 	_quit_button.pressed.connect(_quit_game)
-	wire_vertical_focus([_play_button, _time_trial_button, _settings_button, _quit_button])
+	wire_vertical_focus([_play_button, _time_trial_button, _online_button, _settings_button, _quit_button])
 	focus_initial(_play_button)
 
 

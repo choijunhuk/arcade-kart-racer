@@ -32,6 +32,7 @@ var _finished: bool = false
 var _start_wheelspin_remaining: float = 0.0
 var _shield_item: ShieldItem
 var _last_landing_speed: float = 0.0
+var network_replica: bool = false
 func _ready() -> void:
 	var rays: Array[RayCast3D] = []
 	for child: Node in _ground_rays.get_children():
@@ -50,20 +51,33 @@ func _ready() -> void:
 	_physics.wall_head_on.connect(_on_wall_head_on)
 	_physics.landed.connect(_on_landed)
 func _physics_process(delta: float) -> void:
-	var frame: InputFrame = _get_input_frame()
-	item_slot.capture_input(frame)
+	step_input(input_provider.get_frame(), delta)
+
+## Runs the ordinary fixed-step physics from explicit input, optionally without feedback.
+func step_input(raw: InputFrame, delta: float, replaying: bool = false) -> void:
+	var was_blocked: bool = EventBus.is_blocking_signals()
+	var muted: bool = replaying or network_replica
+	if muted:
+		EventBus.set_block_signals(true)
+	var frame: InputFrame = _filter_input_frame(raw)
+	if not muted:
+		item_slot.capture_input(frame)
 	_start_wheelspin_remaining = maxf(0.0, _start_wheelspin_remaining - delta)
 	if _race_frozen or _start_wheelspin_remaining > 0.0:
 		_physics.reset_motion()
 		_set_state(KartState.FROZEN)
+		if muted:
+			EventBus.set_block_signals(was_blocked)
 		return
 	var terrain: KartPhysics.TerrainSample = _sample_terrain(boost_controller.get_result().ignores_offroad)
 	var ground: KartPhysics.GroundProbe = _physics.probe_ground()
-	var drift_result: KartPhysics.DriftResult = _update_drift(frame, ground)
+	var drift_result: KartPhysics.DriftResult = _update_drift(frame, ground, delta)
 	var boost_result: KartPhysics.BoostResult = _update_boost(delta)
 	_physics.integrate(frame, terrain, ground, drift_result, boost_result, delta)
 	_update_hit_reactor(delta)
 	_update_state(ground)
+	if muted:
+		EventBus.set_block_signals(was_blocked)
 ## Installs a new input source. Karts never read `Input` directly (spec §23).
 func set_input_provider(provider: InputProvider) -> void:
 	input_provider = provider
@@ -149,6 +163,9 @@ func get_ground_normal() -> Vector3:
 	return _physics.ground_normal
 func get_state() -> int:
 	return state
+## Returns whether this kart has crossed the finish line (spec §9.3).
+func is_finished() -> bool:
+	return _finished
 func get_kart_data() -> KartData:
 	return kart_data
 ## Returns the driver identity used by results and presentation.
@@ -174,16 +191,22 @@ func apply_impulse_arcade(delta_velocity: Vector3, yaw_nudge: float) -> void:
 ## `item_speed_factor` forward the item-hit distinction to HitReactor (spec
 ## §12.2): item hits always allow shield absorption, even a BUMP.
 func apply_hit(type: HitReactor.HitType, source: Node = null, from_item: bool = false, item_speed_factor: float = 1.0) -> bool:
+	if network_replica:
+		return false # Server snapshot owns external gameplay effects.
 	var accepted: bool = _hit_reactor.apply(type, source, from_item, item_speed_factor)
 	if accepted:
 		replay_event_received.emit({"type": "hit", "hit_type": int(type)})
 	return accepted
 ## Starts the tick-driven respawn state and suppresses driving input.
 func begin_respawn() -> void:
+	if network_replica:
+		return # Server snapshot owns external gameplay effects.
 	_respawning = true
 	_set_state(KartState.RESPAWNING)
 ## Teleports to a safe transform, clears momentum, and grants protection.
 func teleport_for_respawn(target: Transform3D) -> void:
+	if network_replica:
+		return # Server snapshot owns external gameplay effects.
 	global_transform = target
 	_physics.reset_motion()
 	_hit_reactor.grant_invulnerability(tuning.respawn_invulnerability_duration)
@@ -192,6 +215,8 @@ func reset_motion_arcade() -> void:
 	_physics.reset_motion()
 ## Applies a local-space forward/up launch through KartPhysics ownership.
 func launch(local_velocity: Vector3) -> void:
+	if network_replica:
+		return # Server snapshot owns external gameplay effects.
 	replay_event_received.emit({"type": "launch", "velocity": [local_velocity.x, local_velocity.y, local_velocity.z]})
 	_physics.launch(local_velocity)
 	_ungrounded_ticks = tuning.airborne_grace_ticks + 1
@@ -202,6 +227,8 @@ func notify_contact() -> void:
 	EventBus.kart_contacted.emit(self)
 ## Requests a boost from a track or future item source.
 func request_boost(spec: BoostSpecData, source: StringName) -> void:
+	if network_replica:
+		return # Server snapshot owns external gameplay effects.
 	replay_event_received.emit(KartReplayState.boost_dict(spec, source))
 	boost_controller.request(spec, source)
 ## Returns drift visual state without exposing mutable controller internals.
@@ -264,7 +291,8 @@ func finish_respawn() -> void:
 ## provider is still polled so edge-detected inputs (drift/item press) do not
 ## desynchronize once HitReactor/RespawnSystem/Countdown exist in later phases.
 func _get_input_frame() -> InputFrame:
-	var frame: InputFrame = input_provider.get_frame()
+	return _filter_input_frame(input_provider.get_frame())
+func _filter_input_frame(frame: InputFrame) -> InputFrame:
 	_latest_input_frame = frame.clone()
 	_throttle_held = frame.throttle > 0.0
 	if state == KartState.RESPAWNING or _race_frozen or _start_wheelspin_remaining > 0.0:
@@ -276,10 +304,10 @@ func _sample_terrain(ignores_offroad: bool = false) -> KartPhysics.TerrainSample
 	var sample: KartPhysics.TerrainSample = _terrain_sensor.sample(ignores_offroad)
 	_current_terrain_id = sample.terrain_id
 	return sample
-func _update_drift(frame: InputFrame, ground: KartPhysics.GroundProbe) -> KartPhysics.DriftResult:
+func _update_drift(frame: InputFrame, ground: KartPhysics.GroundProbe, delta: float) -> KartPhysics.DriftResult:
 	return drift_controller.step(
 		frame, _physics.speed, ground.grounded, _physics.air_time,
-		_physics.last_yaw_rate, _hit_reactor.is_active(), get_physics_process_delta_time(),
+		_physics.last_yaw_rate, _hit_reactor.is_active(), delta,
 	)
 func _update_boost(delta: float) -> KartPhysics.BoostResult:
 	var was_active: bool = _slipstream_active
@@ -324,7 +352,28 @@ func _set_state(new_state: int) -> void:
 	state = new_state
 	state_changed.emit(old_state, new_state)
 func _on_wall_head_on() -> void:
+	if network_replica:
+		return # Wall-hit adjudication is mirrored from the server.
 	EventBus.wall_head_on.emit(self)
 	_hit_reactor.apply(HitReactor.HitType.BUMP, self, false, 1.0, false)
 func _on_landed(vertical_speed: float) -> void:
 	_last_landing_speed = vertical_speed
+
+## Captures deterministic motion, drift, boost, hit and slipstream state.
+func capture_state() -> Dictionary:
+	var snapshot: Dictionary = KartReplayState.capture(self)
+	snapshot["slip_charge"] = _slipstream_sensor.get("_charge_time")
+	snapshot["slip_exit"] = _slipstream_sensor.get("_exit_remaining")
+	snapshot["slip_active"] = _slipstream_active
+	return snapshot
+
+## Restores validated state without replaying audiovisual or gameplay events.
+func apply_state(snapshot: Dictionary) -> void:
+	var was_blocked: bool = EventBus.is_blocking_signals()
+	EventBus.set_block_signals(true)
+	KartReplayState.restore(self, snapshot)
+	_slipstream_sensor.set("_charge_time", float(snapshot.get("slip_charge", 0.0)))
+	_slipstream_sensor.set("_exit_remaining", float(snapshot.get("slip_exit", 0.0)))
+	_slipstream_active = bool(snapshot.get("slip_active", false))
+	_slipstream_sensor.set("_active", _slipstream_active)
+	EventBus.set_block_signals(was_blocked)

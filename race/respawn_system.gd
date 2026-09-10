@@ -21,6 +21,8 @@ class Registration extends RefCounted:
 	var phase: RespawnPhase = RespawnPhase.IDLE
 	var timer: float = 0.0
 	var stuck_timer: float = 0.0
+	var track_motion: bool = false
+	var previous_position: Vector3
 
 
 @export var tuning: PhysicsTuning = preload("res://data/tuning/physics_default.tres")
@@ -38,10 +40,12 @@ func _physics_process(delta: float) -> void:
 
 
 ## Registers a kart and a callable returning its current safe Transform3D.
-func register_kart(kart: KartController, get_respawn_transform: Callable) -> void:
+func register_kart(kart: KartController, get_respawn_transform: Callable, track_motion: bool = false) -> void:
 	var registration: Registration = Registration.new()
 	registration.kart = kart
 	registration.get_respawn_transform = get_respawn_transform
+	registration.track_motion = track_motion
+	registration.previous_position = kart.global_position
 	_registrations[kart.get_instance_id()] = registration
 
 
@@ -94,10 +98,24 @@ func _update_registration(registration: Registration, delta: float) -> void:
 
 func _update_stuck_timer(registration: Registration, delta: float) -> void:
 	var kart: KartController = registration.kart
-	if kart.get_state() == KartState.HIT:
+	var speed: float = absf(kart.get_speed())
+	if registration.track_motion:
+		var travel: Vector3 = kart.global_position - registration.previous_position
+		travel.y = 0.0
+		speed = minf(speed, travel.length() / delta) if delta > 0.0 else speed
+		registration.previous_position = kart.global_position
+	# Repeated wall/self BUMP hits must not indefinitely reset a network
+	# human's recovery (a kart jammed against a wall keeps re-triggering
+	# BUMP, which would otherwise never let the stuck timer accumulate).
+	# Item-hit chains (SPIN_OUT/TUMBLE) are a different cause: the kart is
+	# legitimately incapacitated, not stuck, so those must keep resetting
+	# the timer even for network humans, or a long hit chain would force
+	# an unwanted respawn mid-incapacitation.
+	var suppress_reset: bool = registration.track_motion and kart.get_hit_state() == HitReactor.HitType.BUMP
+	if kart.get_state() in [KartState.FROZEN, KartState.RESPAWNING, KartState.FINISHED] or (kart.get_state() == KartState.HIT and not suppress_reset):
 		registration.stuck_timer = 0.0
 		return
-	if kart.is_throttle_held() and absf(kart.get_speed()) < tuning.stuck_speed_threshold:
+	if kart.is_throttle_held() and speed < tuning.stuck_speed_threshold:
 		registration.stuck_timer += delta
 		if registration.stuck_timer >= tuning.stuck_duration:
 			request_respawn(kart)

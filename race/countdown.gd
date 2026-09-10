@@ -100,3 +100,9 @@ func _emit_tick(value: int) -> void:
 	if is_inside_tree():
 		EventBus.countdown_tick.emit(value)
 
+
+## Removes a departed participant without restarting the countdown.
+func unregister_kart(kart: KartController) -> void:
+	_karts.erase(kart)
+	_pending_results.erase(kart.get_instance_id())
+	_throttle_was_held.erase(kart.get_instance_id())

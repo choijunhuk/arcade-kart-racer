@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.4 — Phase 15 (unreleased; ENet/LAN acceptance and independent reviews pending)
+
+- Add an ENet LAN lobby, server-owned player selection/ready/start and load barrier.
+- Add two-tick input buffering, 20Hz binary snapshots, local prediction/replay, 100ms remote interpolation, and bounded correction/extrapolation.
+- Mirror authoritative race reads/results/events, pickup availability and active item visuals; keep client physics limited to its own kart.
+- Reuse existing kart replay state, physics, player panels, HUD and audio bindings.
+- Add headless loopback tooling with seeded one-way latency/loss and pre-correction same-input-tick error metrics.
+- Actual ENet test execution is blocked by sandbox UDP bind permissions; no LAN or latency acceptance is claimed.
+
 ## v0.3 — Phase 14 (unreleased; native acceptance pending)
 
 - Add typed P1-P4 player slots, automatic AI remainder, and per-profile race bests.

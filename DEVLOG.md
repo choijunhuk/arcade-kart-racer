@@ -2519,3 +2519,112 @@ Phase 15 online multiplayer는 선택 Phase이며 사용자 명시 승인 전 �
 
 main-thread native snapshot/perf/physical-pad 결과로 Phase 14 최종 승인 여부만
 판정하면 된다. 이 작업에서는 push/merge/branch switch를 하지 않았다.
+
+## Phase 15 보고 — LAN 온라인 멀티플레이 (구현됨, 인수 검증 차단)
+
+### 구현된 기능
+- ENet 호스트/참가, 서버 소유 로비 선택·ready·start, 전원 로딩 완료 장벽.
+- 60Hz 서버 카트 물리, 참가자별 2틱 입력 지연·중복 제거·누락 시 레벨 반복.
+- 3틱마다 고정 레이아웃 바이너리 스냅샷: cm 위치·milliradian yaw, 재생 상태,
+  입력 ack, 레이스/랩/순위/아이템 슬롯, 활성 아이템 개체의 id/transform.
+- 로컬 예측 및 ack 이후 입력 재생, 100ms 시각 보정(3m 초과 snap),
+  원격 카트 100ms 지연 보간 및 최대 50ms 외삽.
+- 서버 판정 이벤트·결과·아이템 박스 가용성 미러. 클라이언트 AI/아이템/피격/
+  리스폰 판정 차단, 네트워크 hit-stop·전체 일시정지 비활성화.
+- ONLINE 메뉴와 공용 로비 패널, 로컬 카메라/HUD/오디오 소유권, 연결 종료 메시지.
+- 실제 두 headless 프로세스 하네스와 편도 지연/손실 주입, 동일 입력 tick의
+  보정 전 예측 오차 측정 및 RESULTS/완주 검증, 종료·실패·시그널 시 프로세스 회수.
+
+### 생성/수정된 파일
+- 신규 `net/*.gd`: 세션, 입력 버퍼, 시계, 전송 조건, 스냅샷/상태 codec,
+  예측/보간, 레이스 어댑터, 이벤트/결과/개체/트랙 미러, headless 실행기.
+- `kart/kart_controller.gd`, `kart/kart_visuals.gd`, `kart/item_slot.gd`:
+  명시적 물리 스텝·상태 API·권한 경계·시각 transform 합성·HUD 읽기 적용.
+- `race/race_manager.gd`, `race/lap_tracker.gd`, `race/position_tracker.gd`:
+  네트워크 구성/권한/로컬 표시 및 서버 상태 읽기 API.
+- `items/item_manager.gd`, `items/item_roulette.gd`, `track/elements/item_box.gd`:
+  서버 아이템 상태와 박스 가용성 미러 경계.
+- `core/autoload/game_state.gd`, `scenes/main.gd`, `ui/menus/main_menu.*`,
+  `ui/menus/local_lobby.gd`, 신규 `ui/menus/online_lobby.*`.
+- 신규 `tools/run_net_test.sh`, `tests/unit/test_netcode.gd`,
+  `tests/integration/test_net_race_adapter.gd`, `tests/integration/test_net_lobby.gd`.
+- `ARCHITECTURE.md`, `README.md`, `CHANGELOG.md`, 이 보고서.
+
+### 핵심 설계 결정과 이유
+- 브리프와 §28의 설계 유지. 재설계/새 의존성/추가 autoload 없음.
+- 기존 KartReplayState의 허용 필드와 KartPhysics를 재사용하여 예측용 별도 물리를 만들지 않음.
+- 로비 패널 생성기를 공유하고 기존 HUD/오디오의 명시적 바인딩을 유지함.
+- 서버 tick과 참가자 입력 tick을 구별하고 스냅샷에 각 입력 ack를 기록함.
+- Transport timestamp는 네트워크 지연/시계/표시 전용이며 레이스 판정은 고정 틱 유지.
+- 완료 결과는 신뢰 전송하고 늦은 비신뢰 스냅샷이 RESULTS를 되돌리지 못하게 함.
+
+### 실행 방법 / LAN 플레이 지시
+1. 같은 빌드로 같은 LAN의 2–4대에서 게임 실행.
+2. 호스트: ONLINE → HOST (기본 UDP 24565).
+3. 참가자: ONLINE → 호스트 LAN IP/포트 입력 → JOIN.
+4. 각자 드라이버·카트 선택 → READY → 호스트 START.
+5. Ridgeline 1랩 완주, 로컬 HUD/오디오와 상대 카트 이동 확인.
+6. 호스트 종료 시 참가자가 연결 종료 메시지와 함께 메뉴로 복귀하는지 확인.
+7. 100ms 편도 지연 + 2% 손실에서 조향 반응·보정 튐·카운트다운·아이템/결과 일치 확인.
+   창 모드 실행과 이 수동 인수 항목은 본 샌드박스에서 수행하지 않음.
+
+### 테스트 방법 및 결과
+- 모든 Godot 실행은 `--headless`, `HOME="$PWD/.tmp-home"` 사용.
+- 중간 전체 회귀: **520/520**, 4,954 assertions, 361.817s (`full-tests.log`).
+- 이후 확장한 네트워크 단위 **19/19**, 어댑터 **6/6**, 로비 **2/2**.
+  합계 신규 **27개**이며 최종 전체 테스트는 `tools/gate.sh`로 다시 실행함.
+- 트랙 validator **7/7 PASSED** (`tracks.log`).
+- 0ms 및 `--net-latency 100 --net-loss 0.02`의 실제 ENet 하네스는 둘 다 호스트
+  생성에서 **실행 차단**: `Couldn't create an ENet host`, `NET startup failed: Can't create`.
+- 독립적인 UDP 확인: `127.0.0.1:0`과 `0.0.0.0:24565` 모두
+  `PermissionError [Errno 1] Operation not permitted`. 포트 충돌이 아닌 샌드박스 제한.
+- 루프백 mean/max 및 실제 LAN 완주 결과는 **없음**. 어댑터 테스트를 ENet 통과로 대체하지 않음.
+- 로그: `.omc/phase15-logs/`; 네트워크 자식 프로세스는 실패 경로에서도 회수함.
+- macOS CA 조회 / Dummy renderer RID 종료 진단은 원본 로그에 유지. `project.godot` 변경 없음.
+- 최종 gate 출력/상태는 아래 최종 검증 기록에 추가함.
+
+### 현재 문제점 / 알려진 버그
+- UDP 권한 부족으로 실제 네트워크 경로 및 지연 오차 기준을 검증하지 못함.
+- LAN/창 모드 조작감·2–4인 완주·실기 오디오 검증 대기.
+- `net/` 등 민감 경로의 두 독립 리뷰는 main thread가 수행/기록해야 함.
+  이 작업은 단독 실행이므로 독립 리뷰를 주장하거나 승인 파일을 조작하지 않음.
+- 동일 빌드/LAN 우선. 로비 복귀 후 새 세션으로 재시작하며 경기 중 인원 이탈은 세션 종료.
+
+### TODO / PLACEHOLDER 목록
+- 코드에 임시 네트워크/물리 대체 구현 없음.
+- 미완료 인수 항목: 실제 ENet 두 조건 통과, LAN 수동 인수, 두 독립 민감 경로 리뷰.
+
+### 다음 Phase 계획 / 사용자에게 필요한 결정
+- Phase 16 착수 없음. 설계 변경 요청 없음.
+- Phase 15 완료 선언은 차단된 네트워크 인수와 독립 리뷰 완료 후에만 가능.
+
+### 커밋 상태
+- 최초 구현 커밋: `b0d80f1 feat(net): preserve server authority for LAN racing`.
+- 후속 권한/표시/로비 수정, 추가 테스트와 문서는 `.git/index.lock: Operation not permitted`로
+  커밋하지 못했으며 작업 트리에 보존함. 브랜치 변경·push·대리 커밋/우회 없음.
+- 어댑터 검증은 실제 두 인간 슬롯이 버퍼 입력을 통해 Ridgeline 1랩을 완주해
+  RESULTS로 전환하는 경로도 포함한다. 이는 소켓/실제 클라이언트 검증을 대체하지 않는다.
+
+### 최종 검증 기록 (2026-09-09)
+최종 코드/테스트를 고정한 뒤 `env -u GATE_ALLOW_SENSITIVE HOME="$PWD/.tmp-home" tools/gate.sh` 재실행:
+
+```text
+import: ok
+parse: ok
+Tests               531
+Passing Tests       531
+tracks: ok
+sim smoke: ok
+file size (.gd <= 400 lines): ok
+project.godot hygiene: ok
+sensitive paths: two independent cross-reviews required; approval absent
+== RESULT: FAIL
+```
+
+- 실제 종료 코드 **1**. 전체 출력: `.omc/phase15-logs/gate.log`.
+- 최초 게이트 530/530 이후 마지막 완주 테스트까지 포함한 고정 소스 결과는 **531/531**.
+- 기술 검사는 모두 통과했지만 민감 경로 독립 리뷰 요건 때문에 Phase 15 DoD는 미완료.
+- 현재 gate의 민감 경로 목록은 `origin/main...HEAD` 기준이므로, 독립 리뷰는
+  `b0d80f1`뿐 아니라 미커밋 후속 수정까지 포함한 최종 변경을 대상으로 해야 한다.
+- 실제 ENet 두 조건은 계속 UDP bind 권한에 막혀 mean/max 수치 없음. 창 모드 실행 없음.
+- `git diff --check` 통과. 모든 프로젝트 GDScript ≤400줄. `project.godot` diff 없음.

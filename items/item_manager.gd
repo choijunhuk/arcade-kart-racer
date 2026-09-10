@@ -102,6 +102,10 @@ func register_kart(kart: KartController) -> void:
 func unregister_kart(kart: KartController) -> void:
 	if kart == null:
 		return
+	for item: ItemBase in _live_items.duplicate():
+		if item.owner_kart == kart:
+			item.expire()
+	_flush_finished()
 	_karts.erase(kart)
 	_slots.erase(kart.get_instance_id())
 	_cooldowns.erase(kart.get_instance_id())
@@ -297,3 +301,16 @@ func _pool_key(item_data: ItemData) -> String:
 
 func _is_projectile_category(category: ItemData.ItemCategory) -> bool:
 	return category == ItemData.ItemCategory.PROJECTILE or category == ItemData.ItemCategory.HOMING
+
+## Restores a normalized cooldown read without enabling client item decisions.
+func apply_network_cooldown(kart: KartController, ratio: float) -> void:
+	_cooldowns[kart.get_instance_id()] = clampf(ratio, 0.0, 1.0)
+	_cooldown_durations[kart.get_instance_id()] = 1.0
+
+## Returns all active item visuals, including independent triple-projectile children.
+func get_network_items() -> Array[ItemBase]:
+	var result: Array[ItemBase] = _live_items.duplicate()
+	for projectile: ItemBase in active_projectiles:
+		if not result.has(projectile):
+			result.append(projectile)
+	return result
