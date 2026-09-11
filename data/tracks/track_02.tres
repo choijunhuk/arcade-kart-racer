@@ -23,3 +23,4 @@ preview_color = Color(0.2, 0.8, 1, 1)
 bgm = ExtResource("3")
 bgm_id = &"lumen_underpass"
 lap_length_hint = 1598.8
+night_theme = true

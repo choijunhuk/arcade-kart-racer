@@ -201,6 +201,7 @@ func _spawn_karts() -> void:
 		var base_kart: KartData = _roster.kart_for_slot(_config, slot, player)
 		kart.kart_data = RaceConfigBuilder.apply_driver_mods(base_kart, driver)
 		kart.set_driver_data(driver)
+		kart.night_theme = _config.track != null and _config.track.night_theme
 		var kart_audio: KartAudio = kart.get_node("KartAudio") as KartAudio
 		if is_player and (GameState.net_session == null or slot == GameState.net_session.local_slot()):
 			var is_primary: bool = slot == GameState.net_session.local_slot() if GameState.net_session != null else _player_karts.is_empty()
