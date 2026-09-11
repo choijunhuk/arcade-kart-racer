@@ -76,6 +76,9 @@ func _populate_options() -> void:
 	var particle_option: OptionButton = $Panel/VBox/Tabs/Video/ParticleQualityOption
 	for quality_name: String in ["LOW", "MEDIUM", "HIGH"]:
 		particle_option.add_item(quality_name)
+	var camera_preset_option: OptionButton = $Panel/VBox/Tabs/Gameplay/CameraPresetOption
+	for preset_name: String in ["Arcade", "Cinematic"]:
+		camera_preset_option.add_item(preset_name)
 
 
 func _build_remap_rows() -> void:
@@ -110,6 +113,7 @@ func _connect_controls() -> void:
 	_connect_toggle($Panel/VBox/Tabs/Gameplay/SpeedometerToggle, &"gameplay", &"speedometer")
 	($Panel/VBox/Tabs/Video/ResolutionOption as OptionButton).item_selected.connect(_on_resolution_selected)
 	($Panel/VBox/Tabs/Video/ParticleQualityOption as OptionButton).item_selected.connect(_on_particle_quality_selected)
+	($Panel/VBox/Tabs/Gameplay/CameraPresetOption as OptionButton).item_selected.connect(_on_camera_preset_selected)
 
 
 func _connect_slider(slider: HSlider, section: StringName, key: StringName) -> void:
@@ -139,6 +143,8 @@ func _sync_values() -> void:
 	_set_toggle($Panel/VBox/Tabs/Accessibility/TierIconsToggle, &"accessibility", &"drift_tier_icons", true)
 	_set_toggle($Panel/VBox/Tabs/Accessibility/MultiplayerMinimapToggle, &"accessibility", &"multiplayer_minimap_all", false)
 	_set_toggle($Panel/VBox/Tabs/Gameplay/SpeedometerToggle, &"gameplay", &"speedometer", true)
+	var stored_preset: String = CameraPreset.resolve_id(String(SettingsManager.get_setting(&"gameplay", &"camera_preset", CameraPreset.ARCADE_ID)))
+	($Panel/VBox/Tabs/Gameplay/CameraPresetOption as OptionButton).select(CameraPreset.VALID_IDS.find(stored_preset))
 	var resolution_value: Variant = SettingsManager.get_setting(&"video", &"resolution", Vector2i(1600, 900))
 	var resolution: Vector2i = resolution_value if resolution_value is Vector2i else Vector2i(1600, 900)
 	_select_resolution(resolution)
@@ -188,6 +194,15 @@ func _on_resolution_selected(index: int) -> void:
 func _on_particle_quality_selected(index: int) -> void:
 	if not _syncing:
 		SettingsManager.update_setting(&"video", &"particle_quality", index)
+
+
+func _on_camera_preset_selected(index: int) -> void:
+	if _syncing:
+		return
+	var preset_id: String = CameraPreset.ARCADE_ID
+	if index >= 0 and index < CameraPreset.VALID_IDS.size():
+		preset_id = CameraPreset.VALID_IDS[index]
+	SettingsManager.update_setting(&"gameplay", &"camera_preset", preset_id)
 
 
 func _on_remap_requested(action: StringName, event: InputEvent) -> void:

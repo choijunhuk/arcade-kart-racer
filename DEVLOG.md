@@ -2649,3 +2649,23 @@ Sonnet executor 두 번 실패(429, 600 s 정지) 후 메인 스레드가 인수
 - 회귀: 액세서리 ~14개/카트가 그림자 캐스케이드마다 그려져 12카트 고품질 134 → 83 fps, 드로우 804.
   액세서리·도색 그림자 끔 → 103 fps / 702.
 - heat shimmer 셰이더 머티리얼이 씬 sub-resource로 전 카트 공유 → 정지한 카트가 모두의 intensity를 0으로 덮음. 카트별 복제 + 고품질에서만 허용.
+
+### Phase 17b Part B — 조작감 프리셋 (2026-09-12, executor)
+`camera_preset` 게임플레이 설정(Arcade/Cinematic, 기본 Arcade) 추가. `data/schemas/camera_preset.gd`(새 경량 Resource)로 스프링/FOV/드리프트 오프셋 서브셋만 오버레이하고, 나머지 `FeelTuning` 값(충돌 마진, 셰이크, 킥백 등)은 그대로 유지. `RaceCamera`는 `_ready()`와 `settings_changed(&"gameplay")`에서 `apply_camera_preset()`을 호출해 베이스 튜닝을 복제 후 프리셋 값을 덮어쓰므로 스플릿스크린 카메라(각자 `race_camera.tscn` 인스턴스)도 동일하게 적용된다.
+
+Arcade 프리셋 값 = 기존 `camera_default.tres`(Phase 8에서 이미 튜닝된 값)를 그대로 채택 — 지시(item 4/task 3)대로 "현재 값에서 Arcade 프리셋을 고른다":
+- `follow_stiffness = 10.0` — 이미 튠된 채이스 스프링 속도, 변경 없이 아케이드 기준값으로 유지.
+- `camera_height = 2.2` — 기존 채이스 높이 그대로, 아케이드는 시네마틱 대비 "더 높은" 기준선 역할.
+- `speed_fov_add = 14.0` — 기존 속도감 FOV 가산값, 아케이드다운 강한 스피드 피드백 유지.
+- `boost_fov_add = 8.0` — 기존 부스트 FOV 킥 유지.
+- `drift_side_offset = 0.7` — 기존 드리프트 사이드 오프셋 유지.
+
+Cinematic 프리셋 값 = 위 기준 대비 부드럽게 낮춤(신규):
+- `follow_stiffness = 6.0` — 스프링을 40% 낮춰 카메라가 카트를 천천히 따라가는 "랙" 느낌을 줌.
+- `camera_height = 1.6` — 27% 낮춰 지면에 가까운 시네마틱 로우앵글.
+- `speed_fov_add = 8.0` — FOV 강도를 절반 가까이 낮춰 속도감을 절제.
+- `boost_fov_add = 4.0` — 부스트 FOV 킥도 동일 비율로 절제.
+- `drift_side_offset = 0.4` — 43% 낮춰 드리프트 시 카메라가 덜 흔들리게.
+
+Settings → Gameplay에 `CameraPresetOption`(OptionButton, "Arcade"/"Cinematic") 추가, 기존 세로 포커스 내비게이션에 자동 편입.
+검증: `godot --headless --path . --quit` 스크립트/파스 에러 0. 새 테스트 `tests/unit/test_camera_preset.gd`(5/5), `tests/unit/test_race_camera_preset.gd`(3/3) 개별 실행 통과, 기존 `test_settings_manager.gd`(6/6)·`test_camera_fov.gd`+`test_camera_shake.gd`(9/9)·`test_race_camera_clipping.gd`(2/2) 회귀 없음 확인.

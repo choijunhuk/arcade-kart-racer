@@ -75,6 +75,7 @@ func default_settings() -> Dictionary:
 			"shake_strength": 100.0,
 			"fov_effect_strength": 100.0,
 			"speedometer": true,
+			"camera_preset": CameraPreset.ARCADE_ID,
 		},
 	}
 

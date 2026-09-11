@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="CameraPreset" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/schemas/camera_preset.gd" id="1_preset"]
+
+[resource]
+script = ExtResource("1_preset")
+follow_stiffness = 6.0
+camera_height = 1.6
+speed_fov_add = 8.0
+boost_fov_add = 4.0
+drift_side_offset = 0.4
