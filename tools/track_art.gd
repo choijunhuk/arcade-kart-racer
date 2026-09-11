@@ -14,6 +14,9 @@ const FOG_DENSITY: Array[float] = [0.0009, 0.006, 0.0022, 0.0028]
 const SKY_TOP: Array[Color] = [Color(0.24, 0.47, 0.82), Color(0.02, 0.03, 0.09), Color(0.36, 0.58, 0.86), Color(0.36, 0.2, 0.08)]
 const SKY_HORIZON: Array[Color] = [Color(0.7, 0.83, 0.95), Color(0.16, 0.1, 0.28), Color(0.86, 0.92, 0.98), Color(0.79, 0.62, 0.49)]
 ## Lamp glow sprite: soft radial falloff, additive, so it reads as light rather than a solid tile.
+## Fog only partly tints the sky: at 1.0 (Godot default) the infinitely distant sky is fully fog-coloured,
+## which is what turned the day sky green and the alpine sky white.
+const FOG_SKY_AFFECT: float = 0.3
 const LAMP_GLOW_SIZE: float = 2.4
 const LAMP_GLOW_TEXTURE_SIZE: int = 64
 ## The underpass theme reads as night: dim ambient plus batched lamp glow.
@@ -101,7 +104,8 @@ static func _sky(root: Node3D, theme: int) -> void:
 	environment.ssao_radius = 1.4
 	environment.ssao_intensity = 1.6
 	environment.ssao_power = 1.0
-	environment.fog_light_color = THEMES[theme].lightened(0.3)
+	environment.fog_light_color = SKY_HORIZON[theme]
+	environment.fog_sky_affect = FOG_SKY_AFFECT
 	environment.fog_density = FOG_DENSITY[theme]
 
 ## Batches lamp posts for the underpass "night" theme: an always-visible
