@@ -90,6 +90,10 @@ content_margin_bottom = 5.0
 
 [resource]
 default_font_size = 22
+ScreenTitle/base_type = &"Label"
+ScreenTitle/font_sizes/font_size = 44
+SectionHeading/base_type = &"Label"
+SectionHeading/font_sizes/font_size = 28
 PanelContainer/styles/panel = SubResource("Style_panel")
 Button/colors/font_color = Color(0.92, 0.97, 1, 1)
 Button/colors/font_hover_color = Color(1, 1, 1, 1)

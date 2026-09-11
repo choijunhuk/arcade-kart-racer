@@ -42,7 +42,7 @@ theme_override_constants/separation = 16
 
 [node name="Title" type="Label" parent="Panel/VBox"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 38
+theme_type_variation = &"ScreenTitle"
 text = "LOCAL MULTIPLAYER"
 horizontal_alignment = 1
 

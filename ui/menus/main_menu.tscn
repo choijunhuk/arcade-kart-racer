@@ -43,13 +43,14 @@ theme_override_constants/separation = 18
 
 [node name="Title" type="Label" parent="Panel/VBox"]
 layout_mode = 2
+theme_type_variation = &"ScreenTitle"
 theme_override_colors/font_color = Color(0.2, 0.86, 1, 1)
-theme_override_font_sizes/font_size = 52
 text = "TURBO CIRCUIT"
 horizontal_alignment = 1
 
 [node name="Subtitle" type="Label" parent="Panel/VBox"]
 layout_mode = 2
+theme_type_variation = &"SectionHeading"
 theme_override_colors/font_color = Color(1, 0.45, 0.16, 1)
 text = "CHASE THE APEX"
 horizontal_alignment = 1
