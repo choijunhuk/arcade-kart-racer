@@ -4,12 +4,16 @@ extends Node3D
 ## Heat-shimmer fade speed in intensity units per second, applied on both the
 ## rise (boost start) and fall (boost end) edges.
 const SHIMMER_FADE_SPEED: float = 4.0
+## The shimmer reads the screen texture (one extra screen copy per frame while visible), so it is
+## a high-tier-only effect: below this particle quality ratio it never shows.
+const SHIMMER_MIN_QUALITY_RATIO: float = 0.9
 
 @onready var _kart: KartController = get_parent() as KartController
 @onready var _exhaust: GPUParticles3D = $Exhaust
 @onready var _flame_core: MeshInstance3D = $FlameCore
 @onready var _heat_shimmer: MeshInstance3D = $HeatShimmer
-@onready var _shimmer_material: ShaderMaterial = _heat_shimmer.mesh.material as ShaderMaterial
+var _shimmer_material: ShaderMaterial
+var _shimmer_allowed: bool = true
 
 var _boost_active: bool = false
 var _lod_enabled: bool = true
@@ -17,6 +21,10 @@ var _shimmer_intensity: float = 0.0
 
 
 func _ready() -> void:
+	# The quad + ShaderMaterial are a shared sub-resource of the scene: without a per-kart copy every
+	# kart's _process overwrote the same "intensity", so one idle kart zeroed everyone's shimmer.
+	_heat_shimmer.mesh = _heat_shimmer.mesh.duplicate(true)
+	_shimmer_material = _heat_shimmer.mesh.material as ShaderMaterial
 	_exhaust.material_override = ParticleArt.material(true)
 	var controller: BoostController = _kart.get_node("BoostController") as BoostController
 	controller.boost_started.connect(_on_boost_started)
@@ -26,7 +34,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	_exhaust.emitting = _boost_active and _lod_enabled
 	_flame_core.visible = _boost_active and _lod_enabled
-	var target: float = 1.0 if (_boost_active and _lod_enabled) else 0.0
+	var target: float = 1.0 if (_boost_active and _lod_enabled and _shimmer_allowed) else 0.0
 	_shimmer_intensity = move_toward(_shimmer_intensity, target, SHIMMER_FADE_SPEED * delta)
 	_heat_shimmer.visible = _shimmer_intensity > 0.0
 	_shimmer_material.set_shader_parameter("intensity", _shimmer_intensity)
@@ -51,3 +59,4 @@ func set_lod_enabled(enabled: bool) -> void:
 ## Applies the user-selected visual density without restarting the exhaust.
 func set_quality_ratio(ratio: float) -> void:
 	_exhaust.amount_ratio = clampf(ratio, 0.0, 1.0)
+	_shimmer_allowed = ratio >= SHIMMER_MIN_QUALITY_RATIO

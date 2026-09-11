@@ -94,6 +94,19 @@ static func decorate(visuals: Node3D, data: KartData, night_theme: bool = false)
 	driver.add_child(head)
 	PrimitiveArt.add_box(driver, Vector3(0.5, 0.16, 0.15), Vector3(0, 0.43, -0.28), PrimitiveArt.material(Color(0.02, 0.06, 0.12)))
 	_add_helmet_visor(driver)
+	_disable_detail_shadows(body)
+	_disable_detail_shadows(driver, head)
+	for wheel_name: String in ["WheelFL", "WheelFR", "WheelRL", "WheelRR"]:
+		_disable_detail_shadows(visuals.get_node(wheel_name))
+
+
+## Small accessories are invisible in shadow maps but each one costs a draw per shadow cascade
+## (4 on the high tier), which is what doubled kart draw calls in Phase 17b. Only the chassis
+## (the Body mesh itself) and the helmet (`keep`) keep casting shadows.
+static func _disable_detail_shadows(parent: Node, keep: Node = null) -> void:
+	for child: Node in parent.find_children("*", "MeshInstance3D", true, false):
+		if child != keep:
+			(child as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
 ## Emissive nose lamps; only lit (emission enabled) on night-themed tracks.
@@ -191,3 +204,4 @@ static func _paint_gradient(body: MeshInstance3D, paint: Color) -> void:
 
 static func _tag_decal(node: MeshInstance3D, index: int) -> void:
 	node.name = "%s%d" % [PAINT_DECAL_PREFIX, index]
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
