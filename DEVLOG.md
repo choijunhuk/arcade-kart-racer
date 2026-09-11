@@ -2628,3 +2628,24 @@ sensitive paths: two independent cross-reviews required; approval absent
   `b0d80f1`뿐 아니라 미커밋 후속 수정까지 포함한 최종 변경을 대상으로 해야 한다.
 - 실제 ENet 두 조건은 계속 UDP bind 권한에 막혀 mean/max 수치 없음. 창 모드 실행 없음.
 - `git diff --check` 통과. 모든 프로젝트 GDScript ≤400줄. `project.godot` diff 없음.
+
+## Phase 17a — 라이팅 · 트랙 드레싱 · 성능 가드 (2026-09-11, main thread)
+
+Sonnet executor 두 번 실패(429, 600 s 정지) 후 메인 스레드가 인수. 기존 WIP(`tools/track_dressing.gd`, `track/elements/start_gantry.gd`, `QualityTier` 게이팅)는 이미 모든 트랙에 연결되어 있었고, 스냅샷으로 결함 3개를 찾아 고쳤다.
+
+| 결함 | 원인 | 수정 |
+|---|---|---|
+| 전 트랙 하늘/톤매핑/글로우/포그 미적용 + 테스트 unexpected error | 존재하지 않는 API `Environment.reflection_source` 대입으로 `_sky()`가 중단 | 실제 API `reflected_light_source` |
+| Ridgeline 하늘 초록, Glacier 하늘 흰색 | ① 하늘을 지형 테마색으로 칠함 ② 포그 `fog_sky_affect` 기본 1.0이 무한원 하늘 전체를 포그색(지형색)으로 덮음 | 테마별 `SKY_TOP`/`SKY_HORIZON`, 포그색 = 지평선색, `fog_sky_affect` 0.3 |
+| Lumen 가로등이 불투명 베이지 사각형 | 텍스처 없는 알파 쿼드 | 방사형 `GradientTexture2D` + 가산 블렌드 |
+| 샌드박스 트랙 교체 시 `SCRIPT ERROR 'root' on null` | 트리에서 빠진 트랙에 지연 설치 실행 | `get_tree()` null 가드 |
+
+검증: GUT 620/620, 4개 트랙 헤드리스 로드 런타임 에러 0, 윈도우 스냅샷 4트랙 판정(파란 하늘+헤이즈 / 야간 발광 램프 / 설원 / 사막 협곡).
+성능(12카트, M3 Max, 17a 시점): 저품질 139 fps · 드로우 527, 고품질 134 fps · 드로우 680.
+도구: `perf_probe --quality 0..2` 추가(테스트 포함), `.omc/p17_visual.sh` 시각 스윕.
+
+### Phase 17b 진행 기록
+- Part A(카트 디테일) WIP는 executor 3회 실패(429 → 정지 → 정지) 후 메인 스레드가 커밋·수습.
+- 회귀: 액세서리 ~14개/카트가 그림자 캐스케이드마다 그려져 12카트 고품질 134 → 83 fps, 드로우 804.
+  액세서리·도색 그림자 끔 → 103 fps / 702.
+- heat shimmer 셰이더 머티리얼이 씬 sub-resource로 전 카트 공유 → 정지한 카트가 모두의 intensity를 0으로 덮음. 카트별 복제 + 고품질에서만 허용.
