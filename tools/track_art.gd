@@ -9,6 +9,13 @@ const PROP_RANGE: float = 160.0
 const THEMES: Array[Color] = [Color(0.18, 0.42, 0.18), Color(0.06, 0.12, 0.25), Color(0.65, 0.83, 0.9), Color(0.65, 0.36, 0.15)]
 ## Fog density per theme (index matches THEMES): clear day, underpass haze, alpine haze, dusty haze.
 const FOG_DENSITY: Array[float] = [0.0009, 0.006, 0.0022, 0.0028]
+## Sky gradient per theme (index matches THEMES). THEMES are ground/terrain tints; reusing them for
+## the sky turned the clear-day circuit green. Ochre keeps its dusty dusk look.
+const SKY_TOP: Array[Color] = [Color(0.24, 0.47, 0.82), Color(0.02, 0.03, 0.09), Color(0.36, 0.58, 0.86), Color(0.36, 0.2, 0.08)]
+const SKY_HORIZON: Array[Color] = [Color(0.7, 0.83, 0.95), Color(0.16, 0.1, 0.28), Color(0.86, 0.92, 0.98), Color(0.79, 0.62, 0.49)]
+## Lamp glow sprite: soft radial falloff, additive, so it reads as light rather than a solid tile.
+const LAMP_GLOW_SIZE: float = 2.4
+const LAMP_GLOW_TEXTURE_SIZE: int = 64
 ## The underpass theme reads as night: dim ambient plus batched lamp glow.
 const NIGHT_THEME: int = 1
 const LAMP_SPACING: float = 26.0
@@ -57,7 +64,10 @@ static func install(track: Node3D) -> void:
 	if theme == NIGHT_THEME:
 		_lamps(root, line)
 	TrackDressing.install(root, track, line, theme)
-	var settings: Node = track.get_tree().root.get_node_or_null("SettingsManager")
+	# A track swapped out before its deferred art install runs is no longer in the tree
+	# (sandbox/snapshot track switching); skip the quality pass instead of dereferencing null.
+	var tree: SceneTree = track.get_tree()
+	var settings: Node = tree.root.get_node_or_null("SettingsManager") if tree != null else null
 	if settings != null:
 		QualityTier.apply_scene(track, int(settings.call("get_setting", &"video", &"particle_quality", 2)))
 
@@ -70,8 +80,8 @@ static func _sky(root: Node3D, theme: int) -> void:
 	world.environment = world.environment.duplicate() as Environment
 	var sky: Sky = Sky.new()
 	var paint: ProceduralSkyMaterial = ProceduralSkyMaterial.new()
-	paint.sky_top_color = THEMES[theme].darkened(0.45)
-	paint.sky_horizon_color = THEMES[theme].lightened(0.4)
+	paint.sky_top_color = SKY_TOP[theme]
+	paint.sky_horizon_color = SKY_HORIZON[theme]
 	paint.ground_bottom_color = THEMES[theme].darkened(0.7)
 	paint.sun_angle_max = 3.5
 	paint.sun_curve = 0.15
@@ -99,13 +109,25 @@ static func _sky(root: Node3D, theme: int) -> void:
 ## kept out of low/medium tiers by `QualityTier.apply_scene`'s group toggle.
 static func _lamps(root: Node3D, line: RacingLine) -> void:
 	var shape: QuadMesh = QuadMesh.new()
-	shape.size = Vector2(1.1, 1.1)
+	shape.size = Vector2(LAMP_GLOW_SIZE, LAMP_GLOW_SIZE)
+	var falloff: Gradient = Gradient.new()
+	falloff.offsets = PackedFloat32Array([0.0, 0.35, 1.0])
+	falloff.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.45), Color(1, 1, 1, 0)])
+	var radial: GradientTexture2D = GradientTexture2D.new()
+	radial.gradient = falloff
+	radial.fill = GradientTexture2D.FILL_RADIAL
+	radial.fill_from = Vector2(0.5, 0.5)
+	radial.fill_to = Vector2(0.5, 0.0)
+	radial.width = LAMP_GLOW_TEXTURE_SIZE
+	radial.height = LAMP_GLOW_TEXTURE_SIZE
 	var glow: StandardMaterial3D = StandardMaterial3D.new()
 	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	glow.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	glow.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glow.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	glow.albedo_texture = radial
 	glow.emission_enabled = true
-	glow.albedo_color = Color(1.0, 0.85, 0.55, 0.9)
+	glow.albedo_color = Color(1.0, 0.85, 0.55, 1.0)
 	glow.emission = Color(1.0, 0.8, 0.45)
 	glow.emission_energy_multiplier = 3.0
 	shape.material = glow
