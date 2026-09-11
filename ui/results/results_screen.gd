@@ -25,6 +25,7 @@ var _is_grand_prix: bool = false
 
 func _ready() -> void:
 	UiAudio.attach($Panel)
+	ButtonMotion.attach($Panel)
 	_restart_button.pressed.connect(_on_restart_pressed)
 	_track_select_button.pressed.connect(_on_track_select_pressed)
 	_menu_button.pressed.connect(_on_menu_pressed)

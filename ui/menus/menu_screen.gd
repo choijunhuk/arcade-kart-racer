@@ -6,6 +6,7 @@ extends Control
 
 func _ready() -> void:
 	UiAudio.attach(self)
+	ButtonMotion.attach(self)
 	_start_menu_music.call_deferred()
 	if get_parent() == get_tree().root:
 		GameState.current_mode = GameState.Mode.MENU
