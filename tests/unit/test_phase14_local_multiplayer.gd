@@ -164,6 +164,18 @@ func test_perf_probe_accepts_named_player_and_kart_counts() -> void:
 	assert_almost_eq(float(options["duration"]), 5.0, 0.001)
 
 
+func test_perf_probe_quality_flag_defaults_low_and_clamps_to_tier_range() -> void:
+	var script: GDScript = load("res://scenes/test/perf_probe.gd") as GDScript
+	var defaults: Dictionary = script.call("parse_options", PackedStringArray(["--karts", "12"])) as Dictionary
+	assert_eq(int(defaults["quality"]), 0, "default keeps the historical low-tier measurement")
+	var high: Dictionary = script.call("parse_options", PackedStringArray(["--quality", "2"])) as Dictionary
+	assert_eq(int(high["quality"]), 2)
+	var clamped: Dictionary = script.call("parse_options", PackedStringArray(["--quality", "9"])) as Dictionary
+	assert_eq(int(clamped["quality"]), 2)
+	var negative: Dictionary = script.call("parse_options", PackedStringArray(["--quality", "-3"])) as Dictionary
+	assert_eq(int(negative["quality"]), 0)
+
+
 func test_split_screen_render_scale_decreases_for_more_viewports() -> void:
 	assert_almost_eq(SplitScreen.render_scale_for_players(1, 1.0), 1.0, 0.001)
 	assert_almost_eq(SplitScreen.render_scale_for_players(2, 1.0), 0.85, 0.001)

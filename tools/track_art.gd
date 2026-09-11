@@ -81,7 +81,7 @@ static func _sky(root: Node3D, theme: int) -> void:
 	environment.background_mode = Environment.BG_SKY
 	# Sky-derived ambient/reflections replace the greybox flat/color fallback.
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	environment.reflection_source = Environment.REFLECTION_SOURCE_SKY
+	environment.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	environment.tonemap_mode = Environment.TONE_MAPPER_ACES
 	environment.tonemap_white = 6.0
 	environment.glow_intensity = 0.85

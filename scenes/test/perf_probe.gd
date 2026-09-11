@@ -10,6 +10,8 @@ const AI_DIFFICULTY: AIDifficultyProfile = preload("res://data/ai/normal.tres")
 const DEFAULT_KART_COUNT: int = 12
 const DEFAULT_PLAYER_COUNT: int = 0
 const DEFAULT_DURATION_SECONDS: float = 30.0
+const DEFAULT_QUALITY: int = 0
+const MAX_QUALITY: int = 2
 const WARMUP_SECONDS: float = 2.0
 const MICROSECONDS_PER_SECOND: float = 1_000_000.0
 const PROBE_LAPS: int = 3
@@ -22,6 +24,7 @@ const QUAD_PLAYER_TARGET_FPS: float = 45.0
 var _race: RaceManager
 var _kart_count: int = DEFAULT_KART_COUNT
 var _player_count: int = DEFAULT_PLAYER_COUNT
+var _quality: int = DEFAULT_QUALITY
 var _duration_seconds: float = DEFAULT_DURATION_SECONDS
 var _elapsed_real: float = 0.0
 var _measured_real: float = 0.0
@@ -37,8 +40,9 @@ func _ready() -> void:
 	var options: Dictionary = parse_options(OS.get_cmdline_user_args())
 	_kart_count = int(options["karts"])
 	_player_count = int(options["players"])
+	_quality = int(options["quality"])
 	_duration_seconds = float(options["duration"])
-	SettingsManager.set_setting(&"video", &"particle_quality", 0)
+	SettingsManager.set_setting(&"video", &"particle_quality", _quality)
 	SettingsManager.set_setting(&"video", &"resolution", Vector2i(1600, 900))
 	_race = RACE_SCENE.instantiate() as RaceManager
 	_race.configure(build_config(_kart_count, _player_count), _scripted_provider if _player_count > 0 else Callable())
@@ -101,6 +105,7 @@ static func parse_options(arguments: PackedStringArray) -> Dictionary:
 		"karts": DEFAULT_KART_COUNT,
 		"players": DEFAULT_PLAYER_COUNT,
 		"duration": DEFAULT_DURATION_SECONDS,
+		"quality": DEFAULT_QUALITY,
 	}
 	if not arguments.is_empty() and arguments[0].is_valid_int():
 		result["karts"] = clampi(arguments[0].to_int(), 1, RaceManager.MAX_KART_COUNT)
@@ -120,6 +125,9 @@ static func parse_options(arguments: PackedStringArray) -> Dictionary:
 			"--duration":
 				if value.is_valid_float():
 					result["duration"] = maxf(value.to_float(), 1.0)
+			"--quality":
+				if value.is_valid_int():
+					result["quality"] = clampi(value.to_int(), 0, MAX_QUALITY)
 		index += 2
 	result["karts"] = maxi(int(result["karts"]), int(result["players"]))
 	return result
@@ -132,7 +140,7 @@ func _finish() -> void:
 	var result: Dictionary = {
 		"karts": _kart_count,
 		"players": _player_count,
-		"quality": 0,
+		"quality": _quality,
 		"resolution": "1600x900",
 		"gpu_measurement": gpu_measurement,
 		"target_fps": target_fps,
