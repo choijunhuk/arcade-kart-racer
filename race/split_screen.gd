@@ -148,6 +148,7 @@ func _resize_views() -> void:
 		var view: PlayerView = _views[index]
 		view.container.position = rect.position * output
 		view.container.size = rect.size * output
+		view.hud.apply_viewport_layout(view.container.size)
 
 
 func _on_settings_changed(section: StringName) -> void:

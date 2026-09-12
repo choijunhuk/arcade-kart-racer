@@ -46,6 +46,7 @@ var _kart_names_by_id: Dictionary[int, String] = {}
 var _respawns: Dictionary[String, int] = {}
 var _wall_head_on_counts: Dictionary[String, int] = {}
 var _wall_head_on_count: int = 0
+var _kart_contact_events: int = 0
 var _drift_started_count: int = 0
 var _tier3_release_count: int = 0
 var _shortcut_take_count: int = 0
@@ -70,6 +71,7 @@ func _run() -> void:
 	Engine.physics_ticks_per_second = SIM_PHYSICS_TICKS
 	Engine.time_scale = SIM_TIME_SCALE
 	EventBus.kart_respawned.connect(_on_kart_respawned)
+	EventBus.kart_contacted.connect(_on_kart_contacted)
 	EventBus.drift_started.connect(_on_drift_started)
 	EventBus.drift_ended.connect(_on_drift_ended)
 	EventBus.item_used.connect(_on_item_used)
@@ -290,6 +292,8 @@ func _run_one_race(
 		"respawns": _respawns.duplicate(),
 		"wall_head_on_counts": _wall_head_on_counts.duplicate(),
 		"wall_head_on_count": _wall_head_on_count,
+		## `KartCollisionResolver` notifies both karts once per resolved pair.
+		"kart_contact_count": _kart_contact_events / 2,
 		"drifts_started": _drift_started_count,
 		"tier3_releases": _tier3_release_count,
 		"shortcut_takes": _shortcut_take_count,
@@ -317,6 +321,7 @@ func _reset_metrics() -> void:
 	_respawns.clear()
 	_wall_head_on_counts.clear()
 	_wall_head_on_count = 0
+	_kart_contact_events = 0
 	_drift_started_count = 0
 	_tier3_release_count = 0
 	_shortcut_take_count = 0
@@ -340,6 +345,12 @@ func _on_wall_head_on(kart: KartController) -> void:
 		return
 	_wall_head_on_counts[kart_name] = int(_wall_head_on_counts.get(kart_name, 0)) + 1
 	_wall_head_on_count += 1
+
+
+func _on_kart_contacted(_kart: Node) -> void:
+	_kart_contact_events += 1
+
+
 func _on_item_used(_kart: Node, item_id: StringName) -> void:
 	var key: String = String(item_id)
 	_items_used[key] = int(_items_used.get(key, 0)) + 1

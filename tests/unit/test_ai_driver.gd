@@ -72,6 +72,25 @@ func test_choose_overtake_side_returns_zero_when_boxed_in() -> void:
 	assert_eq(AIDriver.choose_overtake_side(false, false), 0)
 
 
+func test_overtake_chooses_empty_lane_when_a_farther_kart_occupies_the_other_lane() -> void:
+	var report: AISensors.SensorReport = AISensors.SensorReport.new()
+	var has_lane_occupancy: bool = _has_property(report, &"lane_occupied")
+	assert_true(has_lane_occupancy, "sensor reports must preserve occupancy for every forward lane")
+	if not has_lane_occupancy:
+		return
+	report.kart_ahead_distance = 4.0
+	report.kart_ahead_relative_speed = AIDriver.OVERTAKE_SPEED_DELTA + 1.0
+	report.kart_ahead_side = AISensors.Side.CENTER
+	report.lane_occupied[AISensors.Side.CENTER] = true
+	report.lane_occupied[AISensors.Side.RIGHT] = true
+	report.lane_distance[AISensors.Side.CENTER] = 4.0
+	report.lane_distance[AISensors.Side.RIGHT] = 7.0
+	assert_lt(
+		AIDriver.compute_overtake_bias(report, NORMAL_DIFFICULTY, 0.0), 0.0,
+		"the farther right-lane kart must force the overtake into the empty left lane",
+	)
+
+
 func test_evaluate_stuck_is_none_below_the_reverse_trigger() -> void:
 	assert_eq(AIDriver.evaluate_stuck(1.0), AIDriver.StuckAction.NONE)
 
@@ -260,3 +279,10 @@ func test_imminent_wall_releases_drift_for_full_recovery_steering() -> void:
 			assert_false(frame.drift, "emergency braking must release the drift lock")
 			assert_false(frame.drift_pressed)
 			assert_lt(frame.steer, -kart.tuning.drift_min_steer, "wall recovery needs full navigator steering")
+
+
+func _has_property(object: Object, property_name: StringName) -> bool:
+	for property: Dictionary in object.get_property_list():
+		if StringName(str(property.get("name", ""))) == property_name:
+			return true
+	return false

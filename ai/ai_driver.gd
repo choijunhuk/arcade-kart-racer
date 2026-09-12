@@ -110,8 +110,8 @@ static func compute_overtake_bias(report: AISensors.SensorReport, profile: AIDif
 		return 0.0
 	if absf(curvature_ahead) > CORNER_APEX_CURVATURE:
 		return 0.0
-	var left_clear: bool = report.side_clear(AISensors.Side.LEFT) and report.kart_ahead_side != AISensors.Side.LEFT
-	var right_clear: bool = report.side_clear(AISensors.Side.RIGHT) and report.kart_ahead_side != AISensors.Side.RIGHT
+	var left_clear: bool = report.side_clear(AISensors.Side.LEFT)
+	var right_clear: bool = report.side_clear(AISensors.Side.RIGHT)
 	return float(choose_overtake_side(left_clear, right_clear)) * profile.lane_offset_max
 
 
