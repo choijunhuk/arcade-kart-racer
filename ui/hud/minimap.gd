@@ -53,6 +53,12 @@ func force_update() -> void:
 		dot.position = _to_canvas(MinimapProjection.project_point(kart.global_position, _world_points))
 
 
+## Reprojects cached geometry after a split-screen viewport resize.
+func refresh_layout() -> void:
+	_rebuild_track_line()
+	force_update()
+
+
 func _rebuild_track_line() -> void:
 	var canvas_points: PackedVector2Array = PackedVector2Array()
 	for point: Vector2 in MinimapProjection.normalize_points(_world_points):
