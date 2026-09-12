@@ -7,6 +7,8 @@ const GO_DISPLAY_SECONDS: float = 1.0
 const SHIELD_FULL_SECONDS: float = 8.0
 const METRES_PER_SECOND_TO_KPH: float = 3.6
 const PERCENT_MAX: float = 100.0
+const COMPACT_MAX_WIDTH: float = 900.0
+const COMPACT_MAX_HEIGHT: float = 520.0
 
 @export var tuning: FeelTuning = preload("res://data/tuning/feel_default.tres")
 
@@ -48,6 +50,7 @@ var _lap_base_position: Vector2 = Vector2.ZERO
 var _threat_remaining: float = 0.0
 var _time_trial: TimeTrialGhost
 var _time_label: Label
+var _compact_layout: bool = false
 
 
 func _ready() -> void:
@@ -74,7 +77,7 @@ func _process(delta: float) -> void:
 		_position_count_label.text = "/%d" % _kart_count
 		_lap_label.text = "LAP %d/%d" % [lap, _total_laps]
 		_speed_label.text = "%03d km/h" % roundi(absf(_player_kart.get_speed()) * METRES_PER_SECOND_TO_KPH)
-	_speedometer.visible = bool(SettingsManager.get_setting(&"gameplay", &"speedometer", true))
+	_speedometer.visible = not _compact_layout and bool(SettingsManager.get_setting(&"gameplay", &"speedometer", true))
 	if _go_display_remaining > 0.0:
 		_go_display_remaining = maxf(0.0, _go_display_remaining - delta)
 		if _go_display_remaining <= 0.0:
@@ -138,6 +141,105 @@ func bind(
 ## Selects whether this player's viewport pays the minimap rendering cost.
 func set_minimap_visible(minimap_visible: bool) -> void:
 	_minimap.visible = minimap_visible
+
+
+## Pure viewport-local geometry used by split-screen and headless tests.
+static func layout_for_viewport(viewport_size: Vector2) -> Dictionary:
+	var compact: bool = viewport_size.x <= COMPACT_MAX_WIDTH or viewport_size.y <= COMPACT_MAX_HEIGHT
+	if compact:
+		return {
+			"compact": true,
+			"speedometer_visible": false,
+			"regions": {
+				"position": Rect2(12.0, 12.0, 150.0, 88.0),
+				"minimap": Rect2(12.0, viewport_size.y - 120.0, 140.0, 108.0),
+				"drift": Rect2(viewport_size.x * 0.5 - 120.0, viewport_size.y - 60.0, 240.0, 44.0),
+				"item": Rect2(viewport_size.x - 152.0, 12.0, 140.0, 100.0),
+				"speedometer": Rect2(),
+			},
+		}
+	return {
+		"compact": false,
+		"speedometer_visible": true,
+		"regions": {
+			"position": Rect2(24.0, 20.0, 190.0, 122.0),
+			"minimap": Rect2(24.0, viewport_size.y - 224.0, 260.0, 200.0),
+			"drift": Rect2(viewport_size.x * 0.5 - 210.0, viewport_size.y - 98.0, 420.0, 72.0),
+			"item": Rect2(viewport_size.x - 244.0, 238.0, 220.0, 160.0),
+			"speedometer": Rect2(viewport_size.x * 0.5 + 228.0, viewport_size.y - 98.0, 170.0, 72.0),
+		},
+	}
+
+
+## Applies a full or compact layout after the owning SubViewport is resized.
+func apply_viewport_layout(viewport_size: Vector2) -> void:
+	var layout: Dictionary = layout_for_viewport(viewport_size)
+	var regions: Dictionary = layout["regions"] as Dictionary
+	_compact_layout = bool(layout["compact"])
+	_set_rect($PositionPanel, regions["position"])
+	_set_rect(_minimap, regions["minimap"])
+	_set_rect(_drift_meter, regions["drift"])
+	_set_rect($ItemPanel, regions["item"])
+	_set_rect(_shield_timer, (regions["item"] as Rect2).grow(6.0))
+	_set_rect(_speedometer, regions["speedometer"])
+	_apply_text_layout(viewport_size)
+	_apply_panel_contents()
+	_speedometer.visible = not _compact_layout and bool(SettingsManager.get_setting(&"gameplay", &"speedometer", true))
+	_lap_base_position = _lap_label.position
+	_position_label.pivot_offset = _position_label.size * 0.5
+
+
+func _apply_text_layout(viewport_size: Vector2) -> void:
+	if _compact_layout:
+		_set_rect(_position_label, Rect2(22.0, 14.0, 60.0, 48.0))
+		_set_rect(_position_count_label, Rect2(82.0, 28.0, 68.0, 32.0))
+		_set_rect(_lap_label, Rect2(22.0, 64.0, 128.0, 24.0))
+		_set_rect(_countdown_label, Rect2(viewport_size * 0.5 - Vector2(90.0, 60.0), Vector2(180.0, 120.0)))
+		_set_rect(_wrong_way_label, Rect2(viewport_size * 0.5 + Vector2(-140.0, 48.0), Vector2(280.0, 40.0)))
+		_set_rect(_message_label, Rect2(0.0, 72.0, viewport_size.x, 36.0))
+		_set_rect(_threat_warning, Rect2(viewport_size.x * 0.5 - 180.0, 18.0, 360.0, 34.0))
+	else:
+		_set_rect(_position_label, Rect2(42.0, 26.0, 82.0, 78.0))
+		_set_rect(_position_count_label, Rect2(124.0, 56.0, 70.0, 44.0))
+		_set_rect(_lap_label, Rect2(42.0, 104.0, 152.0, 32.0))
+		_set_rect(_countdown_label, Rect2(viewport_size * 0.5 - Vector2(180.0, 130.0), Vector2(360.0, 260.0)))
+		_set_rect(_wrong_way_label, Rect2(viewport_size * 0.5 + Vector2(-260.0, 110.0), Vector2(520.0, 60.0)))
+		_set_rect(_message_label, Rect2(0.0, 94.0, viewport_size.x, 56.0))
+		_set_rect(_threat_warning, Rect2(viewport_size.x * 0.5 - 350.0, 24.0, 700.0, 54.0))
+	_position_label.add_theme_font_size_override("font_size", 40 if _compact_layout else 64)
+	_position_count_label.add_theme_font_size_override("font_size", 20 if _compact_layout else 28)
+	_lap_label.add_theme_font_size_override("font_size", 16 if _compact_layout else 22)
+	_countdown_label.add_theme_font_size_override("font_size", 64 if _compact_layout else 112)
+	_wrong_way_label.add_theme_font_size_override("font_size", 28 if _compact_layout else 42)
+	_message_label.add_theme_font_size_override("font_size", 24 if _compact_layout else 38)
+	_threat_warning.add_theme_font_size_override("font_size", 20 if _compact_layout else 30)
+
+
+func _apply_panel_contents() -> void:
+	_minimap.custom_minimum_size = Vector2(140.0, 108.0) if _compact_layout else Vector2(260.0, 200.0)
+	_drift_meter.custom_minimum_size = Vector2(240.0, 44.0) if _compact_layout else Vector2(420.0, 72.0)
+	var charge_bar: ProgressBar = _drift_meter.get_node("Panel/ChargeBar") as ProgressBar
+	charge_bar.custom_minimum_size = Vector2(220.0, 26.0) if _compact_layout else Vector2(400.0, 42.0)
+	if _compact_layout:
+		_set_rect(_item_icon, Rect2(47.0, 5.0, 46.0, 46.0))
+		_set_rect(_item_name, Rect2(0.0, 54.0, 140.0, 18.0))
+		_set_rect(_roulette_label, Rect2(0.0, 71.0, 140.0, 16.0))
+		_set_rect(_cooldown_bar, Rect2(10.0, 88.0, 120.0, 9.0))
+	else:
+		_set_rect(_item_icon, Rect2(74.0, 10.0, 72.0, 72.0))
+		_set_rect(_item_name, Rect2(0.0, 86.0, 220.0, 28.0))
+		_set_rect(_roulette_label, Rect2(0.0, 110.0, 220.0, 24.0))
+		_set_rect(_cooldown_bar, Rect2(16.0, 136.0, 188.0, 15.0))
+	_item_icon.pivot_offset = _item_icon.size * 0.5
+	_item_name.add_theme_font_size_override("font_size", 14 if _compact_layout else 22)
+	_roulette_label.add_theme_font_size_override("font_size", 12 if _compact_layout else 16)
+	_speed_label.add_theme_font_size_override("font_size", 18 if _compact_layout else 24)
+
+
+func _set_rect(control: Control, rect: Rect2) -> void:
+	control.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	control.position = rect.position
+	control.size = rect.size
 
 
 ## Returns the kart observed by this HUD for integration checks and adapters.
