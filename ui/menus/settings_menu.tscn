@@ -269,6 +269,13 @@ layout_mode = 2
 button_pressed = true
 text = "Show Speedometer"
 
+[node name="CameraPresetLabel" type="Label" parent="Panel/VBox/Tabs/Gameplay"]
+layout_mode = 2
+text = "Camera"
+
+[node name="CameraPresetOption" type="OptionButton" parent="Panel/VBox/Tabs/Gameplay"]
+layout_mode = 2
+
 [node name="BackButton" type="Button" parent="Panel/VBox"]
 layout_mode = 2
 text = "BACK"

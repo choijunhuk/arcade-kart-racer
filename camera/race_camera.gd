@@ -15,12 +15,13 @@ var _drift_offset: float = 0.0
 var _look_back_blend: float = 0.0
 var _shake: CameraShake = CameraShake.new()
 var _fov_model: CameraFov = CameraFov.new()
+var _base_tuning: FeelTuning
 
 
 func _ready() -> void:
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
-	_shake.configure(tuning)
-	_fov_model.configure(tuning)
+	_base_tuning = tuning
+	apply_camera_preset(String(SettingsManager.get_setting(&"gameplay", &"camera_preset", CameraPreset.ARCADE_ID)))
 	_connect_events()
 
 
@@ -65,6 +66,27 @@ func _process(delta: float) -> void:
 ## Adds trauma through the bounded camera model for tests and local effects.
 func add_trauma(amount: float) -> void:
 	_shake.add_trauma(amount)
+
+
+## Duplicates the base tuning resource and overlays the named camera preset's
+## values, then reconfigures the shake and FOV models against the result.
+## Unrecognized preset ids resolve to Arcade.
+func apply_camera_preset(preset_id: String) -> void:
+	if _base_tuning == null:
+		_base_tuning = tuning
+	if _base_tuning == null:
+		return
+	var preset: CameraPreset = CameraPreset.load_for_id(preset_id)
+	var applied: FeelTuning = _base_tuning.duplicate() as FeelTuning
+	if preset != null:
+		applied.follow_stiffness = preset.follow_stiffness
+		applied.camera_height = preset.camera_height
+		applied.speed_fov_add = preset.speed_fov_add
+		applied.boost_fov_add = preset.boost_fov_add
+		applied.drift_side_offset = preset.drift_side_offset
+	tuning = applied
+	_shake.configure(tuning)
+	_fov_model.configure(tuning)
 
 
 ## Returns current trauma for the debug overlay and integration tests.
@@ -132,6 +154,8 @@ func _connect_events() -> void:
 		EventBus.kart_landed.connect(_on_kart_landed)
 	if not EventBus.item_exploded.is_connected(_on_item_exploded):
 		EventBus.item_exploded.connect(_on_item_exploded)
+	if not SettingsManager.settings_changed.is_connected(_on_settings_changed):
+		SettingsManager.settings_changed.connect(_on_settings_changed)
 
 
 func _disconnect_events() -> void:
@@ -143,6 +167,13 @@ func _disconnect_events() -> void:
 		EventBus.kart_landed.disconnect(_on_kart_landed)
 	if EventBus.item_exploded.is_connected(_on_item_exploded):
 		EventBus.item_exploded.disconnect(_on_item_exploded)
+	if SettingsManager.settings_changed.is_connected(_on_settings_changed):
+		SettingsManager.settings_changed.disconnect(_on_settings_changed)
+
+
+func _on_settings_changed(section: StringName) -> void:
+	if section == &"gameplay":
+		apply_camera_preset(String(SettingsManager.get_setting(&"gameplay", &"camera_preset", CameraPreset.ARCADE_ID)))
 
 
 func _on_kart_hit(kart: Node, _hit_type: int) -> void:
