@@ -28,6 +28,15 @@ func test_every_shipped_item_has_an_icon_and_concrete_item_scene() -> void:
 			instance.free()
 
 
+func test_exported_remap_listing_returns_the_item_id() -> void:
+	var resources: Array[Resource] = ResourceScanner.scan_tres(
+		"res://data/items", PackedStringArray(["rocket_dart.tres.remap"]),
+	)
+	assert_eq(resources.size(), 1)
+	if resources.size() == 1:
+		assert_eq((resources[0] as ItemData).id, &"rocket_dart")
+
+
 func test_item_box_collection_decides_result_immediately_but_starts_roulette() -> void:
 	var manager: Node = _make_manager()
 	if manager == null:

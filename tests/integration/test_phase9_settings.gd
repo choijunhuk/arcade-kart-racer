@@ -62,6 +62,22 @@ func test_pause_settings_back_keeps_the_race_tree_paused() -> void:
 	assert_true(pause_menu.get_node("Panel").visible)
 
 
+func test_hidden_settings_ignores_ui_cancel_without_requesting_a_scene() -> void:
+	var requested_scenes: Array[String] = []
+	var capture_request: Callable = func(scene_path: String) -> void: requested_scenes.append(scene_path)
+	GameState.scene_change_requested.connect(capture_request)
+	var settings: SettingsMenu = (load(SETTINGS_PATH) as PackedScene).instantiate() as SettingsMenu
+	settings.visible = false
+	add_child_autofree(settings)
+	await wait_process_frames(1)
+	var cancel: InputEventAction = InputEventAction.new()
+	cancel.action = &"ui_cancel"
+	cancel.pressed = true
+	settings._unhandled_input(cancel)
+	assert_true(requested_scenes.is_empty())
+	GameState.scene_change_requested.disconnect(capture_request)
+
+
 func test_loading_race_scene_preserves_race_mode() -> void:
 	var config: RaceConfig = RaceConfigBuilder.build(DRIVER, KART, TRACK, DIFFICULTY, 1, 1)
 	config.items_enabled = false

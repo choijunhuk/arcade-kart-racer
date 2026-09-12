@@ -35,12 +35,14 @@ var _input_limiter: NetRateLimiter = NetRateLimiter.new()
 var _gate: NetPeerGate = NetPeerGate.new()
 var _loss: NetLossEstimator = NetLossEstimator.new()
 var _roster: NetSessionLobby = NetSessionLobby.new()
+var _transport: NetSessionTransport = NetSessionTransport.new()
 var _pending_departures: Array[int] = []
 var _clock_ticks: int = 0
 var _closing: bool = false
 
 func _init() -> void:
 	_roster.attach(self)
+	_transport.attach(self)
 
 func _ready() -> void:
 	multiplayer.peer_connected.connect(_peer_connected)
@@ -127,7 +129,7 @@ func bind_race(value: NetRace) -> void:
 
 ## Queues a real RPC through optional one-way delay and unreliable loss.
 func send(method: StringName, target: int, args: Array, reliable: bool) -> void:
-	conditions.enqueue(now(), reliable, _deliver.bind(method, target, args, reliable))
+	_transport.send(method, target, args, reliable)
 
 ## Monotonic time is restricted to transport, never race adjudication.
 static func now() -> float:
@@ -159,22 +161,10 @@ func _physics_process(_delta: float) -> void:
 		start_race()
 
 func _deliver(method: StringName, target: int, args: Array, reliable: bool) -> void:
-	if not reliable and not NetTuning.fits_unreliable(method, args):
-		return
-	if peer != null and peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED:
-		if target != 0 and not multiplayer.get_peers().has(target):
-			return
-		rpc_id.callv([target, method] + args)
+	_transport.deliver(method, target, args, reliable)
 
-## Server tick: drains the deferred kicks queued a tick earlier (so their
-## reason RPC has flushed, spec item 1) and rejects every peer that let its
-## handshake deadline lapse (spec item 6).
 func _service_peers() -> void:
-	for id: int in _gate.take_kicks():
-		if multiplayer.get_peers().has(id):
-			multiplayer.disconnect_peer(id)
-	for id: int in _gate.expired(now()):
-		_reject_peer(id, "Handshake timed out.")
+	_transport.service_peers()
 
 ## A connected peer is not a joined player yet: it holds no roster row (and so
 ## no kart) until its handshake passes, and is kicked if it never sends one.

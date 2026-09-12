@@ -43,10 +43,10 @@ func _ready() -> void:
 	_quality = int(options["quality"])
 	_duration_seconds = float(options["duration"])
 	SettingsManager.set_setting(&"video", &"particle_quality", _quality)
+	SettingsManager.set_setting(&"video", &"resolution", Vector2i(1600, 900))
 	# Measure uncapped: with vsync on, runs landed on exactly 60.0 or ~120 fps depending on the
 	# display's sync state, which made A/B comparisons meaningless (Phase 17b shimmer A/B).
-	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
-	SettingsManager.set_setting(&"video", &"resolution", Vector2i(1600, 900))
+	SettingsManager.set_setting(&"video", &"vsync", false)
 	_race = RACE_SCENE.instantiate() as RaceManager
 	_race.configure(build_config(_kart_count, _player_count), _scripted_provider if _player_count > 0 else Callable())
 	add_child(_race)
@@ -145,6 +145,7 @@ func _finish() -> void:
 		"players": _player_count,
 		"quality": _quality,
 		"resolution": "1600x900",
+		"vsync": DisplayServer.window_get_vsync_mode() != DisplayServer.VSYNC_DISABLED,
 		"gpu_measurement": gpu_measurement,
 		"target_fps": target_fps,
 		"fps_pass": mean_fps >= target_fps,

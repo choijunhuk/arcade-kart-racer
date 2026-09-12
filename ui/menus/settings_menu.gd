@@ -51,6 +51,8 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if not is_visible_in_tree():
+		return
 	if event.is_action_pressed(&"ui_cancel") and not _is_remapping():
 		UiAudio.play_back()
 		_close()

@@ -47,10 +47,15 @@ func _process(delta: float) -> void:
 	var look_direction: Vector3 = _look_direction().rotated(Vector3.UP, PI * _look_back_blend)
 	var drift_weight: float = clampf(tuning.feedback_lerp_speed * delta, 0.0, 1.0)
 	var desired: Vector3 = _resolve_clipping(_desired_position(look_direction, drift_weight))
-	global_position = global_position.lerp(desired, clampf(tuning.follow_stiffness * delta, 0.0, 1.0))
+	var recovered: Vector3 = _resolve_clipping(global_position)
+	if recovered.distance_squared_to(global_position) > POSITION_EPSILON * POSITION_EPSILON:
+		global_position = recovered
+	else:
+		global_position = global_position.lerp(desired, clampf(tuning.follow_stiffness * delta, 0.0, 1.0))
 	var sample: CameraShake.Sample = _shake.step(delta, SettingsManager.get_shake_strength())
 	_apply_look_rotation(sample.rotation_offset)
 	global_position += global_basis * sample.position_offset
+	global_position = _resolve_clipping(global_position)
 	fov = _fov_model.step(
 		_target.get_speed_ratio(), _target.is_boosting(), delta,
 		SettingsManager.get_fov_effect_strength(),

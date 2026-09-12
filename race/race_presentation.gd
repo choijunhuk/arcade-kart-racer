@@ -29,3 +29,16 @@ static func configure(
 	split_screen.configure(world, players, lap_tracker, position_tracker, karts.size(), config.laps, item_manager, track.get_racing_line(), karts)
 	particle_budget.configure_cameras(karts, split_screen.get_cameras())
 	return split_screen.get_huds()[0]
+
+
+## Binds and resets pause/results overlays before a countdown begins.
+static func prepare_overlays(
+	manager: RaceManager, config: RaceConfig, player_kart: KartController,
+	pause_menu: PauseMenu, results_screen: ResultsScreen,
+) -> void:
+	pause_menu.bind(
+		manager, player_kart != null and not GameState.automation_mode and not GameState.is_networked,
+		config.player_device_ids(),
+	)
+	pause_menu.hide_menu()
+	results_screen.hide_results()

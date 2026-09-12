@@ -57,7 +57,7 @@ static func chassis(data: KartData) -> ArrayMesh:
 static func decorate(visuals: Node3D, data: KartData, night_theme: bool = false) -> void:
 	var body: MeshInstance3D = visuals.get_node("Body") as MeshInstance3D
 	body.mesh = chassis(data)
-	var accent: StandardMaterial3D = PrimitiveArt.material(data.body_color.lightened(0.35), true)
+	var accent: StandardMaterial3D = PrimitiveArt.material(data.body_color.lightened(0.35))
 	PrimitiveArt.add_box(body, Vector3(1.65, 0.12, 0.18), Vector3(0, -0.12, -1.1), PrimitiveArt.material(Color(0.1, 0.12, 0.16)))
 	PrimitiveArt.add_box(body, Vector3(0.15, 0.08, 1.7), Vector3(0, 0.3, 0), accent)
 	if data.weight_class == KartData.WeightClass.HEAVY:
@@ -166,6 +166,7 @@ static func _add_helmet_visor(driver: Node3D) -> void:
 static func apply_paint_pattern(body: MeshInstance3D, driver: DriverData) -> void:
 	for child: Node in body.get_children():
 		if String(child.name).begins_with(PAINT_DECAL_PREFIX):
+			body.remove_child(child)
 			child.queue_free()
 	if driver == null:
 		return

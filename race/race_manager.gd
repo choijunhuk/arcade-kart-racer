@@ -151,12 +151,7 @@ func _begin_loading(is_restart: bool) -> void:
 	)
 	modes.setup(_config, _player_kart, _track, primary_hud)
 	if GameState.is_networked and not multiplayer.is_server(): primary_hud.bind_network(GameState.net_session)
-	_pause_menu.bind(
-		self, _player_kart != null and not GameState.automation_mode and not GameState.is_networked,
-		_config.player_device_ids(),
-	)
-	_pause_menu.hide_menu()
-	_results_screen.hide_results()
+	RacePresentation.prepare_overlays(self, _config, _player_kart, _pause_menu, _results_screen)
 	_transition_to(RaceState.COUNTDOWN)
 	if not GameState.is_networked:
 		_countdown.start()

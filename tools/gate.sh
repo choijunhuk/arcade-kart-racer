@@ -6,25 +6,51 @@ PROJECT_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 GODOT_BIN=${GODOT_BIN:-/opt/homebrew/bin/godot}
 cd "$PROJECT_ROOT"
 fail=0
+gate_tmp=$(mktemp -d "${TMPDIR:-/tmp}/turbo-circuit-gate.XXXXXX")
+cleanup() { rm -rf "$gate_tmp"; }
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
 step() { printf '\n== %s\n' "$1"; }
+run_stage() {
+  stage_name=$1
+  expected_output=$2
+  shift 2
+  stage_log="$gate_tmp/$stage_name.log"
+  "$@" >"$stage_log" 2>&1
+  stage_status=$?
+  if [ "$stage_status" -ne 0 ]; then
+    echo "FAIL: $stage_name exited with status $stage_status"
+    fail=1
+    return 1
+  fi
+  if ! grep -qE -- "$expected_output" "$stage_log"; then
+    echo "FAIL: $stage_name missing completion marker"
+    fail=1
+    return 1
+  fi
+  return 0
+}
 
 step "import (fresh checkouts need the class cache)"
-"$GODOT_BIN" --headless --path . --import >/dev/null 2>&1; echo "ok"
+if run_stage import '^Godot Engine v' "$GODOT_BIN" --headless --path . --import; then echo "ok"; fi
 
 step "parse"
-if "$GODOT_BIN" --headless --path . --quit 2>&1 | grep -qiE 'script error|parse error'; then echo "FAIL: script/parse errors"; fail=1; else echo "ok"; fi
+if run_stage parse '^Godot Engine v' "$GODOT_BIN" --headless --path . --quit; then
+  if grep -qiE 'script error|parse error' "$gate_tmp/parse.log"; then echo "FAIL: parse reported script/parse errors"; fail=1; else echo "ok"; fi
+fi
 
 step "tests"
-out=$(tools/run_tests.sh 2>&1); echo "$out" | grep -E '^(Tests|Passing Tests|Failing)' 
-if ! echo "$out" | grep -qE '^Passing Tests'; then echo "FAIL: test run did not complete"; fail=1
-elif [ "$(echo "$out" | awk '/^Tests/{t=$2} /^Passing Tests/{p=$3} END{print (t==p && t>0)?"eq":"ne"}')" != "eq" ]; then echo "FAIL: failing tests"; fail=1; else echo "ok"; fi
+if run_stage tests '---- All tests passed! ----' tools/run_tests.sh; then
+  grep -E '^(Tests|Passing Tests|Failing)' "$gate_tmp/tests.log" || true
+  if [ "$(awk '/^Tests/{t=$2} /^Passing Tests/{p=$3} END{print (t==p && t>0)?"eq":"ne"}' "$gate_tmp/tests.log")" != "eq" ]; then echo "FAIL: tests completion totals do not match"; fail=1; else echo "ok"; fi
+fi
 
 step "tracks"
-if tools/validate_tracks.sh 2>&1 | grep -q 'FAILED'; then echo "FAIL: track validation"; fail=1; else echo "ok"; fi
+if run_stage tracks '^TRACK VALIDATION PASSED:' tools/validate_tracks.sh; then echo "ok"; fi
 
 step "sim smoke"
 if [ -x tools/run_sim.sh ]; then
-  if tools/run_sim.sh --races 1 --karts 8 --laps 1 2>/dev/null | grep -q '"success":true'; then echo "ok"; else echo "FAIL: sim smoke race"; fail=1; fi
+  if run_stage sim '"success":true' tools/run_sim.sh --races 1 --karts 8 --laps 1; then echo "ok"; fi
 fi
 
 step "file size (.gd <= 400 lines)"
@@ -44,7 +70,7 @@ if git rev-parse --verify origin/main >/dev/null 2>&1; then
     if [ "${GATE_ALLOW_SENSITIVE:-0}" = "1" ]; then echo "approved via GATE_ALLOW_SENSITIVE"
     elif [ -f .omc/sensitive_approval.md ] && grep -q "$head_sha" .omc/sensitive_approval.md && grep -qi "review-1" .omc/sensitive_approval.md && grep -qi "review-2" .omc/sensitive_approval.md; then
       echo "approved via .omc/sensitive_approval.md (two reviews recorded for $head_sha)"
-    else fail=1; fi
+    else echo "FAIL: sensitive paths lack two recorded cross-reviews for $head_sha"; fail=1; fi
   else echo "ok"; fi
 fi
 

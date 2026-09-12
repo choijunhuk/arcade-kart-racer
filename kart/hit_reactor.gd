@@ -38,9 +38,9 @@ func apply(
 	type: HitType, _source: Node, from_item: bool = false,
 	item_speed_factor: float = 1.0, emit_hit_event: bool = true,
 ) -> bool:
-	if (from_item or type != HitType.BUMP) and _controller != null and _controller.consume_shield():
-		return false
 	if is_invulnerable():
+		return false
+	if (from_item or type != HitType.BUMP) and _controller != null and _controller.consume_shield():
 		return false
 	_hit_type = type
 	_duration = _duration_for(type)

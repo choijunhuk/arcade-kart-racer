@@ -249,10 +249,8 @@ func reset() -> void:
 func _load_item_catalog() -> void:
 	if not _items_by_id.is_empty():
 		return
-	for file_name: String in DirAccess.get_files_at(ITEM_DATA_DIRECTORY):
-		if file_name.get_extension() != "tres":
-			continue
-		var item: ItemData = load(ITEM_DATA_DIRECTORY.path_join(file_name)) as ItemData
+	for resource: Resource in ResourceScanner.scan_tres(ITEM_DATA_DIRECTORY):
+		var item: ItemData = resource as ItemData
 		if item != null and not item.id.is_empty():
 			_items_by_id[item.id] = item
 
