@@ -116,16 +116,21 @@ func retry_start() -> void:
 func restart_to_lobby() -> void:
 	if not _session.multiplayer.is_server() or not _session.dedicated:
 		return
+	clear_race_state()
+	_session.peer.refuse_new_connections = false
+	for row: Dictionary in _session.players:
+		row["ready"] = false
+	_session.send(&"_return_to_lobby", 0, [_session.players], true)
+	_session.lobby_changed.emit()
+
+
+## Clears every per-race flag while preserving the connected peer roster.
+func clear_race_state() -> void:
 	_session.started = false
 	_session.running = false
 	_session.race = null
 	preparing = false
 	loaded.clear()
-	_session.peer.refuse_new_connections = false
-	for row: Dictionary in _session.players:
-		row["ready"] = false
-	_session.send(&"_lobby", 0, [_session.players], true)
-	_session.lobby_changed.emit()
 
 
 func _prepare_args() -> Array:

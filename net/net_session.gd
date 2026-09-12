@@ -221,6 +221,12 @@ func _lobby(roster: Array) -> void:
 	lobby_changed.emit()
 
 @rpc("authority", "call_remote", "reliable")
+func _return_to_lobby(roster: Array) -> void:
+	_roster.clear_race_state()
+	_roster.replace(roster)
+	lobby_changed.emit()
+
+@rpc("authority", "call_remote", "reliable")
 func _prepare_race(roster: Array, bots: int, lap_count: int, race_seed: int, race_track_id: String = "") -> void:
 	if _roster.preparing or race != null:
 		if not multiplayer.is_server() and race != null:

@@ -67,7 +67,7 @@ func _start_network(args: PackedStringArray) -> void:
 	if session.automated:
 		var runner: NetTestRun = NetTestRun.new()
 		GameState.add_child(runner)
-		runner.configure(session)
+		runner.configure(session, clampi(int(_value(args, "--net-races", "1")), 1, 9))
 	print("NET_READY " + ("host" if args.has("--net-host") else "client"))
 
 func _value(args: PackedStringArray, key: String, fallback: String) -> String:

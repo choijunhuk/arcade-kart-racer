@@ -22,11 +22,15 @@ var _recent_events: Array[Dictionary] = []
 var _next_start_retry: float = 0.0
 var _next_progress: float = 0.0
 var _stall_elapsed: Dictionary[int, float] = {}
+var _target_races: int = 1
+var _completed_races: int = 0
+var _all_races_passed: bool = true
 const STATE_NAMES: Array[String] = ["LOADING", "COUNTDOWN", "RACING", "FINISHING", "RESULTS", "PAUSED"]
 
 ## Installs the command-line headless test on the persistent GameState owner.
-func configure(owner_session: NetSession) -> void:
+func configure(owner_session: NetSession, target_races: int = 1) -> void:
 	session = owner_session
+	_target_races = maxi(1, target_races)
 	_started_at = NetSession.now()
 	_next_start_retry = _started_at + START_RETRY_SECONDS
 	_next_progress = _started_at + PROGRESS_SECONDS
@@ -34,6 +38,7 @@ func configure(owner_session: NetSession) -> void:
 	session.event_received.connect(_event_received)
 	session.disconnected.connect(_disconnected)
 	session.snapshot_received.connect(_trace_divergence)
+	session.lobby_changed.connect(_lobby_changed)
 	EventBus.race_state_changed.connect(_state_changed)
 	print("NET_STATE role=%s state=LOBBY" % _role())
 	if session.race != null:
@@ -77,7 +82,10 @@ func _physics_process(delta: float) -> void:
 	var finished: bool = entries.size() == session.players.size() + session.ai_count
 	for entry: RaceResults.Entry in entries:
 		finished = finished and entry.total_time_seconds >= 0.0
+	_completed_races += 1
+	_all_races_passed = _all_races_passed and finished
 	print("NET_RESULTS role=%s karts=%d all_finished=%s" % ["host" if multiplayer.is_server() else "client", entries.size(), finished])
+	print("NET_RACE role=%s completed=%d" % [_role(), _completed_races])
 	if not multiplayer.is_server():
 		var rows: Dictionary = {}
 		var passed: bool = finished and not session.race.statistics.is_empty()
@@ -86,12 +94,26 @@ func _physics_process(delta: float) -> void:
 			var mean: float = float(stats["sum"]) / maxi(1, int(stats["count"]))
 			rows[str(slot)] = {"samples": stats["count"], "mean": mean, "max": stats["max"]}
 			passed = passed and mean < MEAN_LIMIT and float(stats["max"]) < NetTuning.SNAP_METERS
-		var report: Dictionary = {"passed": passed, "predicted_karts": rows,
+		_all_races_passed = _all_races_passed and passed
+		var report: Dictionary = {"passed": _all_races_passed, "predicted_karts": rows,
 			"dropped_outbound": session.conditions.dropped, "rtt": session.clock.rtt_seconds}
 		print("NET_STATS " + JSON.stringify(report))
-		session.send(&"_test_report", NetSession.SERVER_ID, [report], true)
+		if _completed_races >= _target_races:
+			session.send(&"_test_report", NetSession.SERVER_ID, [report], true)
 	elif not finished:
 		_exit_code = 1
+
+func _lobby_changed() -> void:
+	if not _reported or _completed_races >= _target_races or session.started:
+		return
+	_reported = false
+	_stall_elapsed.clear()
+	_recent_events.clear()
+	_next_progress = NetSession.now() + PROGRESS_SECONDS
+	var local: int = session.local_slot()
+	if local >= 0:
+		var row: Dictionary = session.players[local]
+		session.select(String(row["driver"]), String(row["kart"]), true)
 
 func _report_received(report: Dictionary) -> void:
 	if session.race.manager.get_state() != RaceState.RESULTS:

@@ -18,6 +18,24 @@ func test_main_menu_exposes_online_and_disconnection_message() -> void:
 	assert_eq((menu.get_node("Panel/VBox/NetworkMessage") as Label).text, "Host disconnected.")
 	assert_eq(GameState.network_message, "")
 
+func test_authoritative_lobby_return_clears_the_previous_client_race() -> void:
+	var session: NetSession = NetSession.new()
+	add_child_autofree(session)
+	session.players = [{"peer": 2, "ready": true}]
+	session.started = true
+	session.running = true
+	session.race = NetRace.new()
+	add_child_autofree(session.race)
+	session._roster.preparing = true
+	session._roster.loaded.append(2)
+	session._return_to_lobby([{"peer": 2, "ready": false}])
+	assert_false(session.started)
+	assert_false(session.running)
+	assert_null(session.race)
+	assert_false(session._roster.preparing)
+	assert_true(session._roster.loaded.is_empty())
+	assert_false(bool(session.players[0]["ready"]))
+
 func test_delayed_load_ack_and_clock_reach_countdown_then_racing() -> void:
 	var session: NetSession = NetSession.new()
 	session.automated = true

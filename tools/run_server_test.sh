@@ -1,7 +1,7 @@
 #!/bin/sh
 # Dedicated-server acceptance (Phase 16): a headless dedicated server plus
-# two automated AI-driven clients complete a 1-lap race, and the server
-# loops back to an empty lobby afterward (SERVER_STATE LOBBY twice).
+# two automated AI-driven clients complete two 1-lap races over the same
+# connections, and the server loops back to the lobby between them.
 # Captures logs, bounds runtime, and reaps every child on success/failure/signal.
 set -eu
 PROJECT_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -36,9 +36,9 @@ while ! grep -q 'SERVER_READY' "$server_log"; do
   sleep 1
 done
 
-"$GODOT_BIN" --headless --path . -- --net-join 127.0.0.1 --net-port "$port" >"$client1_log" 2>&1 &
+"$GODOT_BIN" --headless --path . -- --net-join 127.0.0.1 --net-port "$port" --net-races 2 >"$client1_log" 2>&1 &
 client1_pid=$!
-"$GODOT_BIN" --headless --path . -- --net-join 127.0.0.1 --net-port "$port" >"$client2_log" 2>&1 &
+"$GODOT_BIN" --headless --path . -- --net-join 127.0.0.1 --net-port "$port" --net-races 2 >"$client2_log" 2>&1 &
 client2_pid=$!
 
 tries=0
@@ -66,12 +66,13 @@ kill "$server_pid" 2>/dev/null || true
 wait "$server_pid" 2>/dev/null || true
 server_pid=
 
-grep -E '^(SERVER_STATE|SERVER_READY|NET_(RESULTS|STATS|TEST))' "$server_log" "$client1_log" "$client2_log" || true
+grep -E '^(SERVER_STATE|SERVER_READY|NET_(RACE|RESULTS|STATS|TEST))' "$server_log" "$client1_log" "$client2_log" || true
 
 fail=0
 if [ "$client1_status" -ne 0 ] || [ "$client2_status" -ne 0 ]; then fail=1; fi
 for log in "$client1_log" "$client2_log"; do
-  if ! grep -q '^NET_TEST PASS' "$log" || grep -qE 'SCRIPT ERROR|Parse Error' "$log"; then fail=1; fi
+  if ! grep -q '^NET_TEST PASS' "$log" || [ "$(grep -c '^NET_RESULTS' "$log")" -ne 2 ] || \
+     ! grep -q '^NET_RACE role=client completed=2' "$log" || grep -qE 'SCRIPT ERROR|Parse Error' "$log"; then fail=1; fi
 done
 if [ "$(grep -c 'SERVER_STATE LOBBY' "$server_log")" -lt 2 ]; then fail=1; fi
 if grep -qE 'SCRIPT ERROR|Parse Error' "$server_log"; then fail=1; fi
