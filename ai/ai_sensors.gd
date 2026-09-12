@@ -28,6 +28,8 @@ class SensorReport extends RefCounted:
 	var kart_ahead_distance: float = INF
 	var kart_ahead_relative_speed: float = 0.0
 	var kart_ahead_side: int = AISensors.Side.CENTER
+	var lane_occupied: Dictionary[int, bool] = {}
+	var lane_distance: Dictionary[int, float] = {}
 	var obstacle_hit: Dictionary[int, bool] = {}
 	var obstacle_distance: Dictionary[int, float] = {}
 	var rear_kart_distance: float = INF
@@ -36,7 +38,7 @@ class SensorReport extends RefCounted:
 	var incoming_projectile: bool = false
 
 	func side_clear(side: int) -> bool:
-		return not bool(obstacle_hit.get(side, false))
+		return not bool(lane_occupied.get(side, false))
 
 
 var _owner_kart: KartController
@@ -70,6 +72,8 @@ func _scan_forward(side: int, cast: ShapeCast3D, report: SensorReport) -> void:
 	for index: int in cast.get_collision_count():
 		var collider: Object = cast.get_collider(index)
 		var distance: float = _owner_kart.global_position.distance_to(cast.get_collision_point(index))
+		report.lane_occupied[side] = true
+		report.lane_distance[side] = minf(distance, report.lane_distance.get(side, INF))
 		if collider is KartController:
 			if distance < report.kart_ahead_distance:
 				report.kart_ahead_distance = distance
