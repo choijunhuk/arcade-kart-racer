@@ -43,7 +43,7 @@ func _ready() -> void:
 	_rear_right_base = _wheel_rr.position
 	_bob_noise.seed = BOB_NOISE_SEED
 	_bob_noise.frequency = 1.0
-	KartMeshBuilder.decorate(self, _controller.get_kart_data())
+	KartMeshBuilder.decorate(self, _controller.get_kart_data(), _controller.get_night_theme())
 	_install_hit_flash_material()
 	apply_driver_data(_controller.get_driver_data())
 	if not EventBus.kart_hit.is_connected(_on_kart_hit):
@@ -78,6 +78,7 @@ func apply_driver_data(driver: DriverData) -> void:
 	material.albedo_color = driver.driver_color
 	material.roughness = DRIVER_MATERIAL_ROUGHNESS
 	_driver_mesh.material_override = material
+	KartMeshBuilder.apply_paint_pattern(_body_mesh, driver)
 
 
 func _update_body_pose(delta: float) -> void:

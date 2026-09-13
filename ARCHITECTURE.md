@@ -490,6 +490,9 @@ GhostRecording version 3 rejects earlier content recordings after this change.
 `GameState.net_session` owns an ordinary `NetSession` child at the identical
 `/root/GameState/NetSession` RPC path on all peers. No autoload or project
 network/TLS setting is added. The selected design is the Phase 15 brief and spec §28.
+`NetSessionTransport` owns queued RPC delivery, unreliable-payload rejection,
+and handshake-deadline servicing; `NetSession` retains thin compatibility
+delegates at the existing test/RPC seams.
 
 - ENet server id 1 owns a roster of 2–4 peers, content-id selections and ready flags.
   Clients cannot select another peer's kart; sender identity comes from the RPC.

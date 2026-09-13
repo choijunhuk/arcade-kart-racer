@@ -27,15 +27,15 @@ theme_override_constants/separation = 12
 
 [node name="Title" type="Label" parent="Panel/VBox"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 40
+theme_type_variation = &"ScreenTitle"
 text = "RACE RESULTS"
 horizontal_alignment = 1
 
 [node name="NewRecordBadge" type="Label" parent="Panel/VBox"]
 visible = false
 layout_mode = 2
+theme_type_variation = &"SectionHeading"
 theme_override_colors/font_color = Color(1, 0.82, 0.14, 1)
-theme_override_font_sizes/font_size = 28
 text = "★ NEW RECORD ★"
 horizontal_alignment = 1
 

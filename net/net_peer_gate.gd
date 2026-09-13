@@ -43,6 +43,11 @@ func allows(id: int) -> bool:
 	return bool(_verified.get(id, false))
 
 
+## Number of connected peers still inside the handshake deadline.
+func pending_count() -> int:
+	return _deadlines.size()
+
+
 ## Forgets a peer entirely (disconnected, rejected, or kicked).
 func remove(id: int) -> void:
 	_deadlines.erase(id)

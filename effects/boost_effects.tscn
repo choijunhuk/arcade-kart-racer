@@ -1,6 +1,7 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://effects/boost_effects.gd" id="1_script"]
+[ext_resource type="Shader" path="res://effects/heat_shimmer.gdshader" id="2_shimmer_shader"]
 [sub_resource type="ParticleProcessMaterial" id="Particles_boost"]
 direction = Vector3(0, 0, 1)
 initial_velocity_min = 3.0
@@ -8,6 +9,23 @@ initial_velocity_max = 5.0
 color = Color(0.2, 0.7, 1, 1)
 [sub_resource type="QuadMesh" id="Mesh_particle"]
 size = Vector2(0.2, 0.2)
+[sub_resource type="StandardMaterial3D" id="Material_flame"]
+albedo_color = Color(0.25, 0.75, 1, 1)
+emission_enabled = true
+emission = Color(0.3, 0.8, 1, 1)
+emission_energy_multiplier = 3.5
+shading_mode = 0
+[sub_resource type="SphereMesh" id="Mesh_flame"]
+radius = 0.09
+height = 0.24
+radial_segments = 10
+rings = 6
+[sub_resource type="ShaderMaterial" id="Material_shimmer"]
+shader = ExtResource("2_shimmer_shader")
+shader_parameter/intensity = 0.0
+[sub_resource type="QuadMesh" id="Mesh_shimmer"]
+size = Vector2(0.4, 0.4)
+material = SubResource("Material_shimmer")
 [node name="BoostEffects" type="Node3D"]
 script = ExtResource("1_script")
 [node name="Exhaust" type="GPUParticles3D" parent="."]
@@ -17,3 +35,11 @@ amount = 24
 lifetime = 0.3
 process_material = SubResource("Particles_boost")
 draw_pass_1 = SubResource("Mesh_particle")
+[node name="FlameCore" type="MeshInstance3D" parent="."]
+position = Vector3(0, -0.05, 1.2)
+visible = false
+mesh = SubResource("Mesh_flame")
+material_override = SubResource("Material_flame")
+[node name="HeatShimmer" type="MeshInstance3D" parent="."]
+position = Vector3(0, -0.05, 1.35)
+mesh = SubResource("Mesh_shimmer")

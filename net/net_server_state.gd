@@ -15,16 +15,20 @@ var _countdown_remaining: float = COUNTDOWN_SECONDS
 
 ## Advances the machine by `delta` seconds given the current lobby facts.
 ## Returns true on exactly the tick a race should be started.
-func update(delta: float, human_count: int, ready_count: int) -> bool:
+func update(delta: float, human_count: int, ready_count: int, pending_count: int = 0) -> bool:
 	match state:
 		State.LOBBY:
-			if human_count >= 1:
+			if human_count >= 1 and pending_count == 0:
 				state = State.COUNTDOWN
 				_countdown_remaining = COUNTDOWN_SECONDS
 			return false
 		State.COUNTDOWN:
 			if human_count < 1:
 				state = State.LOBBY
+				return false
+			if pending_count > 0:
+				state = State.LOBBY
+				_countdown_remaining = COUNTDOWN_SECONDS
 				return false
 			_countdown_remaining = maxf(0.0, _countdown_remaining - delta)
 			var everyone_ready: bool = ready_count >= human_count

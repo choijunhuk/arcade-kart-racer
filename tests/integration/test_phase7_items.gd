@@ -78,6 +78,15 @@ func test_aegis_absorbs_pulse_blast_bump_hit() -> void:
 	add_child_autofree(shield)
 	shield.setup(preload("res://data/items/aegis_bubble.tres"), target, context)
 	shield.activate(InputFrame.zero())
+	var drift_frame: InputFrame = InputFrame.new()
+	drift_frame.steer = 1.0
+	drift_frame.drift = true
+	drift_frame.drift_pressed = true
+	target.drift_controller.step(drift_frame, 18.0, true, 0.0, 0.0, false, 0.1)
+	drift_frame.drift_pressed = false
+	target.drift_controller.step(drift_frame, 18.0, true, 0.0, 1.0, false, target.tuning.drift_hop_duration)
+	target.drift_controller.step(drift_frame, 18.0, true, 0.0, 1.0, false, 0.5)
+	var charge_before_hit: float = target.drift_controller.get_charge()
 	var pulse_data: ItemData = preload("res://data/items/pulse_blast.tres")
 	var pulse: AreaItem = pulse_data.scene.instantiate() as AreaItem
 	add_child_autofree(pulse)
@@ -86,6 +95,8 @@ func test_aegis_absorbs_pulse_blast_bump_hit() -> void:
 	pulse.tick(0.3)
 	assert_false(bool(target.call("has_shield")))
 	assert_eq(target.get_hit_state(), -1)
+	assert_eq(target.get_drift_state(), DriftController.DriftState.HOLD)
+	assert_almost_eq(target.drift_controller.get_charge(), charge_before_hit, EPSILON)
 	assert_almost_eq(target.get_speed(), 0.0, EPSILON)
 	assert_almost_eq(target.get_lateral_speed(), 0.0, EPSILON)
 
@@ -117,6 +128,19 @@ func test_kart_vs_kart_bump_still_bypasses_shield() -> void:
 	assert_true(target.apply_hit(HitReactor.HitType.BUMP, null))
 	assert_true(bool(target.call("has_shield")))
 	assert_eq(target.get_hit_state(), HitReactor.HitType.BUMP)
+
+
+func test_respawn_invulnerability_rejects_item_hit_without_consuming_shield() -> void:
+	var owner: KartController = _make_kart("Owner")
+	var target: KartController = _make_kart("Target")
+	var shield: ShieldItem = preload("res://data/items/aegis_bubble.tres").scene.instantiate() as ShieldItem
+	add_child_autofree(shield)
+	shield.setup(preload("res://data/items/aegis_bubble.tres"), target, _make_context([owner, target]))
+	shield.activate(InputFrame.zero())
+	target.teleport_for_respawn(target.global_transform)
+	assert_false(target.apply_hit(HitReactor.HitType.SPIN_OUT, owner, true))
+	assert_true(target.has_shield())
+	assert_eq(target.get_hit_state(), -1)
 
 
 func test_storm_warning_can_be_countered_before_strike() -> void:

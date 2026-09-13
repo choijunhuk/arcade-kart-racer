@@ -31,8 +31,8 @@ func tick(dt: float) -> void:
 			continue
 		if global_position.distance_to(kart.global_position) > radius:
 			continue
-		kart.drift_controller.call("cancel")
 		if on_hit(kart):
+			kart.drift_controller.call("cancel")
 			_apply_knockback(kart)
 	expire()
 

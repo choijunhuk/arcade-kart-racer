@@ -47,6 +47,24 @@ func test_corrupt_primary_recovers_valid_backup_and_restores_primary() -> void:
 	assert_eq(int((restored as Dictionary)["version"]), SaveManagerService.CURRENT_VERSION)
 
 
+func test_corrupt_profile_records_recover_the_valid_backup() -> void:
+	var manager: SaveManagerService = SaveManagerService.new(SAVE_PATH)
+	autofree(manager)
+	var primary: Dictionary = manager.default_data()
+	primary["player_profiles"]["P2"]["best_laps"] = {"test_loop": -10}
+	primary["player_profiles"]["P3"]["best_positions"] = {"test_loop": "first"}
+	var backup: Dictionary = manager.default_data()
+	backup["player_profiles"]["P2"]["best_laps"] = {"test_loop": 54_321}
+	_write_text(SAVE_PATH, JSON.stringify(primary))
+	_write_text(BACKUP_PATH, JSON.stringify(backup))
+
+	var recovered: Dictionary = manager.load_data()
+	var restored: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(SAVE_PATH)) as Dictionary
+
+	assert_eq(int(recovered["player_profiles"]["P2"]["best_laps"]["test_loop"]), 54_321)
+	assert_eq(restored, recovered)
+
+
 func test_record_race_result_only_replaces_bests_with_better_values() -> void:
 	var manager: SaveManagerService = SaveManagerService.new(SAVE_PATH)
 	autofree(manager)

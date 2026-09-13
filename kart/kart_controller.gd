@@ -8,6 +8,9 @@ signal replay_event_received(event: Dictionary)
 const ENGINE_BOOST_PITCH_ADD: float = 0.3
 @export var kart_data: KartData = preload("res://data/karts/medium.tres")
 @export var driver_data: DriverData
+## Set by RaceManager from the active TrackData before this kart enters the
+## tree; drives headlight visibility in KartMeshBuilder.decorate().
+@export var night_theme: bool = false
 @export var tuning: PhysicsTuning = preload("res://data/tuning/physics_default.tres")
 @onready var _physics: KartPhysics = $KartPhysics
 @onready var _ground_rays: Node3D = $GroundRays
@@ -171,6 +174,9 @@ func get_kart_data() -> KartData:
 ## Returns the driver identity used by results and presentation.
 func get_driver_data() -> DriverData:
 	return driver_data
+
+func get_night_theme() -> bool:
+	return night_theme
 ## Rebinds the driver identity and refreshes its placeholder color when ready.
 func set_driver_data(data: DriverData) -> void:
 	driver_data = data

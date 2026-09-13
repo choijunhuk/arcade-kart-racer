@@ -12,3 +12,6 @@ extends Resource
 @export var bgm_id: StringName = &"race"
 @export var minimap_line_points: PackedVector2Array = PackedVector2Array()
 @export var lap_length_hint: float = 0.0
+## True for tracks whose environment art renders as night (see tools/track_art.gd
+## NIGHT_THEME); drives kart headlight visibility.
+@export var night_theme: bool = false

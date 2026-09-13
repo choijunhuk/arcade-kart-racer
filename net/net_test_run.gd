@@ -22,18 +22,23 @@ var _recent_events: Array[Dictionary] = []
 var _next_start_retry: float = 0.0
 var _next_progress: float = 0.0
 var _stall_elapsed: Dictionary[int, float] = {}
+var _target_races: int = 1
+var _completed_races: int = 0
+var _all_races_passed: bool = true
 const STATE_NAMES: Array[String] = ["LOADING", "COUNTDOWN", "RACING", "FINISHING", "RESULTS", "PAUSED"]
 
 ## Installs the command-line headless test on the persistent GameState owner.
-func configure(owner_session: NetSession) -> void:
+func configure(owner_session: NetSession, target_races: int = 1) -> void:
 	session = owner_session
+	_target_races = maxi(1, target_races)
 	_started_at = NetSession.now()
 	_next_start_retry = _started_at + START_RETRY_SECONDS
 	_next_progress = _started_at + PROGRESS_SECONDS
 	session.test_report_received.connect(_report_received)
 	session.event_received.connect(_event_received)
 	session.disconnected.connect(_disconnected)
-	session.snapshot_received.connect(_trace_divergence)
+	session.prediction_measured.connect(_trace_divergence)
+	session.lobby_changed.connect(_lobby_changed)
 	EventBus.race_state_changed.connect(_state_changed)
 	print("NET_STATE role=%s state=LOBBY" % _role())
 	if session.race != null:
@@ -77,7 +82,10 @@ func _physics_process(delta: float) -> void:
 	var finished: bool = entries.size() == session.players.size() + session.ai_count
 	for entry: RaceResults.Entry in entries:
 		finished = finished and entry.total_time_seconds >= 0.0
+	_completed_races += 1
+	_all_races_passed = _all_races_passed and finished
 	print("NET_RESULTS role=%s karts=%d all_finished=%s" % ["host" if multiplayer.is_server() else "client", entries.size(), finished])
+	print("NET_RACE role=%s completed=%d" % [_role(), _completed_races])
 	if not multiplayer.is_server():
 		var rows: Dictionary = {}
 		var passed: bool = finished and not session.race.statistics.is_empty()
@@ -86,12 +94,26 @@ func _physics_process(delta: float) -> void:
 			var mean: float = float(stats["sum"]) / maxi(1, int(stats["count"]))
 			rows[str(slot)] = {"samples": stats["count"], "mean": mean, "max": stats["max"]}
 			passed = passed and mean < MEAN_LIMIT and float(stats["max"]) < NetTuning.SNAP_METERS
-		var report: Dictionary = {"passed": passed, "predicted_karts": rows,
+		_all_races_passed = _all_races_passed and passed
+		var report: Dictionary = {"passed": _all_races_passed, "predicted_karts": rows,
 			"dropped_outbound": session.conditions.dropped, "rtt": session.clock.rtt_seconds}
 		print("NET_STATS " + JSON.stringify(report))
-		session.send(&"_test_report", NetSession.SERVER_ID, [report], true)
+		if _completed_races >= _target_races:
+			session.send(&"_test_report", NetSession.SERVER_ID, [report], true)
 	elif not finished:
 		_exit_code = 1
+
+func _lobby_changed() -> void:
+	if not _reported or _completed_races >= _target_races or session.started:
+		return
+	_reported = false
+	_stall_elapsed.clear()
+	_recent_events.clear()
+	_next_progress = NetSession.now() + PROGRESS_SECONDS
+	var local: int = session.local_slot()
+	if local >= 0:
+		var row: Dictionary = session.players[local]
+		session.select(String(row["driver"]), String(row["kart"]), true)
 
 func _report_received(report: Dictionary) -> void:
 	if session.race.manager.get_state() != RaceState.RESULTS:
@@ -112,32 +134,17 @@ func _event_received(kind: String, args: Array) -> void:
 		print("NET_TEST %s" % ("PASS" if _exit_code == 0 else "FAIL"))
 		_exit_at = NetSession.now() + SHUTDOWN_SECONDS * 0.5
 
-func _trace_divergence(snapshot: RaceSnapshot) -> void:
+func _trace_divergence(
+	snapshot: RaceSnapshot, row: Dictionary, predicted_position: Vector3,
+	error: float, replay_frames: int,
+) -> void:
 	if session.race == null:
 		return
 	var slot: int = session.local_slot()
 	if slot < 0:
 		return
-	# A raw per-chunk snapshot may only carry a subset of karts (spec: bounded
-	# packetization), so find this slot by its explicit `slot` field rather
-	# than assuming array position, and skip silently if it is not in this chunk.
-	var row: Dictionary = {}
-	var found: bool = false
-	for candidate: Dictionary in snapshot.karts:
-		if int(candidate.get("slot", -1)) == slot:
-			row = candidate
-			found = true
-			break
-	if not found:
-		return
 	var ack: int = int(row["ack"])
-	var history: Dictionary = session.race.get("_predicted_positions")
-	if not history.has(ack):
-		return
 	var values: Array = row["state"]["position"]
-	var server_position: Vector3 = Vector3(values[0], values[1], values[2])
-	var predicted_position: Vector3 = history[ack]
-	var error: float = predicted_position.distance_to(server_position)
 	if error <= NetTuning.SNAP_METERS:
 		return
 	var kart: KartController = session.race.manager.get_karts()[slot]
@@ -145,7 +152,7 @@ func _trace_divergence(snapshot: RaceSnapshot) -> void:
 		"server_state": row["state"]["components"]["."]["state"], "local_state": kart.get_state(),
 		"server_position": values, "predicted_position": [predicted_position.x, predicted_position.y, predicted_position.z],
 		"local_position": [kart.global_position.x, kart.global_position.y, kart.global_position.z],
-		"replay_frames": session.race.prediction.frames.size(), "events": _recent_events}))
+		"replay_frames": replay_frames, "events": _recent_events}))
 
 func _disconnected(message: String) -> void:
 	if _exit_at < 0.0:

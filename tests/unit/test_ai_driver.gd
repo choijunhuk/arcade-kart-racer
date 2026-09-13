@@ -60,16 +60,55 @@ func test_rubber_band_mult_scales_linearly_within_the_band() -> void:
 
 
 func test_choose_overtake_side_prefers_right_when_both_clear() -> void:
-	assert_eq(AIDriver.choose_overtake_side(true, true), 1)
+	assert_eq(AIDriver.choose_overtake_side(INF, INF, 4.0), 1)
 
 
 func test_choose_overtake_side_picks_the_only_clear_lane() -> void:
-	assert_eq(AIDriver.choose_overtake_side(true, false), -1)
-	assert_eq(AIDriver.choose_overtake_side(false, true), 1)
+	assert_eq(AIDriver.choose_overtake_side(INF, 3.0, 4.0), -1)
+	assert_eq(AIDriver.choose_overtake_side(3.0, INF, 4.0), 1)
 
 
 func test_choose_overtake_side_returns_zero_when_boxed_in() -> void:
-	assert_eq(AIDriver.choose_overtake_side(false, false), 0)
+	assert_eq(AIDriver.choose_overtake_side(3.0, 2.0, 4.0), 0)
+
+
+func test_choose_overtake_side_prefers_the_lane_with_more_clearance() -> void:
+	assert_eq(AIDriver.choose_overtake_side(7.0, 12.0, 4.0), 1)
+	assert_eq(AIDriver.choose_overtake_side(10.0, 6.0, 4.0), -1)
+
+
+func test_boxed_overtake_relaxes_kart_occupancy_after_timeout() -> void:
+	var report: AISensors.SensorReport = AISensors.SensorReport.new()
+	report.kart_ahead_distance = 4.0
+	report.kart_ahead_relative_speed = AIDriver.OVERTAKE_SPEED_DELTA + 1.0
+	report.kart_ahead_side = AISensors.Side.CENTER
+	for side: int in [AISensors.Side.LEFT, AISensors.Side.CENTER, AISensors.Side.RIGHT]:
+		report.lane_occupied[side] = true
+	report.lane_distance[AISensors.Side.LEFT] = 7.0
+	report.lane_distance[AISensors.Side.CENTER] = 4.0
+	report.lane_distance[AISensors.Side.RIGHT] = 6.0
+	assert_true(AIDriver.overtake_is_boxed(report, NORMAL_DIFFICULTY, 0.0))
+	assert_eq(AIDriver.compute_overtake_bias(report, NORMAL_DIFFICULTY, 0.0, AIDriver.OVERTAKE_BLOCKED_RELAX_SECONDS - 0.01), 0.0)
+	assert_ne(AIDriver.compute_overtake_bias(report, NORMAL_DIFFICULTY, 0.0, AIDriver.OVERTAKE_BLOCKED_RELAX_SECONDS), 0.0)
+
+
+func test_overtake_chooses_empty_lane_when_a_farther_kart_occupies_the_other_lane() -> void:
+	var report: AISensors.SensorReport = AISensors.SensorReport.new()
+	var has_lane_occupancy: bool = _has_property(report, &"lane_occupied")
+	assert_true(has_lane_occupancy, "sensor reports must preserve occupancy for every forward lane")
+	if not has_lane_occupancy:
+		return
+	report.kart_ahead_distance = 4.0
+	report.kart_ahead_relative_speed = AIDriver.OVERTAKE_SPEED_DELTA + 1.0
+	report.kart_ahead_side = AISensors.Side.CENTER
+	report.lane_occupied[AISensors.Side.CENTER] = true
+	report.lane_occupied[AISensors.Side.RIGHT] = true
+	report.lane_distance[AISensors.Side.CENTER] = 4.0
+	report.lane_distance[AISensors.Side.RIGHT] = 7.0
+	assert_lt(
+		AIDriver.compute_overtake_bias(report, NORMAL_DIFFICULTY, 0.0), 0.0,
+		"the farther right-lane kart must force the overtake into the empty left lane",
+	)
 
 
 func test_evaluate_stuck_is_none_below_the_reverse_trigger() -> void:
@@ -260,3 +299,10 @@ func test_imminent_wall_releases_drift_for_full_recovery_steering() -> void:
 			assert_false(frame.drift, "emergency braking must release the drift lock")
 			assert_false(frame.drift_pressed)
 			assert_lt(frame.steer, -kart.tuning.drift_min_steer, "wall recovery needs full navigator steering")
+
+
+func _has_property(object: Object, property_name: StringName) -> bool:
+	for property: Dictionary in object.get_property_list():
+		if StringName(str(property.get("name", ""))) == property_name:
+			return true
+	return false

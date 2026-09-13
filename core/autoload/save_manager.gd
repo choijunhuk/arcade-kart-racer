@@ -157,11 +157,8 @@ func _read_valid_data(path: String) -> Dictionary:
 			return {}
 	for key: String in ["best_laps", "best_positions"]:
 		var records: Dictionary = data.get(key, {})
-		for value: Variant in records.values():
-			if not (value is int or value is float):
-				return {}
-			if not is_finite(float(value)) or float(value) <= 0.0:
-				return {}
+		if not _records_are_valid(records):
+			return {}
 	var selection: Dictionary = data.get("last_selection", {})
 	var gp_bests: Dictionary = data.get("grand_prix_bests", {})
 	var profiles: Dictionary = data.get("player_profiles", {})
@@ -169,7 +166,8 @@ func _read_valid_data(path: String) -> Dictionary:
 		if not profile is Dictionary:
 			return {}
 		for section: String in ["best_laps", "best_positions"]:
-			if not (profile as Dictionary).get(section, {}) is Dictionary:
+			var records: Variant = (profile as Dictionary).get(section, {})
+			if not records is Dictionary or not _records_are_valid(records as Dictionary):
 				return {}
 	for record: Variant in gp_bests.values():
 		if not record is Dictionary:
@@ -186,6 +184,15 @@ func _read_valid_data(path: String) -> Dictionary:
 	if data.has("unlocks") and not data["unlocks"] is Array:
 		return {}
 	return data
+
+
+func _records_are_valid(records: Dictionary) -> bool:
+	for value: Variant in records.values():
+		if not (value is int or value is float):
+			return false
+		if not is_finite(float(value)) or float(value) <= 0.0:
+			return false
+	return true
 
 
 func _migrate(data: Dictionary) -> Dictionary:

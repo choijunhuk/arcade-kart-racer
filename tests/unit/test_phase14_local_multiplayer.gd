@@ -1,6 +1,7 @@
 extends GutTest
 
 const SPLIT_SCREEN_PATH: String = "res://race/split_screen.gd"
+const HUD_PATH: String = "res://ui/hud/hud.gd"
 const PLAYER_SLOT_PATH: String = "res://data/schemas/player_slot.gd"
 const LOBBY_STATE_PATH: String = "res://ui/menus/local_lobby_state.gd"
 const SAVE_PATH: String = "user://phase14_profiles_test.json"
@@ -164,10 +165,49 @@ func test_perf_probe_accepts_named_player_and_kart_counts() -> void:
 	assert_almost_eq(float(options["duration"]), 5.0, 0.001)
 
 
+func test_perf_probe_quality_flag_defaults_low_and_clamps_to_tier_range() -> void:
+	var script: GDScript = load("res://scenes/test/perf_probe.gd") as GDScript
+	var defaults: Dictionary = script.call("parse_options", PackedStringArray(["--karts", "12"])) as Dictionary
+	assert_eq(int(defaults["quality"]), 0, "default keeps the historical low-tier measurement")
+	var high: Dictionary = script.call("parse_options", PackedStringArray(["--quality", "2"])) as Dictionary
+	assert_eq(int(high["quality"]), 2)
+	var clamped: Dictionary = script.call("parse_options", PackedStringArray(["--quality", "9"])) as Dictionary
+	assert_eq(int(clamped["quality"]), 2)
+	var negative: Dictionary = script.call("parse_options", PackedStringArray(["--quality", "-3"])) as Dictionary
+	assert_eq(int(negative["quality"]), 0)
+
+
 func test_split_screen_render_scale_decreases_for_more_viewports() -> void:
 	assert_almost_eq(SplitScreen.render_scale_for_players(1, 1.0), 1.0, 0.001)
 	assert_almost_eq(SplitScreen.render_scale_for_players(2, 1.0), 0.85, 0.001)
 	assert_almost_eq(SplitScreen.render_scale_for_players(4, 1.0), 0.70, 0.001)
+
+
+func test_hud_layout_regions_stay_inside_and_do_not_overlap() -> void:
+	var hud_script: GDScript = load(HUD_PATH) as GDScript
+	assert_true(hud_script.has_method("layout_for_viewport"))
+	if not hud_script.has_method("layout_for_viewport"):
+		return
+	for viewport_size: Vector2 in [Vector2(800.0, 450.0), Vector2(1600.0, 900.0)]:
+		var layout: Dictionary = hud_script.call("layout_for_viewport", viewport_size) as Dictionary
+		var regions: Dictionary = layout["regions"] as Dictionary
+		var visible_names: Array[String] = ["position", "minimap", "drift", "item"]
+		if bool(layout["speedometer_visible"]):
+			visible_names.append("speedometer")
+		var viewport_rect: Rect2 = Rect2(Vector2.ZERO, viewport_size)
+		for name: String in visible_names:
+			assert_true(viewport_rect.encloses(regions[name]), "%s must fit inside %s" % [name, viewport_size])
+		for first_index: int in range(visible_names.size()):
+			for second_index: int in range(first_index + 1, visible_names.size()):
+				var first_name: String = visible_names[first_index]
+				var second_name: String = visible_names[second_index]
+				assert_false(
+					(regions[first_name] as Rect2).intersects(regions[second_name] as Rect2),
+					"%s and %s overlap at %s" % [first_name, second_name, viewport_size],
+				)
+	assert_true(bool((hud_script.call("layout_for_viewport", Vector2(800.0, 450.0)) as Dictionary)["compact"]))
+	assert_false(bool((hud_script.call("layout_for_viewport", Vector2(800.0, 450.0)) as Dictionary)["speedometer_visible"]))
+	assert_false(bool((hud_script.call("layout_for_viewport", Vector2(1600.0, 900.0)) as Dictionary)["compact"]))
 
 
 func _layout_rects(player_count: int) -> Array:

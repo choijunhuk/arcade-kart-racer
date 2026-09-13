@@ -56,6 +56,25 @@ func test_clear_path_leaves_the_default_position_unclipped() -> void:
 	assert_eq(resolved, desired)
 
 
+func test_camera_starting_beyond_wall_recovers_inside_in_one_tick() -> void:
+	var kart: KartController = KART_SCENE.instantiate() as KartController
+	add_child_autofree(kart)
+	kart.global_position = Vector3.ZERO
+	var camera: RaceCamera = CAMERA_SCENE.instantiate() as RaceCamera
+	add_child_autofree(camera)
+	camera.set_target(kart)
+	var wall: StaticBody3D = _build_wall()
+	add_child_autofree(wall)
+	await wait_physics_frames(1)
+	camera.global_position = Vector3(0.0, 2.0, 8.0)
+
+	camera._process(1.0 / 60.0)
+
+	assert_lt(camera.global_position.z, 2.25, "camera must return to the kart side of the wall immediately")
+	var resolved: Vector3 = camera.call("_resolve_clipping", camera.global_position) as Vector3
+	assert_almost_eq(camera.global_position.distance_to(resolved), 0.0, 0.01)
+
+
 ## Places a wall directly in the ray path between the look-target focus point
 ## (kart position + 1m up) and the default unclipped chase position behind
 ## the kart, on the default `camera_collision_mask` layer ("world" = 1).

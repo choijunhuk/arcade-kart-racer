@@ -16,6 +16,7 @@ const LATE_BRAKE_DELAY_SECONDS: float = 0.3
 const HEAD_ON_BRAKE_DISTANCE: float = 3.0
 const AVOID_STRENGTH: float = 1.0
 const OVERTAKE_SPEED_DELTA: float = 1.5
+const OVERTAKE_BLOCKED_RELAX_SECONDS: float = 1.0
 ## Above this |curvature| the AI is mid-corner; it neither starts nor holds
 ## an overtake attempt there (spec §13.4: "코너 정점 근처에서는 추월 시도 안 함").
 const CORNER_APEX_CURVATURE: float = 0.03
@@ -85,12 +86,14 @@ static func compute_rubber_band_mult(gap: float, strength: float, max_band: floa
 	return clampf(1.0 + strength * gap, 1.0 - max_band, 1.0 + max_band)
 
 
-## Returns 1 (right), -1 (left), or 0 (no clear lane) to overtake through.
-static func choose_overtake_side(left_clear: bool, right_clear: bool) -> int:
-	if right_clear:
-		return 1
-	if left_clear:
-		return -1
+## Chooses the farther lane when it stays clear beyond the kart being passed.
+static func choose_overtake_side(left_distance: float, right_distance: float, required_clearance: float) -> int:
+	var left_clear: bool = left_distance > required_clearance
+	var right_clear: bool = right_distance > required_clearance
+	if left_clear and right_clear:
+		return 1 if right_distance >= left_distance else -1
+	if right_clear or left_clear:
+		return 1 if right_clear else -1
 	return 0
 
 
@@ -104,15 +107,42 @@ static func compute_avoid_bias(report: AISensors.SensorReport, avoid_strength: f
 	return bias
 
 
+## Returns whether a valid overtake is currently denied by both lane-clearance
+## checks. Static obstacles remain hard blockers during any later relaxation.
+static func overtake_is_boxed(report: AISensors.SensorReport, profile: AIDifficultyProfile, curvature_ahead: float) -> bool:
+	if not _can_attempt_overtake(report, profile, curvature_ahead):
+		return false
+	return not report.side_clear(AISensors.Side.LEFT) and not report.side_clear(AISensors.Side.RIGHT)
+
+
 ## Pure overtake bias toward whichever forward lane is clear (spec §13.4).
-static func compute_overtake_bias(report: AISensors.SensorReport, profile: AIDifficultyProfile, curvature_ahead: float) -> float:
+## Sustained traffic may relax kart occupancy, but never wall/obstacle safety.
+static func compute_overtake_bias(
+	report: AISensors.SensorReport, profile: AIDifficultyProfile, curvature_ahead: float,
+	boxed_elapsed: float = 0.0,
+) -> float:
+	if not _can_attempt_overtake(report, profile, curvature_ahead):
+		return 0.0
+	var left_distance: float = INF if report.side_clear(AISensors.Side.LEFT) else 0.0
+	var right_distance: float = INF if report.side_clear(AISensors.Side.RIGHT) else 0.0
+	var side: int = choose_overtake_side(left_distance, right_distance, 0.0)
+	if side == 0 and boxed_elapsed >= OVERTAKE_BLOCKED_RELAX_SECONDS:
+		left_distance = float(report.lane_distance.get(AISensors.Side.LEFT, INF))
+		right_distance = float(report.lane_distance.get(AISensors.Side.RIGHT, INF))
+		if report.obstacle_hit.get(AISensors.Side.LEFT, false) or report.kart_ahead_side == AISensors.Side.LEFT:
+			left_distance = 0.0
+		if report.obstacle_hit.get(AISensors.Side.RIGHT, false) or report.kart_ahead_side == AISensors.Side.RIGHT:
+			right_distance = 0.0
+		side = choose_overtake_side(left_distance, right_distance, report.kart_ahead_distance)
+	return float(side) * profile.lane_offset_max
+
+
+static func _can_attempt_overtake(report: AISensors.SensorReport, profile: AIDifficultyProfile, curvature_ahead: float) -> bool:
 	if report.kart_ahead_distance > profile.overtake_range or report.kart_ahead_relative_speed < OVERTAKE_SPEED_DELTA:
-		return 0.0
+		return false
 	if absf(curvature_ahead) > CORNER_APEX_CURVATURE:
-		return 0.0
-	var left_clear: bool = report.side_clear(AISensors.Side.LEFT) and report.kart_ahead_side != AISensors.Side.LEFT
-	var right_clear: bool = report.side_clear(AISensors.Side.RIGHT) and report.kart_ahead_side != AISensors.Side.RIGHT
-	return float(choose_overtake_side(left_clear, right_clear)) * profile.lane_offset_max
+		return false
+	return true
 
 
 ## Pure stuck-timer state machine (spec §13.4): reverse after 2s, respawn after 5s.

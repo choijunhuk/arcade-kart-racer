@@ -26,6 +26,7 @@ static func summarize(race_outputs: Array[Dictionary], laps: int) -> Dictionary:
 	var rank_one_hit_total: int = 0
 	var rank_eight_gain_total: float = 0.0
 	var lap1_rank8_gain_total: float = 0.0
+	var kart_contact_total: int = 0
 	for race_output: Dictionary in race_outputs:
 		var spread: float = finish_spread(race_output)
 		if spread >= 0.0:
@@ -42,6 +43,7 @@ static func summarize(race_outputs: Array[Dictionary], laps: int) -> Dictionary:
 		rank_one_hit_total += int(race_output.get("rank_one_hits", 0))
 		rank_eight_gain_total += float(race_output.get("rank_eight_gain", 0.0))
 		lap1_rank8_gain_total += float(race_output.get("lap1_rank8_gain", 0.0))
+		kart_contact_total += int(race_output.get("kart_contact_count", 0))
 	var mean_lap_time: float = 0.0
 	if not lap_time_samples.is_empty():
 		var total: float = 0.0
@@ -63,6 +65,8 @@ static func summarize(race_outputs: Array[Dictionary], laps: int) -> Dictionary:
 		"item_hits": hit_totals,
 		"hit_rate_by_item": hit_rates,
 		"average_rank_one_hits_per_race": float(rank_one_hit_total) / race_count if race_count > 0.0 else 0.0,
+		"kart_contact_count": kart_contact_total,
+		"average_kart_contacts_per_race": float(kart_contact_total) / race_count if race_count > 0.0 else 0.0,
 		## Grid-slot-8 kart's rank gain. Mostly regression to the mean (a
 		## back-of-grid kart tends to finish ahead of its start slot even
 		## with items off) — kept for reference but no longer gates.
