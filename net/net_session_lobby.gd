@@ -14,6 +14,9 @@ extends RefCounted
 
 ## Peers whose race scene has finished loading, keyed by peer id.
 var loaded: Array[int] = []
+## Validated peers that joined during a dedicated-server race. They remain in
+## the lobby scene as spectators and move into the roster on the next round.
+var waiting: Array[Dictionary] = []
 ## True between `_prepare_race` and the race scene binding itself.
 var preparing: bool = false
 var _session: NetSession
@@ -34,6 +37,7 @@ static func connection_slots(max_players: int, dedicated: bool) -> int:
 ## no row at all (spec item 3): it drives no kart.
 func reset_for_host(dedicated: bool, ready: bool) -> void:
 	_session.players.clear()
+	waiting.clear()
 	if not dedicated:
 		_session.players.append(new_row(NetSession.SERVER_ID, ready))
 
@@ -53,16 +57,42 @@ func index_of(id: int) -> int:
 
 ## Appends a row for a newly admitted peer; false when it already had one.
 func add(id: int, ready: bool) -> bool:
-	if index_of(id) >= 0:
+	if index_of(id) >= 0 or waiting_has(id):
 		return false
 	_session.players.append(new_row(id, ready))
 	return true
+
+
+## Queues a validated mid-race peer without changing active kart slots.
+func add_waiting(id: int) -> bool:
+	if index_of(id) >= 0 or waiting_has(id):
+		return false
+	waiting.append(new_row(id, false))
+	return true
+
+
+## Returns whether `id` is admitted for the next lobby but not this race.
+func waiting_has(id: int) -> bool:
+	for row: Dictionary in waiting:
+		if int(row["peer"]) == id:
+			return true
+	return false
+
+
+## Moves spectators into the next lobby, preserving their connection/order.
+func promote_waiting() -> void:
+	for row: Dictionary in waiting:
+		_session.players.append(row)
+	waiting.clear()
 
 
 func remove(id: int) -> void:
 	var index: int = index_of(id)
 	if index >= 0:
 		_session.players.remove_at(index)
+	for waiting_index: int in range(waiting.size() - 1, -1, -1):
+		if int(waiting[waiting_index]["peer"]) == id:
+			waiting.remove_at(waiting_index)
 
 
 ## Replaces the whole roster from an authoritative broadcast.
@@ -95,7 +125,7 @@ func start_race(force: bool) -> bool:
 			if not bool(row["ready"]):
 				return false
 	_session.started = true
-	_session.peer.refuse_new_connections = true
+	_session.peer.refuse_new_connections = not _session.dedicated
 	_session.send(&"_prepare_race", 0, _prepare_args(), true)
 	_session._prepare_race(_session.players, _session.ai_count, _session.laps, _session.seed, _session.track_id)
 	return true
@@ -118,6 +148,7 @@ func restart_to_lobby() -> void:
 		return
 	clear_race_state()
 	_session.peer.refuse_new_connections = false
+	promote_waiting()
 	for row: Dictionary in _session.players:
 		row["ready"] = false
 	_session.send(&"_return_to_lobby", 0, [_session.players], true)

@@ -238,7 +238,10 @@ func _apply_snapshot(snapshot: RaceSnapshot) -> void:
 			if NetPrediction.requires_server_pose(server_state) or NetPrediction.requires_server_pose(_karts[index].get_state()):
 				_predicted_positions.clear()
 			elif _predicted_positions.has(ack):
-				_measure(index, _predicted_positions[ack].distance_to(position))
+				var predicted_position: Vector3 = _predicted_positions[ack]
+				var error: float = predicted_position.distance_to(position)
+				_measure(index, error)
+				session.prediction_measured.emit(snapshot, row, predicted_position, error, prediction.frames.size())
 			prediction.reconcile(_karts[index], state, ack, _predicted_positions)
 		else:
 			_karts[index].apply_state(state)

@@ -59,6 +59,9 @@ func test_race_without_transport_delay() -> void:
 func test_race_with_latency_and_two_percent_loss() -> void:
 	await _run_race(0.1, 0.02, -1)
 
+func test_dedicated_start_stays_inside_prediction_budget_at_350ms_rtt() -> void:
+	await _run_race(0.175, 0.0, -1, true)
+
 func test_race_with_latency_loss_and_twenty_packet_burst() -> void:
 	await _run_race(0.1, 0.02, 900)
 

@@ -6,8 +6,8 @@ signal lobby_changed()
 signal disconnected(message: String)
 signal test_report_received(report: Dictionary)
 signal snapshot_received(snapshot: RaceSnapshot)
+signal prediction_measured(snapshot: RaceSnapshot, row: Dictionary, predicted_position: Vector3, error: float, replay_frames: int)
 signal event_received(kind: String, args: Array)
-
 const SERVER_ID: int = 1
 const RACE_PATH: String = "res://race/race.tscn"
 var players: Array[Dictionary] = []
@@ -171,15 +171,12 @@ func _service_peers() -> void:
 func _peer_connected(id: int) -> void:
 	if not multiplayer.is_server():
 		return
-	# Track unconditionally: a peer whose connection lands after the race has
-	# started must still get a deadline, otherwise it holds a slot forever
-	# without ever handshaking (and so never becomes kickable).
 	_gate.track(id, now())
-	if started:
-		_reject_peer(id, "Match already started.")
-
 func _admit_peer(id: int) -> void:
-	if not started and _roster.add(id, automated):
+	var admitted: bool = _roster.add_waiting(id) if started else _roster.add(id, automated)
+	if admitted:
+		print("SERVER_ADMIT peer=%d" % id)
+	if admitted and not started:
 		_broadcast_lobby()
 
 func _connected() -> void:
@@ -263,6 +260,7 @@ func _handshake(client_version: String, password_attempt: String) -> void:
 ## defers the disconnect by a tick so ENet flushes it: the peer sees why it
 ## was refused instead of a bare "Host disconnected" (spec item 1).
 func _reject_peer(id: int, message: String) -> void:
+	print("SERVER_REJECT peer=%d reason=%s" % [id, message])
 	_deliver_reject(id, message)
 	_roster.remove(id)
 	_input_limiter.remove(id)
@@ -343,6 +341,9 @@ func _peer_disconnected(id: int) -> void:
 	_input_limiter.remove(id)
 	_loss.remove(id)
 	_gate.remove(id)
+	if _roster.waiting_has(id):
+		_roster.remove(id)
+		return
 	if automated and race != null and race.manager.get_state() == RaceState.RESULTS:
 		return # Test peers may depart after the results/metrics handshake.
 	if started:

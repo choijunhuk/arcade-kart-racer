@@ -37,7 +37,7 @@ func configure(owner_session: NetSession, target_races: int = 1) -> void:
 	session.test_report_received.connect(_report_received)
 	session.event_received.connect(_event_received)
 	session.disconnected.connect(_disconnected)
-	session.snapshot_received.connect(_trace_divergence)
+	session.prediction_measured.connect(_trace_divergence)
 	session.lobby_changed.connect(_lobby_changed)
 	EventBus.race_state_changed.connect(_state_changed)
 	print("NET_STATE role=%s state=LOBBY" % _role())
@@ -134,32 +134,17 @@ func _event_received(kind: String, args: Array) -> void:
 		print("NET_TEST %s" % ("PASS" if _exit_code == 0 else "FAIL"))
 		_exit_at = NetSession.now() + SHUTDOWN_SECONDS * 0.5
 
-func _trace_divergence(snapshot: RaceSnapshot) -> void:
+func _trace_divergence(
+	snapshot: RaceSnapshot, row: Dictionary, predicted_position: Vector3,
+	error: float, replay_frames: int,
+) -> void:
 	if session.race == null:
 		return
 	var slot: int = session.local_slot()
 	if slot < 0:
 		return
-	# A raw per-chunk snapshot may only carry a subset of karts (spec: bounded
-	# packetization), so find this slot by its explicit `slot` field rather
-	# than assuming array position, and skip silently if it is not in this chunk.
-	var row: Dictionary = {}
-	var found: bool = false
-	for candidate: Dictionary in snapshot.karts:
-		if int(candidate.get("slot", -1)) == slot:
-			row = candidate
-			found = true
-			break
-	if not found:
-		return
 	var ack: int = int(row["ack"])
-	var history: Dictionary = session.race.get("_predicted_positions")
-	if not history.has(ack):
-		return
 	var values: Array = row["state"]["position"]
-	var server_position: Vector3 = Vector3(values[0], values[1], values[2])
-	var predicted_position: Vector3 = history[ack]
-	var error: float = predicted_position.distance_to(server_position)
 	if error <= NetTuning.SNAP_METERS:
 		return
 	var kart: KartController = session.race.manager.get_karts()[slot]
@@ -167,7 +152,7 @@ func _trace_divergence(snapshot: RaceSnapshot) -> void:
 		"server_state": row["state"]["components"]["."]["state"], "local_state": kart.get_state(),
 		"server_position": values, "predicted_position": [predicted_position.x, predicted_position.y, predicted_position.z],
 		"local_position": [kart.global_position.x, kart.global_position.y, kart.global_position.z],
-		"replay_frames": session.race.prediction.frames.size(), "events": _recent_events}))
+		"replay_frames": replay_frames, "events": _recent_events}))
 
 func _disconnected(message: String) -> void:
 	if _exit_at < 0.0:

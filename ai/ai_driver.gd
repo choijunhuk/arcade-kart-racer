@@ -85,12 +85,14 @@ static func compute_rubber_band_mult(gap: float, strength: float, max_band: floa
 	return clampf(1.0 + strength * gap, 1.0 - max_band, 1.0 + max_band)
 
 
-## Returns 1 (right), -1 (left), or 0 (no clear lane) to overtake through.
-static func choose_overtake_side(left_clear: bool, right_clear: bool) -> int:
-	if right_clear:
-		return 1
-	if left_clear:
-		return -1
+## Chooses the farther lane when it stays clear beyond the kart being passed.
+static func choose_overtake_side(left_distance: float, right_distance: float, required_clearance: float) -> int:
+	var left_clear: bool = left_distance > required_clearance
+	var right_clear: bool = right_distance > required_clearance
+	if left_clear and right_clear:
+		return 1 if right_distance >= left_distance else -1
+	if right_clear or left_clear:
+		return 1 if right_clear else -1
 	return 0
 
 
@@ -110,9 +112,9 @@ static func compute_overtake_bias(report: AISensors.SensorReport, profile: AIDif
 		return 0.0
 	if absf(curvature_ahead) > CORNER_APEX_CURVATURE:
 		return 0.0
-	var left_clear: bool = report.side_clear(AISensors.Side.LEFT)
-	var right_clear: bool = report.side_clear(AISensors.Side.RIGHT)
-	return float(choose_overtake_side(left_clear, right_clear)) * profile.lane_offset_max
+	var left_distance: float = float(report.lane_distance.get(AISensors.Side.LEFT, INF))
+	var right_distance: float = float(report.lane_distance.get(AISensors.Side.RIGHT, INF))
+	return float(choose_overtake_side(left_distance, right_distance, report.kart_ahead_distance)) * profile.lane_offset_max
 
 
 ## Pure stuck-timer state machine (spec §13.4): reverse after 2s, respawn after 5s.

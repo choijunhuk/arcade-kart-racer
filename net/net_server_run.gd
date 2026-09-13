@@ -14,6 +14,8 @@ var session: NetSession
 var _state: NetServerState = NetServerState.new()
 var _results_seen_at: float = -1.0
 var _last_printed: int = -1
+var _last_human_count: int = -1
+var _last_ready_count: int = -1
 
 
 ## Installs the dedicated-server loop on the persistent GameState owner.
@@ -26,11 +28,14 @@ func configure(owner_session: NetSession) -> void:
 func _physics_process(delta: float) -> void:
 	if session == null or not multiplayer.is_server():
 		return
+	var human_count: int = session.players.size()
+	var ready_count: int = _ready_count()
 	if _state.state == NetServerState.State.RUNNING:
 		_watch_results()
-	elif _state.update(delta, session.players.size(), _ready_count()):
+	elif _state.update(delta, human_count, ready_count, session._gate.pending_count()):
 		session.start_race(true)
 	_print_state()
+	_print_ready_count()
 
 
 func _ready_count() -> int:
@@ -64,3 +69,14 @@ func _print_state() -> void:
 		return
 	_last_printed = int(_state.state)
 	print("SERVER_STATE %s" % STATE_NAMES[_state.state])
+	_print_ready_count(true)
+
+
+func _print_ready_count(force: bool = false) -> void:
+	var humans: int = session.players.size()
+	var ready: int = _ready_count()
+	if not force and humans == _last_human_count and ready == _last_ready_count:
+		return
+	_last_human_count = humans
+	_last_ready_count = ready
+	print("SERVER_READY_COUNT humans=%d ready=%d" % [humans, ready])

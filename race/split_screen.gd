@@ -148,8 +148,6 @@ func _resize_views() -> void:
 		var view: PlayerView = _views[index]
 		view.container.position = rect.position * output
 		view.container.size = rect.size * output
-		var viewport_size: Vector2 = rect.size * output
-		HudLayout.apply(view.hud, viewport_size)
 		view.hud.apply_viewport_layout(view.container.size)
 
 
