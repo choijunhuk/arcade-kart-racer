@@ -201,7 +201,7 @@ func _run_scenario(
 	var right: Vector3 = line.right_at(target_offset).normalized()
 	var side: float = float(location["side"])
 	var safe_center_limit: float = float(config["road_half_width"]) - KART_HALF_WIDTH
-	var start: Dictionary = _find_grounded_start(line, target_offset, center, right, side, safe_center_limit, angle_degrees)
+	var start: Dictionary = find_grounded_start(line, target_offset, center, right, side, safe_center_limit, angle_degrees)
 	var start_position: Vector3 = start["position"]
 	var impact_direction: Vector3 = start["direction"]
 	var kart: KartController = KART_SCENE.instantiate() as KartController
@@ -290,7 +290,7 @@ func _run_scenario(
 	return result
 
 
-func _find_grounded_start(
+static func find_grounded_start(
 	line: RacingLine, target_offset: float, target_center: Vector3, target_right: Vector3,
 	side: float, safe_center_limit: float, requested_angle: float,
 ) -> Dictionary:

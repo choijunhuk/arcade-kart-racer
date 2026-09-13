@@ -162,9 +162,9 @@ func _run_track_01_wall_impact(angled: bool) -> Dictionary:
 	var direction: Vector3
 	var start_position: Vector3
 	if angled:
-		# The permanent probe's grounded 45-degree Track 01 chicane regression.
-		direction = Vector3(-0.9845, 0.0, 0.1755).normalized()
-		start_position = Vector3(-297.516, 0.95, -2.42)
+		var scenario: Dictionary = _track_01_angled_wall_start(track)
+		direction = scenario["direction"]
+		start_position = scenario["position"]
 	else:
 		direction = Vector3.FORWARD
 		start_position = Vector3(0.0, 0.65, 0.0)
@@ -181,7 +181,6 @@ func _run_track_01_wall_impact(angled: bool) -> Dictionary:
 			var collision: KinematicCollision3D = kart.get_slide_collision(collision_index)
 			if absf(collision.get_normal().dot(Vector3.UP)) < kart.tuning.wall_normal_threshold:
 				saw_wall = true
-				provider.steer = 1.0
 	return {
 		"kind": "angled" if angled else "head_on",
 		"saw_wall": saw_wall,
@@ -189,6 +188,29 @@ func _run_track_01_wall_impact(angled: bool) -> Dictionary:
 		"grounded": kart.is_grounded(),
 		"state": kart.get_state(),
 		"speed": kart.get_speed(),
+	}
+
+
+func _track_01_angled_wall_start(track: TrackRoot) -> Dictionary:
+	var line: RacingLine = track.get_racing_line()
+	var config: Dictionary = CollisionProbe.TRACK_CONFIGS[&"track_01"]
+	var location: Dictionary
+	for candidate: Dictionary in config["locations"]:
+		if candidate["name"] == "chicane_wall_left":
+			location = candidate
+			break
+	var wall_step: float = line.length() / float(ceili(line.length() / float(config["wall_segment_length"])))
+	var target_offset: float = roundf(line.length() * float(location["fraction"]) / wall_step) * wall_step
+	var center: Vector3 = line.sample(target_offset)
+	var right: Vector3 = line.right_at(target_offset).normalized()
+	var side: float = float(location["side"])
+	var safe_center_limit: float = float(config["road_half_width"]) - CollisionProbe.KART_HALF_WIDTH
+	var start: Dictionary = CollisionProbe.find_grounded_start(
+		line, target_offset, center, right, side, safe_center_limit, 45.0,
+	)
+	return {
+		"direction": start["direction"],
+		"position": start["position"] + Vector3.UP * 0.55,
 	}
 
 
