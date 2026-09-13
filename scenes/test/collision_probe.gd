@@ -94,6 +94,8 @@ static func parse_options(arguments: PackedStringArray) -> Dictionary:
 		"angles": DEFAULT_ANGLES.duplicate(),
 		"sweep": false,
 		"location": "",
+		"wall_push_out": -1.0,
+		"wall_bounce": -1.0,
 	}
 	var index: int = 0
 	while index < arguments.size():
@@ -116,6 +118,12 @@ static func parse_options(arguments: PackedStringArray) -> Dictionary:
 					result["angles"] = [clampf(value.to_float(), 1.0, 90.0)]
 			"--location":
 				result["location"] = value
+			"--wall-push-out":
+				if value.is_valid_float():
+					result["wall_push_out"] = maxf(0.0, value.to_float())
+			"--wall-bounce":
+				if value.is_valid_float():
+					result["wall_bounce"] = clampf(value.to_float(), 0.0, 1.0)
 		index += 2
 	return result
 
@@ -152,7 +160,7 @@ func _run() -> void:
 	for location: Dictionary in locations:
 		for speed: float in speeds:
 			for angle: float in options["angles"]:
-				results.append(await _run_scenario(track_id, config, location, speed, angle))
+				results.append(await _run_scenario(track_id, config, location, speed, angle, options))
 	var failed_count: int = 0
 	for result: Dictionary in results:
 		if bool(result["penetrated"]) or bool(result["fell_below_track"]):
@@ -171,6 +179,7 @@ func _run() -> void:
 
 func _run_scenario(
 	track_id: StringName, config: Dictionary, location: Dictionary, speed: float, angle_degrees: float,
+	options: Dictionary,
 ) -> Dictionary:
 	var track: TrackRoot = (TRACK_SCENES[track_id] as PackedScene).instantiate() as TrackRoot
 	add_child(track)
@@ -187,6 +196,13 @@ func _run_scenario(
 	var start_position: Vector3 = start["position"]
 	var impact_direction: Vector3 = start["direction"]
 	var kart: KartController = KART_SCENE.instantiate() as KartController
+	if float(options["wall_push_out"]) >= 0.0 or float(options["wall_bounce"]) >= 0.0:
+		var diagnostic_tuning: PhysicsTuning = kart.tuning.duplicate(true) as PhysicsTuning
+		if float(options["wall_push_out"]) >= 0.0:
+			diagnostic_tuning.wall_push_out = float(options["wall_push_out"])
+		if float(options["wall_bounce"]) >= 0.0:
+			diagnostic_tuning.wall_bounce = float(options["wall_bounce"])
+		kart.tuning = diagnostic_tuning
 	track.add_child(kart)
 	await get_tree().physics_frame
 	kart.global_transform = Transform3D(Basis.looking_at(impact_direction, Vector3.UP), start_position + Vector3.UP * 0.55)
@@ -203,6 +219,7 @@ func _run_scenario(
 	var min_y: float = kart.global_position.y
 	var max_depth: float = 0.0
 	var max_lateral: float = 0.0
+	var min_wall_inward_dot: float = 1.0
 	var penetrated: bool = false
 	var fell_below_track: bool = false
 	for tick: int in range(MAX_SCENARIO_TICKS):
@@ -213,12 +230,16 @@ func _run_scenario(
 		var road_right: Vector3 = line.right_at(closest_offset).normalized()
 		var signed_lateral: float = (kart.global_position - road_center).dot(road_right) * side
 		var depth: float = maxf(0.0, signed_lateral - safe_center_limit)
+		var wall_inward_dot: Variant = null
+		if wall_normal != null:
+			wall_inward_dot = (wall_normal as Vector3).dot(-road_right * side)
+			min_wall_inward_dot = minf(min_wall_inward_dot, float(wall_inward_dot))
 		min_y = minf(min_y, kart.global_position.y)
 		max_depth = maxf(max_depth, depth)
 		max_lateral = maxf(max_lateral, signed_lateral)
 		penetrated = penetrated or signed_lateral > float(config["wall_center"]) + float(config["wall_half_thickness"])
 		fell_below_track = fell_below_track or kart.global_position.y < road_center.y - FALL_DEPTH
-		var sample: Dictionary = _sample_tick(kart, tick, wall_normal)
+		var sample: Dictionary = _sample_tick(kart, tick, wall_normal, wall_inward_dot)
 		if event_tick < 0:
 			if wall_normal != null or penetrated or fell_below_track:
 				event_tick = tick
@@ -243,12 +264,15 @@ func _run_scenario(
 		"angle": angle_degrees,
 		"actual_angle": snappedf(float(start["actual_angle"]), 0.01),
 		"initial_ground_ray_hits": initial_ground_ray_hits,
+		"wall_push_out": kart.tuning.wall_push_out,
+		"wall_bounce": kart.tuning.wall_bounce,
 		"event_tick": event_tick,
 		"penetrated": penetrated,
 		"fell_below_track": fell_below_track,
 		"min_y": snappedf(min_y, 0.001),
 		"max_depth": snappedf(max_depth, 0.001),
 		"max_lateral": snappedf(max_lateral, 0.001),
+		"min_wall_inward_dot": snappedf(min_wall_inward_dot, 0.001),
 		"final_position": _vector(kart.global_position),
 	}
 	print("COLLISION_PROBE ", JSON.stringify(result))
@@ -291,7 +315,9 @@ func _find_grounded_start(
 	}
 
 
-func _sample_tick(kart: KartController, tick: int, wall_normal: Variant) -> Dictionary:
+func _sample_tick(
+	kart: KartController, tick: int, wall_normal: Variant, wall_inward_dot: Variant = null,
+) -> Dictionary:
 	return {
 		"tick": tick,
 		"position": _vector(kart.global_position),
@@ -300,6 +326,7 @@ func _sample_tick(kart: KartController, tick: int, wall_normal: Variant) -> Dict
 		"ground_ray_hits": _ground_ray_hits(kart),
 		"state": _state_name(kart.get_state()),
 		"colliding_wall_normal": null if wall_normal == null else _vector(wall_normal as Vector3),
+		"wall_inward_dot": wall_inward_dot,
 	}
 
 
