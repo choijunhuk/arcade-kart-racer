@@ -43,6 +43,7 @@ static func build_road_segments(
 			body.to_local(end + rb + up),
 		])
 		shape_node.shape = shape
+		shape_node.set_meta(&"driveable_surface", true)
 		body.add_child(shape_node)
 		for vertex: Vector3 in [start - ra + up, end - rb + up, end + rb + up, start - ra + up, end + rb + up, start + ra + up]:
 			surface.set_uv(Vector2(vertex.x, vertex.z) * 0.2)

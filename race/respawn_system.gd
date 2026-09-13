@@ -10,6 +10,7 @@ const RESPAWN_OCCUPANCY_RADIUS: float = 2.0
 const RESPAWN_MAX_ATTEMPTS: int = 6
 const WALL_FALL_GUARD_SECONDS: float = 1.0
 const WALL_FALL_RECOVERY_DEPTH: float = 3.0
+const DRIVEABLE_SURFACE_META: StringName = &"driveable_surface"
 
 enum RespawnPhase {
 	IDLE,
@@ -27,6 +28,7 @@ class Registration extends RefCounted:
 	var previous_position: Vector3
 	var last_grounded_transform: Transform3D
 	var wall_fall_guard_remaining: float = 0.0
+	var pending_respawn_transform: Variant = null
 
 
 @export var tuning: PhysicsTuning = preload("res://data/tuning/physics_default.tres")
@@ -120,14 +122,27 @@ func _update_wall_fall_guard(registration: Registration, delta: float) -> bool:
 	registration.wall_fall_guard_remaining = maxf(0.0, registration.wall_fall_guard_remaining - delta)
 	if kart.global_position.y >= registration.last_grounded_transform.origin.y - WALL_FALL_RECOVERY_DEPTH:
 		return false
-	kart.begin_respawn()
-	kart.teleport_for_respawn(registration.last_grounded_transform)
-	kart.finish_respawn()
+	if not _has_driveable_surface_above(kart, registration.last_grounded_transform.origin.y):
+		return false
+	registration.pending_respawn_transform = registration.last_grounded_transform
+	request_respawn(kart)
 	registration.previous_position = kart.global_position
-	registration.stuck_timer = 0.0
 	registration.wall_fall_guard_remaining = 0.0
-	EventBus.kart_respawned.emit(kart)
 	return true
+
+
+func _has_driveable_surface_above(kart: KartController, target_y: float) -> bool:
+	var origin: Vector3 = kart.global_position
+	var target: Vector3 = Vector3(origin.x, target_y + 1.0, origin.z)
+	var query: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(origin, target, 1)
+	var hit: Dictionary = kart.get_world_3d().direct_space_state.intersect_ray(query)
+	var collider: CollisionObject3D = hit.get("collider") as CollisionObject3D
+	var shape_index: int = int(hit.get("shape", -1))
+	if collider == null or shape_index < 0:
+		return false
+	var owner_id: int = collider.shape_find_owner(shape_index)
+	var owner: Object = collider.shape_owner_get_owner(owner_id)
+	return owner != null and bool(owner.get_meta(DRIVEABLE_SURFACE_META, false))
 
 
 func _on_wall_impacted(body: Node) -> void:
@@ -168,6 +183,11 @@ func _update_stuck_timer(registration: Registration, delta: float) -> void:
 
 
 func _teleport(registration: Registration) -> void:
+	if registration.pending_respawn_transform is Transform3D:
+		var guarded_target: Transform3D = registration.pending_respawn_transform
+		registration.pending_respawn_transform = null
+		_finish_teleport(registration, guarded_target)
+		return
 	if not registration.get_respawn_transform.is_valid():
 		push_error("RespawnSystem requires a valid respawn-transform callable")
 		registration.phase = RespawnPhase.IDLE
@@ -180,6 +200,10 @@ func _teleport(registration: Registration) -> void:
 		registration.kart.finish_respawn()
 		return
 	var target: Transform3D = result
+	_finish_teleport(registration, target)
+
+
+func _finish_teleport(registration: Registration, target: Transform3D) -> void:
 	registration.kart.teleport_for_respawn(target)
 	registration.phase = RespawnPhase.FROZEN
 	registration.timer = tuning.respawn_frozen_duration
