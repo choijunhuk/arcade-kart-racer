@@ -67,7 +67,10 @@ func _build_wall_ribbon(racing_line: RacingLine, lateral_offset: float, skip_cli
 			continue
 		var start_point: Vector3 = racing_line.sample(start_offset) + racing_line.right_at(start_offset) * lateral_offset
 		var end_point: Vector3 = racing_line.sample(end_offset) + racing_line.right_at(end_offset) * lateral_offset
-		TrackBuilder.add_box_segment(_geometry, start_point, end_point, WALL_THICKNESS, WALL_HEIGHT, _wall_material)
+		TrackBuilder.add_connected_segment(
+			_geometry, start_point, end_point, racing_line.right_at(start_offset), racing_line.right_at(end_offset),
+			WALL_THICKNESS, WALL_HEIGHT, _wall_material,
+		)
 
 
 static func _make_material(color: Color) -> StandardMaterial3D:

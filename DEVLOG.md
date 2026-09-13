@@ -2605,6 +2605,23 @@ main-thread native snapshot/perf/physical-pad 결과로 Phase 14 최종 승인 �
 - 어댑터 검증은 실제 두 인간 슬롯이 버퍼 입력을 통해 Ridgeline 1랩을 완주해
   RESULTS로 전환하는 경로도 포함한다. 이는 소켓/실제 클라이언트 검증을 대체하지 않는다.
 
+## Wall penetration review correction (2026-09-13)
+
+The causal wording in commits `16dd2f4` and `d069a11` is superseded. The kart
+wall post-processing in `kart/kart_physics.gd` was not the root defect: a
+seam-free 200 m `BoxShape3D` wall passed 12/12 collision-probe cases at 12,
+22, and 30 m/s and 15, 45, 75, and 90 degrees, with zero penetration, zero
+falls, `max_depth = 0`, and all five ground rays retained. The wall normal was
+consistently inward-facing at first contact.
+
+The branch regression came from extending every rectangular road chord by a
+fixed 2 m. Track 01 auto-drive failed after two laps with `min_y =
+-423788.6875`; changing only that overlap to zero restored the three-lap pass.
+Shared-edge convex road prisms now close chord seams without intersecting
+collision volumes. Therefore `kart_physics.gd` intentionally remains unchanged;
+the earlier zero-push diagnostic suppressed the geometry symptom but did not
+identify a reversed or otherwise invalid push-out response.
+
 ### 최종 검증 기록 (2026-09-09)
 최종 코드/테스트를 고정한 뒤 `env -u GATE_ALLOW_SENSITIVE HOME="$PWD/.tmp-home" tools/gate.sh` 재실행:
 

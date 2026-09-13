@@ -105,6 +105,87 @@ func test_road_builder_preserves_supplied_color() -> void:
 	var visual: MeshInstance3D = body.get_child(body.get_child_count() - 1) as MeshInstance3D
 	assert_eq((visual.mesh.surface_get_material(0) as StandardMaterial3D).albedo_color, paint.albedo_color)
 
+
+func test_short_hairpin_chord_collisions_stay_inside_visual_road_bounds() -> void:
+	var body: StaticBody3D = StaticBody3D.new()
+	add_child_autofree(body)
+	var path: Path3D = Path3D.new()
+	path.curve = Curve3D.new()
+	for point: Vector3 in [Vector3(0, 0, 0), Vector3(0, 0, 2), Vector3(2, 0, 2), Vector3(2, 0, 0)]:
+		path.curve.add_point(point)
+	body.add_child(path)
+	var width: float = 4.0
+	var height: float = 0.4
+	var segment_length: float = 1.0
+	TrackBuilder.build_road_segments(body, path, width, height, TrackArt.surface(Color.GRAY), segment_length)
+
+	var collisions: Array[Node] = body.find_children("*", "CollisionShape3D", false, false)
+	var length: float = path.curve.get_baked_length()
+	var steps: int = maxi(1, int(ceil(length / segment_length)))
+	assert_eq(collisions.size(), steps)
+	for index: int in range(steps):
+		var a: float = length * float(index) / float(steps)
+		var b: float = length * float(index + 1) / float(steps)
+		var start: Vector3 = path.curve.sample_baked(a)
+		var end: Vector3 = path.curve.sample_baked(b)
+		var ra: Vector3 = path.curve.sample_baked_with_rotation(a).basis.x * width * 0.5
+		var rb: Vector3 = path.curve.sample_baked_with_rotation(b).basis.x * width * 0.5
+		var up: Vector3 = Vector3.UP * height * 0.5
+		var expected: AABB = _points_aabb(PackedVector3Array([
+			start - ra - up, start + ra - up, start - ra + up, start + ra + up,
+			end - rb - up, end + rb - up, end - rb + up, end + rb + up,
+		])).grow(0.001)
+		var collision: CollisionShape3D = collisions[index] as CollisionShape3D
+		for vertex: Vector3 in _collision_vertices(collision):
+			assert_true(expected.has_point(vertex), "hairpin chord %d collision escaped visual road bounds" % index)
+
+
+func test_connected_wall_chords_share_their_boundary_without_overlap() -> void:
+	var body: StaticBody3D = StaticBody3D.new()
+	add_child_autofree(body)
+	var shared_axis: Vector3 = Vector3(1.0, 0.0, -1.0).normalized()
+	TrackBuilder.add_connected_segment(
+		body, Vector3.ZERO, Vector3(0, 0, 2), Vector3.RIGHT, shared_axis, 1.0, 2.0, TrackArt.surface(Color.ORANGE),
+	)
+	TrackBuilder.add_connected_segment(
+		body, Vector3(0, 0, 2), Vector3(2, 0, 2), shared_axis, Vector3.BACK, 1.0, 2.0,
+		TrackArt.surface(Color.ORANGE),
+	)
+	var collisions: Array[Node] = body.find_children("*", "CollisionShape3D", false, false)
+	assert_eq(collisions.size(), 2)
+	var first: ConvexPolygonShape3D = (collisions[0] as CollisionShape3D).shape as ConvexPolygonShape3D
+	var second: ConvexPolygonShape3D = (collisions[1] as CollisionShape3D).shape as ConvexPolygonShape3D
+	assert_not_null(first)
+	assert_not_null(second)
+	for index: int in range(4):
+		assert_almost_eq(first.points[index + 4].distance_to(second.points[index]), 0.0, 0.0001)
+
+
+func _collision_vertices(collision: CollisionShape3D) -> PackedVector3Array:
+	var polygon: ConvexPolygonShape3D = collision.shape as ConvexPolygonShape3D
+	if polygon != null:
+		var transformed: PackedVector3Array = PackedVector3Array()
+		for point: Vector3 in polygon.points:
+			transformed.append(collision.transform * point)
+		return transformed
+	var box: BoxShape3D = collision.shape as BoxShape3D
+	if box == null:
+		return PackedVector3Array()
+	var half: Vector3 = box.size * 0.5
+	var vertices: PackedVector3Array = PackedVector3Array()
+	for x: float in [-half.x, half.x]:
+		for y: float in [-half.y, half.y]:
+			for z: float in [-half.z, half.z]:
+				vertices.append(collision.transform * Vector3(x, y, z))
+	return vertices
+
+
+func _points_aabb(points: PackedVector3Array) -> AABB:
+	var result: AABB = AABB(points[0], Vector3.ZERO)
+	for point: Vector3 in points:
+		result = result.expand(point)
+	return result
+
 func test_chassis_palette_preserved() -> void:
 	var data: KartData = load("res://data/karts/light.tres") as KartData
 	var paint: StandardMaterial3D = KartMeshBuilder.chassis(data).surface_get_material(0) as StandardMaterial3D
