@@ -140,6 +140,27 @@ func test_short_hairpin_chord_collisions_stay_inside_visual_road_bounds() -> voi
 			assert_true(expected.has_point(vertex), "hairpin chord %d collision escaped visual road bounds" % index)
 
 
+func test_connected_wall_chords_share_their_boundary_without_overlap() -> void:
+	var body: StaticBody3D = StaticBody3D.new()
+	add_child_autofree(body)
+	var shared_axis: Vector3 = Vector3(1.0, 0.0, -1.0).normalized()
+	TrackBuilder.add_connected_segment(
+		body, Vector3.ZERO, Vector3(0, 0, 2), Vector3.RIGHT, shared_axis, 1.0, 2.0, TrackArt.surface(Color.ORANGE),
+	)
+	TrackBuilder.add_connected_segment(
+		body, Vector3(0, 0, 2), Vector3(2, 0, 2), shared_axis, Vector3.BACK, 1.0, 2.0,
+		TrackArt.surface(Color.ORANGE),
+	)
+	var collisions: Array[Node] = body.find_children("*", "CollisionShape3D", false, false)
+	assert_eq(collisions.size(), 2)
+	var first: ConvexPolygonShape3D = (collisions[0] as CollisionShape3D).shape as ConvexPolygonShape3D
+	var second: ConvexPolygonShape3D = (collisions[1] as CollisionShape3D).shape as ConvexPolygonShape3D
+	assert_not_null(first)
+	assert_not_null(second)
+	for index: int in range(4):
+		assert_almost_eq(first.points[index + 4].distance_to(second.points[index]), 0.0, 0.0001)
+
+
 func _collision_vertices(collision: CollisionShape3D) -> PackedVector3Array:
 	var polygon: ConvexPolygonShape3D = collision.shape as ConvexPolygonShape3D
 	if polygon != null:

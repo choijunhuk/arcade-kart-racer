@@ -83,3 +83,47 @@ static func add_box_segment(
 	collision.shape = box_shape
 	body.add_child(collision)
 	collision.global_transform = Transform3D(basis, center)
+
+
+## Adds a zero-overlap prism whose start/end width axes can follow a curved path.
+static func add_connected_segment(
+	body: StaticBody3D, start: Vector3, end: Vector3, start_width_axis: Vector3,
+	end_width_axis: Vector3, width: float, height: float, material: StandardMaterial3D,
+) -> void:
+	if start.distance_to(end) < 0.001 or start_width_axis.length() < 0.001 or end_width_axis.length() < 0.001:
+		return
+	var half_width: float = width * 0.5
+	var up: Vector3 = Vector3.UP * height * 0.5
+	var start_right: Vector3 = start_width_axis.normalized() * half_width
+	var end_right: Vector3 = end_width_axis.normalized() * half_width
+	var points: PackedVector3Array = PackedVector3Array([
+		body.to_local(start - start_right - up),
+		body.to_local(start + start_right - up),
+		body.to_local(start - start_right + up),
+		body.to_local(start + start_right + up),
+		body.to_local(end - end_right - up),
+		body.to_local(end + end_right - up),
+		body.to_local(end - end_right + up),
+		body.to_local(end + end_right + up),
+	])
+	var surface: SurfaceTool = SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	surface.set_material(material)
+	for vertex_index: int in [
+		2, 6, 7, 2, 7, 3,
+		0, 1, 5, 0, 5, 4,
+		0, 4, 6, 0, 6, 2,
+		1, 3, 7, 1, 7, 5,
+		0, 2, 3, 0, 3, 1,
+		4, 5, 7, 4, 7, 6,
+	]:
+		surface.add_vertex(points[vertex_index])
+	surface.generate_normals()
+	var visual: MeshInstance3D = MeshInstance3D.new()
+	visual.mesh = surface.commit()
+	body.add_child(visual)
+	var collision: CollisionShape3D = CollisionShape3D.new()
+	var shape: ConvexPolygonShape3D = ConvexPolygonShape3D.new()
+	shape.points = points
+	collision.shape = shape
+	body.add_child(collision)
