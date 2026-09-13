@@ -12,6 +12,7 @@ class StraightInputProvider extends InputProvider:
 
 
 const KART_SCENE: PackedScene = preload("res://kart/kart.tscn")
+const FLAT_WALL_PROBE: Script = preload("res://scenes/test/flat_wall_probe.gd")
 const TRACK_SCENES: Dictionary = {
 	&"track_01": preload("res://track/tracks/track_01_ridgeline_circuit/track_01_ridgeline_circuit.tscn"),
 	&"track_02": preload("res://track/tracks/track_02_lumen_underpass/track_02_lumen_underpass.tscn"),
@@ -93,6 +94,7 @@ static func parse_options(arguments: PackedStringArray) -> Dictionary:
 		"speed": 22.0,
 		"angles": DEFAULT_ANGLES.duplicate(),
 		"sweep": false,
+		"flat_wall": false,
 		"location": "",
 		"wall_push_out": -1.0,
 		"wall_bounce": -1.0,
@@ -102,6 +104,10 @@ static func parse_options(arguments: PackedStringArray) -> Dictionary:
 		var key: String = arguments[index]
 		if key == "--sweep":
 			result["sweep"] = true
+			index += 1
+			continue
+		if key == "--flat-wall":
+			result["flat_wall"] = true
 			index += 1
 			continue
 		if index + 1 >= arguments.size():
@@ -145,6 +151,9 @@ static func _normalize_track(value: String) -> StringName:
 
 func _run() -> void:
 	var options: Dictionary = parse_options(OS.get_cmdline_user_args())
+	if bool(options["flat_wall"]):
+		await FLAT_WALL_PROBE.run(self, options)
+		return
 	var track_id: StringName = options["track"]
 	var config: Dictionary = TRACK_CONFIGS[track_id]
 	var locations: Array = config["locations"]
