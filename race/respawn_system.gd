@@ -8,6 +8,8 @@ extends Node
 const RESPAWN_STEP_BACK: float = 3.0
 const RESPAWN_OCCUPANCY_RADIUS: float = 2.0
 const RESPAWN_MAX_ATTEMPTS: int = 6
+const WALL_FALL_GUARD_SECONDS: float = 1.0
+const WALL_FALL_RECOVERY_DEPTH: float = 3.0
 
 enum RespawnPhase {
 	IDLE,
@@ -23,11 +25,18 @@ class Registration extends RefCounted:
 	var stuck_timer: float = 0.0
 	var track_motion: bool = false
 	var previous_position: Vector3
+	var last_grounded_transform: Transform3D
+	var wall_fall_guard_remaining: float = 0.0
 
 
 @export var tuning: PhysicsTuning = preload("res://data/tuning/physics_default.tres")
 
 var _registrations: Dictionary[int, Registration] = {}
+
+
+func _ready() -> void:
+	if not EventBus.wall_impacted.is_connected(_on_wall_impacted):
+		EventBus.wall_impacted.connect(_on_wall_impacted)
 
 
 func _physics_process(delta: float) -> void:
@@ -46,6 +55,7 @@ func register_kart(kart: KartController, get_respawn_transform: Callable, track_
 	registration.get_respawn_transform = get_respawn_transform
 	registration.track_motion = track_motion
 	registration.previous_position = kart.global_position
+	registration.last_grounded_transform = kart.global_transform
 	_registrations[kart.get_instance_id()] = registration
 
 
@@ -82,6 +92,8 @@ func request_respawn(kart: KartController) -> void:
 
 
 func _update_registration(registration: Registration, delta: float) -> void:
+	if _update_wall_fall_guard(registration, delta):
+		return
 	match registration.phase:
 		RespawnPhase.IDLE:
 			_update_stuck_timer(registration, delta)
@@ -94,6 +106,38 @@ func _update_registration(registration: Registration, delta: float) -> void:
 			if registration.timer <= 0.0:
 				registration.phase = RespawnPhase.IDLE
 				registration.kart.finish_respawn()
+
+
+func _update_wall_fall_guard(registration: Registration, delta: float) -> bool:
+	if registration.phase != RespawnPhase.IDLE or registration.kart.network_replica:
+		registration.wall_fall_guard_remaining = 0.0
+		return false
+	var kart: KartController = registration.kart
+	if registration.wall_fall_guard_remaining <= 0.0:
+		if kart.is_grounded():
+			registration.last_grounded_transform = kart.global_transform
+		return false
+	registration.wall_fall_guard_remaining = maxf(0.0, registration.wall_fall_guard_remaining - delta)
+	if kart.global_position.y >= registration.last_grounded_transform.origin.y - WALL_FALL_RECOVERY_DEPTH:
+		return false
+	kart.begin_respawn()
+	kart.teleport_for_respawn(registration.last_grounded_transform)
+	kart.finish_respawn()
+	registration.previous_position = kart.global_position
+	registration.stuck_timer = 0.0
+	registration.wall_fall_guard_remaining = 0.0
+	EventBus.kart_respawned.emit(kart)
+	return true
+
+
+func _on_wall_impacted(body: Node) -> void:
+	if not body is KartController:
+		return
+	var kart: KartController = body as KartController
+	var registration: Registration = _registrations.get(kart.get_instance_id()) as Registration
+	if registration == null or registration.phase != RespawnPhase.IDLE or kart.network_replica:
+		return
+	registration.wall_fall_guard_remaining = WALL_FALL_GUARD_SECONDS
 
 
 func _update_stuck_timer(registration: Registration, delta: float) -> void:
