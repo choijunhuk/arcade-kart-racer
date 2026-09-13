@@ -120,6 +120,18 @@ func test_server_state_resets_to_lobby_if_everyone_leaves_during_countdown() -> 
 	state.update(0.1, 0, 0)
 	assert_eq(state.state, NetServerState.State.LOBBY)
 
+func test_server_state_waits_for_a_late_peers_handshake_before_starting() -> void:
+	var state: NetServerState = NetServerState.new()
+	assert_false(state.update(0.1, 1, 1, 0))
+	assert_eq(state.state, NetServerState.State.COUNTDOWN)
+	# A second ENet peer arrives before its handshake is verified. The first
+	# ready peer must not start a one-kart race while that deadline is active.
+	assert_false(state.update(0.1, 1, 1, 1))
+	assert_eq(state.state, NetServerState.State.LOBBY)
+	assert_false(state.update(0.1, 2, 2, 0))
+	assert_true(state.update(0.1, 2, 2, 0))
+	assert_eq(state.state, NetServerState.State.RUNNING)
+
 func test_handshake_accepts_matching_version_and_no_password() -> void:
 	assert_eq(NetHandshake.reject_reason("0.5.0", "0.5.0", "", ""), "")
 
@@ -255,6 +267,21 @@ func test_handshake_rejects_version_mismatch_before_any_roster_row() -> void:
 	assert_eq(session.players.size(), 0)
 	assert_eq(session.rejects.size(), 1)
 	assert_true(String(session.rejects[0]["message"]).findn("version") >= 0)
+
+func test_running_dedicated_server_keeps_a_late_peer_for_the_next_lobby() -> void:
+	var session: GateSession = _gate_session()
+	session.dedicated = true
+	session.started = true
+	session._peer_connected(12)
+	session.handshake_from(12, _version(), "")
+	assert_true(session.rejects.is_empty())
+	assert_true(session.gate().allows(12))
+	assert_eq(session.players.size(), 0, "a spectator must not enter the active race roster")
+	assert_true(session._roster.waiting_has(12))
+	session._roster.promote_waiting()
+	assert_eq(session.players.size(), 1)
+	assert_eq(int(session.players[0]["peer"]), 12)
+	assert_false(bool(session.players[0]["ready"]))
 
 func test_reject_delivers_the_reason_before_deferring_the_disconnect() -> void:
 	var session: GateSession = _gate_session()

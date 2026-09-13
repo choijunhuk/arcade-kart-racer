@@ -187,6 +187,7 @@ func apply_viewport_layout(viewport_size: Vector2) -> void:
 	_speedometer.visible = not _compact_layout and bool(SettingsManager.get_setting(&"gameplay", &"speedometer", true))
 	_lap_base_position = _lap_label.position
 	_position_label.pivot_offset = _position_label.size * 0.5
+	_minimap.refresh_layout()
 
 
 func _apply_text_layout(viewport_size: Vector2) -> void:

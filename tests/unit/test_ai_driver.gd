@@ -60,16 +60,21 @@ func test_rubber_band_mult_scales_linearly_within_the_band() -> void:
 
 
 func test_choose_overtake_side_prefers_right_when_both_clear() -> void:
-	assert_eq(AIDriver.choose_overtake_side(true, true), 1)
+	assert_eq(AIDriver.choose_overtake_side(INF, INF, 4.0), 1)
 
 
 func test_choose_overtake_side_picks_the_only_clear_lane() -> void:
-	assert_eq(AIDriver.choose_overtake_side(true, false), -1)
-	assert_eq(AIDriver.choose_overtake_side(false, true), 1)
+	assert_eq(AIDriver.choose_overtake_side(INF, 3.0, 4.0), -1)
+	assert_eq(AIDriver.choose_overtake_side(3.0, INF, 4.0), 1)
 
 
 func test_choose_overtake_side_returns_zero_when_boxed_in() -> void:
-	assert_eq(AIDriver.choose_overtake_side(false, false), 0)
+	assert_eq(AIDriver.choose_overtake_side(3.0, 2.0, 4.0), 0)
+
+
+func test_choose_overtake_side_prefers_the_lane_with_more_clearance() -> void:
+	assert_eq(AIDriver.choose_overtake_side(7.0, 12.0, 4.0), 1)
+	assert_eq(AIDriver.choose_overtake_side(10.0, 6.0, 4.0), -1)
 
 
 func test_overtake_chooses_empty_lane_when_a_farther_kart_occupies_the_other_lane() -> void:

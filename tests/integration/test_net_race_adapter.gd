@@ -318,9 +318,14 @@ func test_normal_driving_still_records_large_prediction_errors() -> void:
 	kart.set_frozen(false)
 	var snapshot: RaceSnapshot = NetRaceState.new(_manager).capture(9, [8, 0])
 	var history: Dictionary = _manager.network.get("_predicted_positions")
-	history[8] = kart.global_position + Vector3(4.0, 0.0, 0.0)
+	var predicted: Vector3 = kart.global_position + Vector3(4.0, 0.0, 0.0)
+	history[8] = predicted
+	watch_signals(_session)
 	_manager.network._apply_snapshot(snapshot)
 	assert_eq(float(_manager.network.statistics[0]["max"]), 4.0)
+	assert_signal_emitted_with_parameters(_session, "prediction_measured", [
+		snapshot, snapshot.karts[0], predicted, 4.0, 0,
+	])
 
 func test_offline_split_screen_keeps_secondary_audio_attenuation() -> void:
 	GameState.net_session = null
