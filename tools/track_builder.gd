@@ -5,10 +5,10 @@ extends RefCounted
 ## Collision-preserving art avoids changing historical AI/ghost physics.
 
 const DEFAULT_SEGMENT_LENGTH: float = 8.0
-const CHORD_COLLISION_OVERLAP: float = 2.0
+const ROAD_CHORD_COLLISION_OVERLAP: float = 2.0
 
 
-## Adds one shared-edge visual surface and unchanged per-chord collision boxes.
+## Adds one shared-edge visual surface and overlapped per-chord road collision boxes.
 static func build_road_segments(
 	body: StaticBody3D, path: Path3D, width: float, height: float,
 	material: StandardMaterial3D, segment_length: float = DEFAULT_SEGMENT_LENGTH,
@@ -32,7 +32,7 @@ static func build_road_segments(
 		var rb: Vector3 = path.global_basis * curve.sample_baked_with_rotation(b).basis.x * width * 0.5
 		var shape_node: CollisionShape3D = CollisionShape3D.new()
 		var shape: BoxShape3D = BoxShape3D.new()
-		shape.size = Vector3(width, height, start.distance_to(end) + CHORD_COLLISION_OVERLAP)
+		shape.size = Vector3(width, height, start.distance_to(end) + ROAD_CHORD_COLLISION_OVERLAP)
 		shape_node.shape = shape
 		body.add_child(shape_node)
 		shape_node.global_transform = Transform3D(Basis.looking_at((end - start).normalized()), (start + end) * 0.5)
@@ -60,7 +60,6 @@ static func add_box_segment(
 	var center: Vector3 = (start + end) * 0.5
 	var basis: Basis = Basis.looking_at(direction.normalized(), Vector3.UP)
 	var visual_size: Vector3 = Vector3(width, height, segment_length)
-	var collision_size: Vector3 = Vector3(width, height, segment_length + CHORD_COLLISION_OVERLAP)
 
 	var mesh_instance: MeshInstance3D = MeshInstance3D.new()
 	var box_mesh: BoxMesh = BoxMesh.new()
@@ -72,7 +71,7 @@ static func add_box_segment(
 
 	var collision: CollisionShape3D = CollisionShape3D.new()
 	var box_shape: BoxShape3D = BoxShape3D.new()
-	box_shape.size = collision_size
+	box_shape.size = visual_size
 	collision.shape = box_shape
 	body.add_child(collision)
 	collision.global_transform = Transform3D(basis, center)
