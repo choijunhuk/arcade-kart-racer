@@ -5,10 +5,9 @@ extends RefCounted
 ## Collision-preserving art avoids changing historical AI/ghost physics.
 
 const DEFAULT_SEGMENT_LENGTH: float = 8.0
-const ROAD_CHORD_COLLISION_OVERLAP: float = 2.0
 
 
-## Adds one shared-edge visual surface and overlapped per-chord road collision boxes.
+## Adds shared-edge visual and collision surfaces for every road chord.
 static func build_road_segments(
 	body: StaticBody3D, path: Path3D, width: float, height: float,
 	material: StandardMaterial3D, segment_length: float = DEFAULT_SEGMENT_LENGTH,
@@ -31,12 +30,20 @@ static func build_road_segments(
 		var ra: Vector3 = path.global_basis * curve.sample_baked_with_rotation(a).basis.x * width * 0.5
 		var rb: Vector3 = path.global_basis * curve.sample_baked_with_rotation(b).basis.x * width * 0.5
 		var shape_node: CollisionShape3D = CollisionShape3D.new()
-		var shape: BoxShape3D = BoxShape3D.new()
-		shape.size = Vector3(width, height, start.distance_to(end) + ROAD_CHORD_COLLISION_OVERLAP)
+		var shape: ConvexPolygonShape3D = ConvexPolygonShape3D.new()
+		var up: Vector3 = Vector3.UP * height * 0.5
+		shape.points = PackedVector3Array([
+			body.to_local(start - ra - up),
+			body.to_local(start + ra - up),
+			body.to_local(start - ra + up),
+			body.to_local(start + ra + up),
+			body.to_local(end - rb - up),
+			body.to_local(end + rb - up),
+			body.to_local(end - rb + up),
+			body.to_local(end + rb + up),
+		])
 		shape_node.shape = shape
 		body.add_child(shape_node)
-		shape_node.global_transform = Transform3D(Basis.looking_at((end - start).normalized()), (start + end) * 0.5)
-		var up: Vector3 = Vector3.UP * height * 0.5
 		for vertex: Vector3 in [start - ra + up, end - rb + up, end + rb + up, start - ra + up, end + rb + up, start + ra + up]:
 			surface.set_uv(Vector2(vertex.x, vertex.z) * 0.2)
 			surface.add_vertex(body.to_local(vertex))
