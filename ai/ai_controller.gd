@@ -21,6 +21,7 @@ var _input_provider: AIInputProvider = AIInputProvider.new()
 var _tick_interval: float = 1.0 / 30.0
 var _tick_accumulator: float = 0.0
 var _last_lane_offset: float = 0.0
+var _boxed_overtake_elapsed: float = 0.0
 var _item_slot_view: ItemSlotView = ItemSlotView.new()
 ## Stamped onto each freshly computed `InputFrame` (mirrors
 ## `PlayerInputProvider`'s own counter) so `ItemSlot.capture_input`'s edge
@@ -96,7 +97,12 @@ func get_target_speed() -> float:
 func _run_tick(dt: float) -> void:
 	var sensor_report: AISensors.SensorReport = _sensors.tick()
 	var avoid_bias: float = AIDriver.compute_avoid_bias(sensor_report, AIDriver.AVOID_STRENGTH)
-	var overtake_bias: float = AIDriver.compute_overtake_bias(sensor_report, _profile, _navigator.get_last_curvature_ahead())
+	var curvature_ahead: float = _navigator.get_last_curvature_ahead()
+	if _kart.get_state() in [KartState.GROUNDED, KartState.DRIFTING] and AIDriver.overtake_is_boxed(sensor_report, _profile, curvature_ahead):
+		_boxed_overtake_elapsed += dt
+	else:
+		_boxed_overtake_elapsed = 0.0
+	var overtake_bias: float = AIDriver.compute_overtake_bias(sensor_report, _profile, curvature_ahead, _boxed_overtake_elapsed)
 	var bias: float = clampf(avoid_bias + overtake_bias, _profile.lane_offset_min, _profile.lane_offset_max)
 	if sensor_report.incoming_projectile and _rng.randf() < _profile.projectile_dodge_prob:
 		var dodge_side: float = -1.0 if _last_lane_offset >= 0.0 else 1.0

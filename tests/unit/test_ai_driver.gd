@@ -77,6 +77,21 @@ func test_choose_overtake_side_prefers_the_lane_with_more_clearance() -> void:
 	assert_eq(AIDriver.choose_overtake_side(10.0, 6.0, 4.0), -1)
 
 
+func test_boxed_overtake_relaxes_kart_occupancy_after_timeout() -> void:
+	var report: AISensors.SensorReport = AISensors.SensorReport.new()
+	report.kart_ahead_distance = 4.0
+	report.kart_ahead_relative_speed = AIDriver.OVERTAKE_SPEED_DELTA + 1.0
+	report.kart_ahead_side = AISensors.Side.CENTER
+	for side: int in [AISensors.Side.LEFT, AISensors.Side.CENTER, AISensors.Side.RIGHT]:
+		report.lane_occupied[side] = true
+	report.lane_distance[AISensors.Side.LEFT] = 7.0
+	report.lane_distance[AISensors.Side.CENTER] = 4.0
+	report.lane_distance[AISensors.Side.RIGHT] = 6.0
+	assert_true(AIDriver.overtake_is_boxed(report, NORMAL_DIFFICULTY, 0.0))
+	assert_eq(AIDriver.compute_overtake_bias(report, NORMAL_DIFFICULTY, 0.0, AIDriver.OVERTAKE_BLOCKED_RELAX_SECONDS - 0.01), 0.0)
+	assert_ne(AIDriver.compute_overtake_bias(report, NORMAL_DIFFICULTY, 0.0, AIDriver.OVERTAKE_BLOCKED_RELAX_SECONDS), 0.0)
+
+
 func test_overtake_chooses_empty_lane_when_a_farther_kart_occupies_the_other_lane() -> void:
 	var report: AISensors.SensorReport = AISensors.SensorReport.new()
 	var has_lane_occupancy: bool = _has_property(report, &"lane_occupied")
