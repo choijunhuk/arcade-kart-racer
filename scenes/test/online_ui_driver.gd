@@ -149,6 +149,7 @@ func _run_host(c: Dictionary) -> void:
 		_ok("wait_for_join")
 		(c["back"] as Button).pressed.emit()
 		_ok("host_leaves")
+		await _wait_for_network_flush()
 		_finish(false, 0)
 		return
 
