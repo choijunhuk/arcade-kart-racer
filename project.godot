@@ -17,6 +17,7 @@ EventBus="*res://core/autoload/event_bus.gd"
 SettingsManager="*res://core/autoload/settings_manager.gd"
 SaveManager="*res://core/autoload/save_manager.gd"
 AudioManager="*res://core/autoload/audio_manager.gd"
+FirstRaceHints="*res://core/autoload/first_race_hints.gd"
 DebugOverlay="*res://core/autoload/debug_overlay.tscn"
 
 [display]
