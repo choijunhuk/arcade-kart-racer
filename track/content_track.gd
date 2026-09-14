@@ -55,6 +55,15 @@ func build_theme() -> void:
 	pass
 
 
+## Seam hook: an empty result keeps the default rounded-rectangle centerline;
+## a non-empty result replaces it with a closed loop through these points
+## (still run through `_append_point`, so straight-segment subdivision and
+## `surface_height` sampling apply the same as the default path). The first
+## and last point must coincide to close the loop.
+func authored_points() -> Array[Vector3]:
+	return []
+
+
 ## Authored elevation; subclasses can supply a smooth height profile.
 func surface_height(_point: Vector3) -> float:
 	return ROAD_HEIGHT
@@ -132,16 +141,25 @@ func shortcut(node_name: String, entry: float, exit: float, points: Array[Vector
 	trigger.name = "TriggerArea"
 	trigger.collision_layer = 256
 	trigger.collision_mask = 2
-	var shape_node: CollisionShape3D = CollisionShape3D.new()
-	var shape: BoxShape3D = BoxShape3D.new()
-	var start: Vector3 = points[0]
-	var end: Vector3 = points.back()
-	shape.size = Vector3(8.0, 8.0, start.distance_to(end))
-	shape_node.shape = shape
-	trigger.add_child(shape_node)
 	route.add_child(trigger)
 	$Shortcuts.add_child(route)
-	trigger.global_transform = Transform3D(Basis.looking_at(end - start), (start + end) * 0.5)
+	# One box per consecutive point pair, each oriented along its own segment,
+	# so a curved shortcut's trigger volume follows the alt route instead of
+	# a single chord box that can strand a curved path far outside it. A
+	# 2-point shortcut still yields exactly one box, identical to before.
+	# body_entered/body_exited on the Area3D (not the per-shape variants) fire
+	# once per overlapping-shape-count transition to/from zero, so exit only
+	# fires once the kart has left every box.
+	for index: int in range(points.size() - 1):
+		var start: Vector3 = points[index]
+		var end: Vector3 = points[index + 1]
+		var shape_node: CollisionShape3D = CollisionShape3D.new()
+		shape_node.name = "Shape%02d" % index
+		var shape: BoxShape3D = BoxShape3D.new()
+		shape.size = Vector3(8.0, 8.0, start.distance_to(end))
+		shape_node.shape = shape
+		trigger.add_child(shape_node)
+		shape_node.global_transform = Transform3D(Basis.looking_at(end - start), (start + end) * 0.5)
 	route.alt_curve = make_path("Shortcuts/%s" % node_name, "AltCurve", points)
 	if build_surface:
 		TrackBuilder.build_road_segments(geometry, route.alt_curve, 8.0, ROAD_HEIGHT, wall_material)
@@ -156,21 +174,26 @@ func shortcut(node_name: String, entry: float, exit: float, points: Array[Vector
 
 func _build_line() -> void:
 	line.curve = Curve3D.new()
-	_append_point(Vector3(0.0, 0.0, -half_depth))
-	var centers: Array[Vector2] = [
-		Vector2(-half_width + corner_radius, -half_depth + corner_radius),
-		Vector2(-half_width + corner_radius, half_depth - corner_radius),
-		Vector2(half_width - corner_radius, half_depth - corner_radius),
-		Vector2(half_width - corner_radius, -half_depth + corner_radius),
-	]
-	for corner: int in range(centers.size()):
-		var center: Vector2 = centers[corner]
-		var start_angle: float = -90.0 - float(corner) * 90.0
-		var steps: int = roundi(90.0 / ARC_STEP)
-		for step: int in range(steps + 1):
-			var angle: float = deg_to_rad(start_angle - float(step) * ARC_STEP)
-			_append_point(Vector3(center.x + cos(angle) * corner_radius, 0.0, center.y + sin(angle) * corner_radius))
-	_append_point(Vector3(0.0, 0.0, -half_depth))
+	var authored: Array[Vector3] = authored_points()
+	if authored.is_empty():
+		_append_point(Vector3(0.0, 0.0, -half_depth))
+		var centers: Array[Vector2] = [
+			Vector2(-half_width + corner_radius, -half_depth + corner_radius),
+			Vector2(-half_width + corner_radius, half_depth - corner_radius),
+			Vector2(half_width - corner_radius, half_depth - corner_radius),
+			Vector2(half_width - corner_radius, -half_depth + corner_radius),
+		]
+		for corner: int in range(centers.size()):
+			var center: Vector2 = centers[corner]
+			var start_angle: float = -90.0 - float(corner) * 90.0
+			var steps: int = roundi(90.0 / ARC_STEP)
+			for step: int in range(steps + 1):
+				var angle: float = deg_to_rad(start_angle - float(step) * ARC_STEP)
+				_append_point(Vector3(center.x + cos(angle) * corner_radius, 0.0, center.y + sin(angle) * corner_radius))
+		_append_point(Vector3(0.0, 0.0, -half_depth))
+	else:
+		for point: Vector3 in authored:
+			_append_point(point)
 	line.bake()
 
 

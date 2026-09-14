@@ -1,26 +1,123 @@
 extends ContentTrack
 
-## Lumen Underpass: four tight right-angle corners and two boost-only alley cuts.
+## Lumen Underpass: two S-chicanes lead into a long sweeping bend, then a
+## tightening compound hairpin with a shortcut cutting its inner apex.
+##
+## The layout is a closed "stadium" loop (chicanes -> 180 deg sweeper ->
+## back straight -> 180 deg compound hairpin -> closing straight) authored
+## as exact circular arcs so it closes without drift. Radii/angles below are
+## solved offline (see docs/phase18d track-redesign notes) so SWEEPER_RADIUS
+## and CLOSING_STRAIGHT carry fractional precision on purpose - rounding
+## them would reopen the seam gap.
 
-const TUNNEL_START: Vector3 = Vector3(-200.0, 0.4, 110.0)
-const TUNNEL_END: Vector3 = Vector3(140.0, 0.4, 110.0)
+const START_Z: float = -130.0
+const GRID_STRAIGHT: float = 85.0
+const LINK_A: float = 11.0
+const LINK_B: float = 18.0
+const LINK_C: float = 21.0
+## CHICANE_RADIUS/ANGLE were widened from the original 40.0/19.0 deg (a
+## ~4.4m lateral wiggle) to a real S-pair (~13.4m lateral shift) so the
+## chicanes read as a deliberate feature. SWEEPER_RADIUS is unaffected: each
+## S-pair is two equal-and-opposite arcs that always cancel their own net
+## heading AND lateral offset by symmetry, so the sweeper/hairpin geometry
+## that closes the loop never needs to change with the chicane. Only
+## CLOSING_STRAIGHT (re-solved offline, same method as before) absorbs the
+## chicanes' larger forward travel to keep the loop closed.
+const CHICANE_RADIUS: float = 26.0
+const CHICANE_ANGLE: float = 42.0
+const SWEEPER_RADIUS: float = 87.51342217980729
+const SWEEPER_ANGLE: float = 180.0
+const BACK_STRAIGHT: float = 378.0
+const HAIRPIN_RADIUS_WIDE: float = 95.0
+const HAIRPIN_ANGLE_WIDE: float = 140.0
+const HAIRPIN_RADIUS_TIGHT: float = 31.0
+const HAIRPIN_ANGLE_TIGHT: float = 40.0
+const CLOSING_STRAIGHT: float = 214.54882395861728
+
+## Offsets (metres along the racing line) where the PrismAlley shortcut cuts
+## the inner (left) apex of the compound hairpin: from 85% through the wide
+## stage to 10% into the closing straight (a single checkpoint sits in this
+## span - a wider span would move two checkpoints to the same rejoin offset
+## and fail the "checkpoint offsets increase" contract). Solved alongside
+## the layout above. The wider chicanes push everything downstream later by
+## a fixed +23.157576m (the chicanes' own arc-length growth; the sweeper and
+## hairpin arcs that follow are unchanged, so this shift is exact) - both
+## offsets carry that same shift forward so the alley still cuts the same
+## physical apex. ALLEY_SPEED is lower than the original track_02 alleys'
+## 30 m/s: this cut sits mid-hairpin, where cornering speed rarely reaches
+## 30, and 18 m/s is comfortably reachable while still meaning a driver has
+## to carry real speed through the wide stage to qualify.
+const ALLEY_ENTRY_OFFSET: float = 1061.449914
+const ALLEY_EXIT_OFFSET: float = 1141.115349
+const ALLEY_LATERAL: float = -10.0
+const ALLEY_SPEED: float = 18.0
+
+const TUNNEL_START_FRACTION: float = 0.39
+const TUNNEL_END_FRACTION: float = 0.60
 const TUNNEL_HEIGHT: float = 7.0
-const ALLEY_SPEED: float = 30.0
+const GATE_FRACTIONS: Array[float] = [0.45, 0.54]
+const BOOST_BASE_FRACTION: float = 0.87
+const BOOST_COUNT: int = 3
+const BOOST_SPACING: float = 12.0
+
 const OBSTACLE_SCENE: PackedScene = preload("res://track/elements/moving_obstacle.tscn")
 
+var _cursor: Vector2 = Vector2.ZERO
+var _heading: float = 0.0
 
+
+## Opens the main road's left wall over the hairpin apex the alley cuts.
 func open_inner_wall(point: Vector3) -> bool:
-	return (point.x < -255.0 and point.z > 65.0) or (point.x > 255.0 and point.z < -65.0)
+	var offset: float = line.offset_at(point)
+	return offset > ALLEY_ENTRY_OFFSET and offset < ALLEY_EXIT_OFFSET
+
+
+func authored_points() -> Array[Vector3]:
+	var points: Array[Vector3] = []
+	_cursor = Vector2(0.0, START_Z)
+	_heading = 0.0
+	points.append(_here())
+	_straight(GRID_STRAIGHT, points)
+	_straight(LINK_A, points)
+	_arc(CHICANE_RADIUS, -CHICANE_ANGLE, points)
+	_arc(CHICANE_RADIUS, CHICANE_ANGLE, points)
+	_straight(LINK_B, points)
+	_arc(CHICANE_RADIUS, CHICANE_ANGLE, points)
+	_arc(CHICANE_RADIUS, -CHICANE_ANGLE, points)
+	_straight(LINK_C, points)
+	_arc(SWEEPER_RADIUS, -SWEEPER_ANGLE, points)
+	_straight(BACK_STRAIGHT, points)
+	_arc(HAIRPIN_RADIUS_WIDE, -HAIRPIN_ANGLE_WIDE, points)
+	_arc(HAIRPIN_RADIUS_TIGHT, -HAIRPIN_ANGLE_TIGHT, points)
+	_straight(CLOSING_STRAIGHT, points)
+	return points
 
 
 func build_theme() -> void:
-	TrackBuilder.add_box_segment(geometry, TUNNEL_START + Vector3.UP * TUNNEL_HEIGHT,
-		TUNNEL_END + Vector3.UP * TUNNEL_HEIGHT, road_width + 2.0, 1.0, road_material)
-	for lateral: float in [-1.0, 1.0]:
-		var shift: Vector3 = Vector3(0.0, TUNNEL_HEIGHT * 0.5, lateral * (road_width + 1.0) * 0.5)
-		TrackBuilder.add_box_segment(geometry, TUNNEL_START + shift, TUNNEL_END + shift, 1.0, TUNNEL_HEIGHT, wall_material)
-	for index: int in range(2):
-		var offset: float = line.offset_at(Vector3(-120.0 + float(index) * 160.0, ROAD_HEIGHT, half_depth))
+	_build_tunnel()
+	_build_sliding_gates()
+	_build_boost_pads()
+	_add_alley()
+
+
+func _build_tunnel() -> void:
+	var start_offset: float = line.length() * TUNNEL_START_FRACTION
+	var end_offset: float = line.length() * TUNNEL_END_FRACTION
+	var tunnel_start: Vector3 = line.sample(start_offset)
+	var tunnel_end: Vector3 = line.sample(end_offset)
+	TrackBuilder.add_box_segment(geometry, tunnel_start + Vector3.UP * TUNNEL_HEIGHT,
+		tunnel_end + Vector3.UP * TUNNEL_HEIGHT, road_width + 2.0, 1.0, road_material)
+	for side: float in [-1.0, 1.0]:
+		var lateral: Vector3 = line.right_at(start_offset) * side * (road_width + 1.0) * 0.5
+		TrackBuilder.add_box_segment(geometry,
+			tunnel_start + lateral + Vector3.UP * TUNNEL_HEIGHT * 0.5,
+			tunnel_end + lateral + Vector3.UP * TUNNEL_HEIGHT * 0.5,
+			1.0, TUNNEL_HEIGHT, wall_material)
+
+
+func _build_sliding_gates() -> void:
+	for index: int in range(GATE_FRACTIONS.size()):
+		var offset: float = line.length() * GATE_FRACTIONS[index]
 		var gate: MovingObstacle = place(OBSTACLE_SCENE, "MovingObstacles", "SlidingGate%d" % index, offset) as MovingObstacle
 		var side: float = -1.0 if index == 0 else 1.0
 		gate.path = make_path("MovingObstacles", "GatePath%d" % index, [
@@ -29,11 +126,58 @@ func build_theme() -> void:
 		])
 		gate.loop = false
 		gate.speed = 2.0
-	_add_alley("PrismAlley", Vector3(-300.0, ROAD_HEIGHT, 66.0), Vector3(-256.0, ROAD_HEIGHT, 110.0))
-	_add_alley("RelayAlley", Vector3(300.0, ROAD_HEIGHT, -66.0), Vector3(256.0, ROAD_HEIGHT, -110.0))
-	for index: int in range(3):
-		place(BOOST_SCENE, "BoostPads", "NeonBoost%d" % index, 160.0 + float(index) * 12.0)
 
 
-func _add_alley(node_name: String, start: Vector3, end: Vector3) -> void:
-	shortcut(node_name, line.offset_at(start), line.offset_at(end), [start, end], ALLEY_SPEED)
+func _build_boost_pads() -> void:
+	var base_offset: float = line.length() * BOOST_BASE_FRACTION
+	for index: int in range(BOOST_COUNT):
+		place(BOOST_SCENE, "BoostPads", "NeonBoost%d" % index, base_offset + float(index) * BOOST_SPACING)
+
+
+## The alley spans ~80m of the hairpin, which the compound turn sweeps
+## through by over 60 degrees - a straight 2-point chord between entry and
+## exit strays up to ~15m from the actual curve there, leaving a real gap
+## between the opened main-road wall and the alley's own (8m-wide) surface
+## for a kart to fall through. Sampling several points along the true
+## offset locus keeps the chord within ~1m of it (comfortably inside the
+## alley's own half-width). The lateral offset is also tapered to 0 at both
+## ends (a sine bulge, max magnitude mid-span) rather than held at
+## ALLEY_LATERAL throughout: open_inner_wall's gap closes again exactly at
+## ALLEY_EXIT_OFFSET, so a kart still sitting ALLEY_LATERAL outside the
+## road there would be trapped on the wrong side of the resuming wall.
+const ALLEY_WAYPOINTS: int = 9
+
+
+func _add_alley() -> void:
+	var points: Array[Vector3] = []
+	for index: int in range(ALLEY_WAYPOINTS):
+		var t: float = float(index) / float(ALLEY_WAYPOINTS - 1)
+		var offset: float = lerpf(ALLEY_ENTRY_OFFSET, ALLEY_EXIT_OFFSET, t)
+		var lateral: float = ALLEY_LATERAL * sin(PI * t)
+		points.append(line.sample(offset) + line.right_at(offset) * lateral)
+	shortcut("PrismAlley", ALLEY_ENTRY_OFFSET, ALLEY_EXIT_OFFSET, points, ALLEY_SPEED)
+
+
+func _here() -> Vector3:
+	return Vector3(_cursor.x, 0.0, _cursor.y)
+
+
+func _straight(length: float, points: Array[Vector3]) -> void:
+	var direction: Vector2 = Vector2(cos(deg_to_rad(_heading)), sin(deg_to_rad(_heading)))
+	_cursor += direction * length
+	points.append(_here())
+
+
+## Exact circular arc (matches ContentTrack's own corner math): turn_degrees
+## is signed (positive left/CCW, negative right/CW). Appends one point per
+## ARC_STEP degrees so curvature and self-intersection read correctly.
+func _arc(radius: float, turn_degrees: float, points: Array[Vector3]) -> void:
+	var sign_t: float = 1.0 if turn_degrees > 0.0 else -1.0
+	var center: Vector2 = _cursor + radius * Vector2(cos(deg_to_rad(_heading + 90.0 * sign_t)), sin(deg_to_rad(_heading + 90.0 * sign_t)))
+	var start_angle: float = _heading - 90.0 * sign_t
+	var steps: int = maxi(1, roundi(absf(turn_degrees) / ARC_STEP))
+	for step: int in range(1, steps + 1):
+		var angle: float = deg_to_rad(start_angle + turn_degrees * float(step) / float(steps))
+		_cursor = center + radius * Vector2(cos(angle), sin(angle))
+		points.append(_here())
+	_heading += turn_degrees
