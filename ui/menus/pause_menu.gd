@@ -14,6 +14,15 @@ var _manager: RaceManager
 var _pause_on_focus_loss: bool = true
 var _player_device_ids: PackedInt32Array = PackedInt32Array([PlayerInputProvider.DEVICE_ANY])
 var _pause_owner_device_id: int = PlayerSlot.KEYBOARD_DEVICE_ID
+## True while showing the networked overlay (spec item 2): unlike local
+## pause, this never routes through `RaceManager.pause_race()`/`_state`, so
+## the server-authoritative race (this peer's own RaceManager, if host) and
+## `get_tree().paused` are both left untouched — only the overlay is local.
+var _network_paused: bool = false
+## True once the networked overlay's menu button has been pressed once as a
+## listen host with other players present (review finding 6): the next press
+## actually ends the session. Reset whenever the overlay is reconfigured.
+var _pending_end_session_confirm: bool = false
 
 
 func _ready() -> void:
@@ -37,6 +46,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	var device_id: int = _event_device_id(event)
 	if not _player_device_ids.has(PlayerInputProvider.DEVICE_ANY) and not _player_device_ids.has(device_id):
 		return
+	if GameState.is_networked:
+		if not _network_paused and not _can_open_network_pause():
+			return
+		_toggle_network_pause(device_id)
+		get_viewport().set_input_as_handled()
+		return
 	if _manager.get_state() == RaceState.PAUSED:
 		if _pause_owner_device_id != PlayerInputProvider.DEVICE_ANY and device_id != _pause_owner_device_id:
 			return
@@ -47,8 +62,67 @@ func _unhandled_input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 
 
+## Toggles the networked overlay (spec item 2): same device-ownership rule
+## as the local flow, but the state lives here (`_network_paused`), not on
+## `RaceManager`, since the race must keep running while it is shown.
+func _toggle_network_pause(device_id: int) -> void:
+	if _network_paused:
+		if _pause_owner_device_id != PlayerInputProvider.DEVICE_ANY and device_id != _pause_owner_device_id:
+			return
+		_hide_network_pause()
+	else:
+		_pause_owner_device_id = device_id
+		_show_network_pause()
+
+
+## Review finding 4: only opens the overlay in the same states the offline
+## path's `RaceManager.pause_race()` guard allows, so it can no longer stack
+## over RESULTS (including over BACK TO LOBBY) or any other state pause
+## makes no sense in. Only gates opening — RESUME still works regardless of
+## state, since the overlay itself never changes `_manager`'s state machine.
+func _can_open_network_pause() -> bool:
+	var state: int = _manager.get_state()
+	return state == RaceState.COUNTDOWN or state == RaceState.RACING
+
+
+func _show_network_pause() -> void:
+	_network_paused = true
+	show_menu(_manager)
+	_configure_network_buttons(true)
+
+
+func _hide_network_pause() -> void:
+	_network_paused = false
+	hide_menu()
+	_configure_network_buttons(false)
+
+
+## RESTART/SETTINGS make no sense mid-race for a server-authoritative
+## session, so the networked overlay offers only RESUME and LEAVE/END.
+func _configure_network_buttons(active: bool) -> void:
+	_restart_button.visible = not active
+	_settings_button.visible = not active
+	_continue_button.text = "RESUME" if active else "Continue"
+	_pending_end_session_confirm = false
+	if not active:
+		_menu_button.text = "Quit to Menu"
+	elif _ends_session_for_everyone():
+		_menu_button.text = "END SESSION"
+	else:
+		_menu_button.text = "LEAVE RACE"
+
+
+## True when this button would end the whole session for every connected
+## peer, not just remove this one peer (review finding 6): a listen host
+## with other players still in the session. A dedicated/headless server has
+## no local player and never shows this overlay, so it never reaches here.
+func _ends_session_for_everyone() -> bool:
+	var session: NetSession = GameState.net_session
+	return is_instance_valid(session) and session.multiplayer.is_server() and session.players.size() > 1
+
+
 func _input(event: InputEvent) -> void:
-	if _manager == null or _manager.get_state() != RaceState.PAUSED:
+	if _manager == null or (_manager.get_state() != RaceState.PAUSED and not _network_paused):
 		return
 	if not (event is InputEventKey or event is InputEventJoypadButton or event is InputEventJoypadMotion):
 		return # Mouse support remains shared while device navigation stays owned.
@@ -100,7 +174,11 @@ func hide_menu() -> void:
 
 
 func _on_continue_pressed() -> void:
-	if _manager != null:
+	if _manager == null:
+		return
+	if _network_paused:
+		_hide_network_pause()
+	else:
 		_manager.resume_race()
 
 
@@ -129,9 +207,17 @@ func _wire_focus() -> void:
 		buttons[index].focus_neighbor_bottom = buttons[index].get_path_to(next)
 
 
+## Ending a shared session from a single keypress reads as "only I leave"
+## when it actually ends the race for every other player (review finding
+## 6), so the first press on that overlay only asks for confirmation.
 func _on_menu_pressed() -> void:
-	if _manager != null:
-		_manager.back_to_menu()
+	if _manager == null:
+		return
+	if _network_paused and _ends_session_for_everyone() and not _pending_end_session_confirm:
+		_pending_end_session_confirm = true
+		_menu_button.text = "CONFIRM END SESSION?"
+		return
+	_manager.back_to_menu()
 
 
 func _event_device_id(event: InputEvent) -> int:

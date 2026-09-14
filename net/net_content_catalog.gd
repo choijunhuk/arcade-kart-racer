@@ -5,6 +5,7 @@ extends RefCounted
 ## race setup, keeping NetSession focused on transport/session state.
 
 const TRACK_DIRECTORY: String = "res://data/tracks"
+const AI_DIRECTORY: String = "res://data/ai"
 
 
 ## Returns the first catalog driver id, used to seed a freshly joined row.
@@ -34,3 +35,13 @@ static func resolve_track(id: String) -> TrackData:
 			if resource is TrackData and String((resource as TrackData).id) == id:
 				return resource as TrackData
 	return LocalLobby.DEFAULT_TRACK
+
+
+## Resolves an AI difficulty profile by content id (mirrors `resolve_track`);
+## falls back to the existing default when `id` is empty or unknown.
+static func resolve_difficulty(id: String) -> AIDifficultyProfile:
+	if not id.is_empty():
+		for resource: Resource in ResourceScanner.scan_tres(AI_DIRECTORY):
+			if resource is AIDifficultyProfile and String((resource as AIDifficultyProfile).id) == id:
+				return resource as AIDifficultyProfile
+	return LocalLobby.DEFAULT_DIFFICULTY

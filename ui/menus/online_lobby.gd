@@ -26,6 +26,12 @@ var _upnp: NetUpnp
 var _relay_client: NetRelayClient
 var _drivers: Array[Resource] = []
 var _karts: Array[Resource] = []
+var _tracks: Array[Resource] = []
+var _difficulties: Array[Resource] = []
+var _laps: SpinBox
+var _ai_count_box: SpinBox
+var _track: OptionButton
+var _difficulty: OptionButton
 var _panels: Array[LocalLobby.PanelView] = []
 ## True from a JOIN attempt until the server's handshake actually admits us
 ## (a roster row appears): the ENet socket opens instantly, but "Connected"
@@ -67,6 +73,7 @@ func _ready() -> void:
 	_kart.item_selected.connect(_selection_changed)
 	_build_relay_row()
 	_build_status_row()
+	_build_race_options_row()
 	for index: int in range(NetTuning.MAX_PLAYERS):
 		var panel: LocalLobby.PanelView = LocalLobby.create_panel(index)
 		panel.panel.custom_minimum_size.y = 220.0
@@ -74,6 +81,8 @@ func _ready() -> void:
 		_panels.append(panel)
 	_refresh()
 	focus_initial(_host)
+	if is_instance_valid(GameState.net_session):
+		_rebind_session(GameState.net_session)
 
 func _build_relay_row() -> void:
 	var row: HBoxContainer = HBoxContainer.new()
@@ -99,6 +108,49 @@ func _build_status_row() -> void:
 	_upnp_status = Label.new()
 	row.add_child(_upnp_status)
 
+## Host-only race options (spec item 1): laps, AI bot count, track and difficulty.
+## Editable before/while hosting; clients see the host's broadcast values read-only.
+func _build_race_options_row() -> void:
+	var row: HBoxContainer = HBoxContainer.new()
+	_rows.add_child(row)
+	_rows.move_child(row, 5)
+	_row_label(row, "LAPS")
+	_laps = SpinBox.new()
+	_laps.min_value = 1
+	_laps.max_value = 9
+	_laps.value = 1
+	_laps.value_changed.connect(_on_race_options_changed)
+	row.add_child(_laps)
+	_row_label(row, "BOTS")
+	_ai_count_box = SpinBox.new()
+	_ai_count_box.min_value = 0
+	_ai_count_box.max_value = RaceSnapshot.MAX_KARTS - 1
+	_ai_count_box.value = 6
+	_ai_count_box.value_changed.connect(_on_race_options_changed)
+	row.add_child(_ai_count_box)
+	_row_label(row, "TRACK")
+	_tracks = ResourceScanner.scan_tres(NetContentCatalog.TRACK_DIRECTORY)
+	_track = _options(row, _tracks)
+	_track.item_selected.connect(_on_race_options_changed)
+	_row_label(row, "DIFFICULTY")
+	_difficulties = ResourceScanner.scan_tres(NetContentCatalog.AI_DIRECTORY)
+	_difficulty = _options(row, _difficulties)
+	_difficulty.item_selected.connect(_on_race_options_changed)
+
+func _row_label(parent: Control, text: String) -> void:
+	var label: Label = Label.new()
+	label.text = text
+	parent.add_child(label)
+
+## Host-only: pushes the current controls onto the (now server) session and rebroadcasts the lobby; a no-op on a client or before a session exists.
+func _on_race_options_changed(_value: Variant = null) -> void:
+	if _session == null or not multiplayer.is_server():
+		return
+	_session.set_race_options(
+		int(_laps.value), int(_ai_count_box.value),
+		String(_tracks[_track.selected].get("id")), String(_difficulties[_difficulty.selected].get("id")),
+	)
+
 ## Closes the connection and releases any UPnP mapping/relay proxy before leaving.
 func go_back() -> void:
 	if _upnp != null:
@@ -118,6 +170,19 @@ func _create_session() -> void:
 	_session.lobby_changed.connect(_refresh)
 	_session.admitted.connect(_on_admitted)
 
+## Re-enters an already-open session, e.g. `ResultsScreen`'s "BACK TO LOBBY"
+## (spec item 3): reuses the still-alive NetSession instead of creating a
+## new one, so the roster/settings the server already broadcast still apply.
+func _rebind_session(session: NetSession) -> void:
+	_session = session
+	if not _session.lobby_changed.is_connected(_refresh):
+		_session.lobby_changed.connect(_refresh)
+	if not _session.admitted.is_connected(_on_admitted):
+		_session.admitted.connect(_on_admitted)
+	_awaiting_handshake = false
+	_status.text = "Connected — choose driver/kart, then READY. Host starts."
+	_refresh()
+
 func _host_game() -> void:
 	_create_session()
 	_session.set_password(_password.text)
@@ -129,9 +194,12 @@ func _host_game() -> void:
 		return
 	var error: Error = _session.host(port)
 	_handle_open(error)
-	if error == OK and relay_target.is_empty():
+	if error != OK:
+		return
+	_on_race_options_changed()
+	if relay_target.is_empty():
 		_start_upnp(port)
-	elif error == OK:
+	else:
 		_upnp_status.text = "Relay active — share the room code with your guest."
 
 func _join_game() -> void:
@@ -240,8 +308,16 @@ func _refresh() -> void:
 		_status.text = "Connected — choose driver/kart, then READY. Host starts."
 	_host.disabled = connected
 	_join.disabled = connected
-	_ready_button.disabled = not connected or _session.local_slot() < 0
+	# Review finding 7: while `started`, `_selection` is dropped server-side — READY and the dropdowns that also send it must disable together.
+	var mid_race: bool = connected and _session.started
+	var selection_disabled: bool = not connected or _session.local_slot() < 0 or mid_race
+	_ready_button.disabled = selection_disabled
+	_driver.disabled = selection_disabled
+	_kart.disabled = selection_disabled
+	if mid_race:
+		_status.text = "Waiting for the host to reopen the lobby."
 	_start.disabled = not connected or not multiplayer.is_server()
+	_refresh_race_options(connected)
 	var roster: Array[Dictionary] = []
 	if connected:
 		roster = _session.players
@@ -258,6 +334,34 @@ func _refresh() -> void:
 			view.driver.text = "DRIVER  " + _display(_drivers, row["driver"])
 			view.kart.text = "KART  " + _display(_karts, row["kart"])
 			view.status.text = "READY" if bool(row["ready"]) else "CHOOSING"
+
+## Reflects the session's current laps/bots/track/difficulty into the
+## controls and gates editing to the host (spec item 1: clients see the
+## host's choice but cannot change it).
+func _refresh_race_options(connected: bool) -> void:
+	var editable: bool = not connected or multiplayer.is_server()
+	if connected:
+		# Dropdowns first, and *_no_signal for the spin boxes (review finding
+		# 5): `Range.value =` emits `value_changed` synchronously, so setting
+		# it before the dropdowns caught `_on_race_options_changed` mid-resync
+		# — e.g. the host's rebind after BACK TO LOBBY — while the dropdowns
+		# still read index 0, broadcasting track_01 + easy + the stale bot
+		# count over the host's real choice.
+		_select_option(_track, _tracks, _session.track_id, String(LocalLobby.DEFAULT_TRACK.id))
+		_select_option(_difficulty, _difficulties, _session.difficulty_id, String(LocalLobby.DEFAULT_DIFFICULTY.id))
+		_laps.set_value_no_signal(_session.laps)
+		_ai_count_box.set_value_no_signal(_session.ai_count)
+	_laps.editable = editable
+	_ai_count_box.editable = editable
+	_track.disabled = not editable
+	_difficulty.disabled = not editable
+
+func _select_option(option: OptionButton, resources: Array[Resource], id: String, default_id: String) -> void:
+	var target: String = id if not id.is_empty() else default_id
+	for index: int in range(resources.size()):
+		if String(resources[index].get("id")) == target:
+			option.selected = index
+			return
 
 func _selection_changed(_index: int) -> void:
 	_send_selection(false)
