@@ -68,11 +68,16 @@ static func install(track: Node3D) -> void:
 		_lamps(root, line)
 	TrackDressing.install(root, track, line, theme)
 	# A track swapped out before its deferred art install runs is no longer in the tree
-	# (sandbox/snapshot track switching); skip the quality pass instead of dereferencing null.
+	# (sandbox/snapshot track switching); skip the quality/CC0-art passes instead of
+	# dereferencing null.
 	var tree: SceneTree = track.get_tree()
 	var settings: Node = tree.root.get_node_or_null("SettingsManager") if tree != null else null
-	if settings != null:
-		QualityTier.apply_scene(track, int(settings.call("get_setting", &"video", &"particle_quality", 2)))
+	if settings == null:
+		return
+	var art_style: String = String(settings.call("get_setting", &"video", &"art_style", "kenney"))
+	if art_style == "kenney":
+		TrackKenneyProps.install(root, track, line, theme)
+	QualityTier.apply_scene(track, int(settings.call("get_setting", &"video", &"particle_quality", 2)))
 
 static func _sky(root: Node3D, theme: int) -> void:
 	# Reuse authored WorldEnvironment, avoiding competing active environments.

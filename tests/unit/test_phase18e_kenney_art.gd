@@ -35,3 +35,13 @@ func test_ground_offset_places_scaled_minimum_on_ground() -> void:
 	# The body's local minimum, once shifted by the offset and scaled, must
 	# land exactly on the requested ground height.
 	assert_almost_eq(-0.2 * 2.0 + offset, -0.35, 0.0001)
+
+
+func test_track_prop_clear_of_racing_line_requires_half_width_plus_margin() -> void:
+	assert_false(TrackKenneyProps.is_clear_of_racing_line(6.0, 7.0, 2.0))
+	assert_true(TrackKenneyProps.is_clear_of_racing_line(9.5, 7.0, 2.0))
+	assert_true(TrackKenneyProps.is_clear_of_racing_line(-9.5, 7.0, 2.0), "filter must be symmetric across both sides of the line")
+
+
+func test_track_prop_clear_of_racing_line_boundary_is_inclusive() -> void:
+	assert_true(TrackKenneyProps.is_clear_of_racing_line(9.0, 7.0, 2.0))
