@@ -10,6 +10,27 @@ func test_online_lobby_has_shared_panels_and_enabled_connection_controls() -> vo
 	assert_true((lobby.get("_ready_button") as Button).disabled)
 	assert_eq(int((lobby.get("_port") as SpinBox).value), NetTuning.PORT)
 
+## Review finding 5: `_refresh_race_options` resyncing the controls (e.g. the
+## host's own rebind after BACK TO LOBBY) must not clobber the session's
+## real laps/bots/track/difficulty with the controls' stale defaults.
+func test_refresh_race_options_does_not_clobber_non_default_session_settings() -> void:
+	var lobby: OnlineLobby = (load("res://ui/menus/online_lobby.tscn") as PackedScene).instantiate() as OnlineLobby
+	add_child_autofree(lobby)
+	await wait_process_frames(2)
+	var session: NetSession = NetSession.new()
+	add_child_autofree(session)
+	session.players = [{"peer": 1, "driver": NetContentCatalog.default_driver_id(), "kart": NetContentCatalog.default_kart_id(), "ready": true}]
+	session.laps = 7
+	session.ai_count = 4
+	session.track_id = "track_04_ochre_rift"
+	session.difficulty_id = "hard"
+	lobby.set("_session", session)
+	lobby._refresh()
+	assert_eq(session.laps, 7, "resync must not clobber the host's laps")
+	assert_eq(session.ai_count, 4, "resync must not clobber the host's bot count")
+	assert_eq(session.track_id, "track_04_ochre_rift", "resync must not clobber the host's track")
+	assert_eq(session.difficulty_id, "hard", "resync must not clobber the host's difficulty")
+
 ## Real-UI acceptance testing caught a join showing "Connected" the instant
 ## the ENet socket opened, well before the server's handshake actually
 ## admitted the peer — a rejection moments later would leave a UI that had

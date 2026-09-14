@@ -336,10 +336,16 @@ func _refresh() -> void:
 func _refresh_race_options(connected: bool) -> void:
 	var editable: bool = not connected or multiplayer.is_server()
 	if connected:
-		_laps.value = _session.laps
-		_ai_count_box.value = _session.ai_count
+		# Dropdowns first, and *_no_signal for the spin boxes (review finding
+		# 5): `Range.value =` emits `value_changed` synchronously, so setting
+		# it before the dropdowns caught `_on_race_options_changed` mid-resync
+		# — e.g. the host's rebind after BACK TO LOBBY — while the dropdowns
+		# still read index 0, broadcasting track_01 + easy + the stale bot
+		# count over the host's real choice.
 		_select_option(_track, _tracks, _session.track_id, String(LocalLobby.DEFAULT_TRACK.id))
 		_select_option(_difficulty, _difficulties, _session.difficulty_id, String(LocalLobby.DEFAULT_DIFFICULTY.id))
+		_laps.set_value_no_signal(_session.laps)
+		_ai_count_box.set_value_no_signal(_session.ai_count)
 	_laps.editable = editable
 	_ai_count_box.editable = editable
 	_track.disabled = not editable
