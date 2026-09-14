@@ -36,8 +36,14 @@ func map_port(port: int) -> void:
 func release_and_free() -> void:
 	if _thread != null and _thread.is_alive():
 		# A discovery thread is mid-flight and will call back into this node;
-		# let it finish and free us there rather than freeing under it.
+		# let it finish and free us there rather than freeing under it. Move
+		# onto GameState first: staying under the lobby would free us with it
+		# and _exit_tree would join the thread on the main thread, stalling
+		# ENet servicing long enough to drop connected peers.
 		_release_pending = true
+		if get_parent() != null:
+			get_parent().remove_child(self)
+		GameState.add_child(self)
 		return
 	if _mapped_port < 0:
 		_free_thread_and_self()
@@ -110,6 +116,9 @@ func _finish(result: Dictionary) -> void:
 
 
 func _exit_tree() -> void:
+	# Reparenting for a pending release must not block on the worker thread.
+	if _release_pending:
+		return
 	if _thread != null and _thread.is_alive():
 		_thread.wait_to_finish()
 		_thread = null
