@@ -171,7 +171,24 @@ func _service_peers() -> void:
 func _peer_connected(id: int) -> void:
 	if not multiplayer.is_server():
 		return
+	_relax_peer_timeout(id)
 	_gate.track(id, now())
+
+## ENet's default backoff (32 unacked pings, ~16s of silence) can misread a
+## real main-thread stall — UPnP discovery on host, a heavy scene load during
+## lobby->race prep — as a dead connection and drop an otherwise healthy
+## peer. Real-UI acceptance testing caught this exact case (a fully ready
+## remote peer silently dropped seconds after START); the CLI-only
+## --net-host/--net-join path never goes through the lobby's UPnP attempt or
+## a full scene transition, so it never triggered it. Widening the timeout
+## floor/ceiling gives real stalls room without weakening detection of an
+## actually-dead connection (still bounded, just less trigger-happy).
+func _relax_peer_timeout(id: int) -> void:
+	if peer == null:
+		return
+	var enet_peer: ENetPacketPeer = peer.get_peer(id)
+	if enet_peer != null:
+		enet_peer.set_timeout(32, 15000, 45000)
 func _admit_peer(id: int) -> void:
 	var admitted: bool = _roster.add_waiting(id) if started else _roster.add(id, automated)
 	if admitted:
@@ -180,6 +197,7 @@ func _admit_peer(id: int) -> void:
 		_broadcast_lobby()
 
 func _connected() -> void:
+	_relax_peer_timeout(SERVER_ID)
 	send(&"_ping", SERVER_ID, [now()], true)
 	send(&"_handshake", SERVER_ID, [String(ProjectSettings.get_setting("application/config/version", "")), _password_attempt_hash], true)
 	if automated:
