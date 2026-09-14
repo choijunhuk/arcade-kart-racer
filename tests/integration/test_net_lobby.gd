@@ -57,6 +57,61 @@ func test_main_menu_exposes_online_and_disconnection_message() -> void:
 	assert_eq((menu.get_node("Panel/VBox/NetworkMessage") as Label).text, "Host disconnected.")
 	assert_eq(GameState.network_message, "")
 
+## Spec item 1: the host's laps/bots/track/difficulty choice must reach every
+## client's lobby fields (extends the existing `_lobby` broadcast payload)
+## and, from there, the race config each peer builds locally.
+func test_host_set_race_options_updates_the_session_and_rebroadcasts_the_lobby() -> void:
+	var session: NetSession = NetSession.new()
+	add_child_autofree(session)
+	session.players = [{"peer": 1, "ready": true}]
+	# A single-element array, not a plain int: GDScript lambdas capture outer
+	# locals by value, so `count += 1` inside one would not reach the caller.
+	var broadcasts: Array[int] = [0]
+	session.lobby_changed.connect(func() -> void: broadcasts[0] += 1)
+	session.set_race_options(4, 3, "track_02_lumen_underpass", "hard")
+	assert_eq(session.laps, 4)
+	assert_eq(session.ai_count, 3)
+	assert_eq(session.track_id, "track_02_lumen_underpass")
+	assert_eq(session.difficulty_id, "hard")
+	assert_eq(broadcasts[0], 1)
+	# Ignored once the race has started: `_prepare_race` owns these fields then.
+	session.started = true
+	session.set_race_options(1, 0, "track_01_ridgeline_circuit", "easy")
+	assert_eq(session.laps, 4)
+	assert_eq(broadcasts[0], 1)
+
+## A client applies whatever the authoritative `_lobby` broadcast carries
+## (mirrors `test_authoritative_lobby_return_clears_the_previous_client_race`
+## below: running the RPC body directly, as the client would on receipt).
+func test_lobby_broadcast_applies_the_hosts_race_options_on_the_client() -> void:
+	var session: NetSession = NetSession.new()
+	add_child_autofree(session)
+	session._lobby([{"peer": 1, "ready": true}], 5, 2, "track_04_ochre_rift", "easy")
+	assert_eq(session.laps, 5)
+	assert_eq(session.ai_count, 2)
+	assert_eq(session.track_id, "track_04_ochre_rift")
+	assert_eq(session.difficulty_id, "easy")
+
+## `_prepare_race`'s roster/lobby half (NetSessionLobby.begin_prepare) and
+## `NetRaceSetup.build` are what carry laps/bots/track/difficulty into the
+## `RaceConfig` every peer builds identically (spec item 1); exercised
+## directly rather than through `_prepare_race`, which also deferrably
+## changes the active scene.
+func test_prepare_race_settings_flow_into_the_built_race_config() -> void:
+	var session: NetSession = NetSession.new()
+	add_child_autofree(session)
+	var roster: Array = [{"peer": 1, "driver": NetContentCatalog.default_driver_id(), "kart": NetContentCatalog.default_kart_id(), "ready": true}]
+	session._roster.begin_prepare(roster, 4, 2, "track_03_glacier_crown", "hard")
+	assert_eq(session.laps, 4)
+	assert_eq(session.ai_count, 2)
+	assert_eq(session.track_id, "track_03_glacier_crown")
+	assert_eq(session.difficulty_id, "hard")
+	assert_true(session._roster.preparing)
+	var config: RaceConfig = NetRaceSetup.build(session.players, session.ai_count, session.laps, 42, session.track_id, session.difficulty_id)
+	assert_eq(config.laps, 4)
+	assert_eq(config.ai_difficulty.id, &"hard")
+	assert_eq(config.track.id, &"track_03_glacier_crown")
+
 func test_authoritative_lobby_return_clears_the_previous_client_race() -> void:
 	var session: NetSession = NetSession.new()
 	add_child_autofree(session)
