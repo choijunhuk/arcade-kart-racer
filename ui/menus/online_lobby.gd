@@ -310,7 +310,11 @@ func _refresh() -> void:
 		_status.text = "Connected — choose driver/kart, then READY. Host starts."
 	_host.disabled = connected
 	_join.disabled = connected
-	_ready_button.disabled = not connected or _session.local_slot() < 0
+	# Review finding 7: while `started`, `_selection` is dropped server-side.
+	var mid_race: bool = connected and _session.started
+	_ready_button.disabled = not connected or _session.local_slot() < 0 or mid_race
+	if mid_race:
+		_status.text = "Waiting for the host to reopen the lobby."
 	_start.disabled = not connected or not multiplayer.is_server()
 	_refresh_race_options(connected)
 	var roster: Array[Dictionary] = []

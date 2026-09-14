@@ -31,6 +31,26 @@ func test_refresh_race_options_does_not_clobber_non_default_session_settings() -
 	assert_eq(session.track_id, "track_04_ochre_rift", "resync must not clobber the host's track")
 	assert_eq(session.difficulty_id, "hard", "resync must not clobber the host's difficulty")
 
+## Review finding 7: after a non-host BACK TO LOBBY the client re-enters the
+## lobby while the server's race is still genuinely in progress (the host
+## hasn't also returned yet) — READY must not look pressable while `started`
+## is true, since every `_selection` it would send is dropped server-side.
+func test_ready_is_disabled_and_explained_while_the_session_is_still_started() -> void:
+	var lobby: OnlineLobby = (load("res://ui/menus/online_lobby.tscn") as PackedScene).instantiate() as OnlineLobby
+	add_child_autofree(lobby)
+	await wait_process_frames(2)
+	var session: NetSession = NetSession.new()
+	add_child_autofree(session)
+	session.players = [{"peer": 1, "driver": NetContentCatalog.default_driver_id(), "kart": NetContentCatalog.default_kart_id(), "ready": false}]
+	session.started = true
+	lobby.set("_session", session)
+	lobby._refresh()
+	assert_true((lobby.get("_ready_button") as Button).disabled, "READY must not be pressable while the server's race is still started")
+	assert_eq((lobby.get("_status") as Label).text, "Waiting for the host to reopen the lobby.")
+	session.started = false
+	lobby._refresh()
+	assert_false((lobby.get("_ready_button") as Button).disabled, "READY must re-enable once the session actually returns to the lobby")
+
 ## Real-UI acceptance testing caught a join showing "Connected" the instant
 ## the ENet socket opened, well before the server's handshake actually
 ## admitted the peer — a rejection moments later would leave a UI that had
@@ -181,6 +201,27 @@ func test_authoritative_lobby_return_clears_the_previous_client_race() -> void:
 	assert_false(session._roster.preparing)
 	assert_true(session._roster.loaded.is_empty())
 	assert_false(bool(session.players[0]["ready"]))
+
+## Review finding 7: a mid-race-promoted joiner only just received a roster
+## row from `_return_to_lobby` — without also broadcasting the lobby, its
+## controls stick on NetSession's constructor defaults instead of the host's
+## real laps/bots/track/difficulty. `NetDebugConditions.delivered` counts
+## queued sends (never a real socket), so 2 proves both `_return_to_lobby`
+## and `_lobby` were queued, not just the one this method already sent.
+func test_restart_to_lobby_also_broadcasts_the_lobby() -> void:
+	var session: NetSession = NetSession.new()
+	add_child_autofree(session)
+	session.peer = ENetMultiplayerPeer.new()
+	session.players = [{"peer": 1, "ready": true}]
+	session.laps = 5
+	session.ai_count = 2
+	session.track_id = "track_04_ochre_rift"
+	session.difficulty_id = "hard"
+	session.started = true
+	var before: int = session.conditions.delivered
+	session.restart_to_lobby()
+	session.conditions.advance(NetSession.now() + 1.0)
+	assert_eq(session.conditions.delivered - before, 2, "restart_to_lobby must queue both _return_to_lobby and the _lobby broadcast")
 
 func test_delayed_load_ack_and_clock_reach_countdown_then_racing() -> void:
 	var session: NetSession = NetSession.new()

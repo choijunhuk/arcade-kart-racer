@@ -153,7 +153,12 @@ func restart_to_lobby() -> void:
 	for row: Dictionary in _session.players:
 		row["ready"] = false
 	_session.send(&"_return_to_lobby", 0, [_session.players], true)
-	_session.lobby_changed.emit()
+	# Review finding 7: a mid-race joiner promoted above only just received a
+	# roster row, never the host's laps/bots/track/difficulty — without this,
+	# its controls stick on NetSession's constructor defaults instead of the
+	# real settings until the host happens to change one. Also covers the
+	# `lobby_changed` emit this used to do directly.
+	_session._broadcast_lobby()
 
 
 ## Clears every per-race flag while preserving the connected peer roster.
