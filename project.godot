@@ -121,6 +121,10 @@ textures/vram_compression/import_etc2_astc=true
 renderer/rendering_method="forward_plus"
 renderer/rendering_method.mobile="forward_plus"
 
+rendering_device/fallback_to_vulkan=true
+rendering_device/fallback_to_d3d12=true
+rendering_device/fallback_to_opengl3=true
+
 [debug]
 
 gdscript/warnings/untyped_declaration=2
