@@ -52,16 +52,18 @@ if [ "$(uname -s)" = "Darwin" ]; then
   rm -rf build/macos/extracted
   mkdir -p build/macos/extracted
   unzip -q build/macos/TurboCircuit.zip -d build/macos/extracted
-  app_dir=$(find build/macos/extracted -maxdepth 1 -name '*.app' | head -n 1)
-  if [ -z "$app_dir" ]; then
-    echo "SELFTEST FAIL: no .app bundle found in build/macos/extracted" >&2
+  app_count=$(find build/macos/extracted -maxdepth 1 -name '*.app' | wc -l | tr -d ' ')
+  if [ "$app_count" != "1" ]; then
+    echo "SELFTEST FAIL: expected exactly one .app in build/macos/extracted, found $app_count" >&2
     exit 1
   fi
-  app_bin=$(find "$app_dir/Contents/MacOS" -maxdepth 1 -type f | head -n 1)
-  if [ -z "$app_bin" ]; then
-    echo "SELFTEST FAIL: no executable found in $app_dir/Contents/MacOS" >&2
+  app_dir=$(find build/macos/extracted -maxdepth 1 -name '*.app')
+  bin_count=$(find "$app_dir/Contents/MacOS" -maxdepth 1 -type f | wc -l | tr -d ' ')
+  if [ "$bin_count" != "1" ]; then
+    echo "SELFTEST FAIL: expected exactly one file in $app_dir/Contents/MacOS, found $bin_count" >&2
     exit 1
   fi
+  app_bin=$(find "$app_dir/Contents/MacOS" -maxdepth 1 -type f)
   chmod +x "$app_bin"
   selftest_log=$(mktemp "${TMPDIR:-/tmp}/turbocircuit-selftest.XXXXXX")
   "$app_bin" --headless -- --selftest >"$selftest_log" 2>&1 || true
