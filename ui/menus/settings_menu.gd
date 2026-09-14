@@ -31,6 +31,7 @@ const ACTION_LABELS: Dictionary = {
 @onready var _tabs: TabContainer = $Panel/VBox/Tabs
 @onready var _remap_rows_root: VBoxContainer = $Panel/VBox/Tabs/Controls/Scroll/Rows/RemapRows
 @onready var _back_button: Button = $Panel/VBox/BackButton
+@onready var _replay_tutorial_button: Button = $Panel/VBox/Tabs/Gameplay/ReplayTutorialButton
 
 var _remap_rows: Array[RemapRow] = []
 var _embedded: bool = false
@@ -60,10 +61,13 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 ## Opens this shared screen inside PauseMenu without unpausing the race tree.
+## Hides REPLAY TUTORIAL: mid-race it would abandon the active race (and, if
+## networked, the live GameState.net_session) without RaceManager's teardown.
 func open_embedded(closed_callback: Callable) -> void:
 	_embedded = true
 	_closed_callback = closed_callback
 	visible = true
+	_replay_tutorial_button.visible = false
 	_sync_values()
 	focus_initial(_section_picker)
 

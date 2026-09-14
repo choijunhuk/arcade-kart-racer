@@ -62,6 +62,40 @@ func test_pause_settings_back_keeps_the_race_tree_paused() -> void:
 	assert_true(pause_menu.get_node("Panel").visible)
 
 
+func test_embedded_settings_hides_replay_tutorial_button() -> void:
+	var config: RaceConfig = RaceConfigBuilder.build(DRIVER, KART, TRACK, DIFFICULTY, 1, 1)
+	config.items_enabled = false
+	var manager: RaceManager = RACE_SCENE.instantiate() as RaceManager
+	manager.configure(config)
+	add_child_autofree(manager)
+	await wait_physics_frames(1)
+	manager.pause_race()
+	var pause_menu: PauseMenu = manager.get_node("PauseMenu") as PauseMenu
+	var settings_button: Button = pause_menu.get_node_or_null("Panel/VBox/SettingsButton") as Button
+	assert_not_null(settings_button)
+	if settings_button == null:
+		return
+
+	settings_button.pressed.emit()
+	await wait_process_frames(1)
+	var settings_menu: SettingsMenu = pause_menu.get_node("SettingsMenu") as SettingsMenu
+	var replay_button: Button = settings_menu.get_node("Panel/VBox/Tabs/Gameplay/ReplayTutorialButton") as Button
+
+	assert_false(
+		replay_button.visible,
+		"REPLAY TUTORIAL must be hidden mid-race; it navigates away without RaceManager's teardown",
+	)
+
+
+func test_standalone_settings_shows_replay_tutorial_button() -> void:
+	var settings: SettingsMenu = (load(SETTINGS_PATH) as PackedScene).instantiate() as SettingsMenu
+	add_child_autofree(settings)
+	await wait_process_frames(1)
+	var replay_button: Button = settings.get_node("Panel/VBox/Tabs/Gameplay/ReplayTutorialButton") as Button
+
+	assert_true(replay_button.visible)
+
+
 func test_hidden_settings_ignores_ui_cancel_without_requesting_a_scene() -> void:
 	var requested_scenes: Array[String] = []
 	var capture_request: Callable = func(scene_path: String) -> void: requested_scenes.append(scene_path)
