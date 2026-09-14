@@ -29,7 +29,7 @@ func deliver(method: StringName, target: int, args: Array, reliable: bool) -> vo
 
 ## Drains deferred kicks and rejects peers whose handshake deadline elapsed.
 func service_peers() -> void:
-	for id: int in _session._gate.take_kicks():
+	for id: int in _session._gate.take_kicks(NetSession.now()):
 		if _session.multiplayer.get_peers().has(id):
 			_session.multiplayer.disconnect_peer(id)
 	for id: int in _session._gate.expired(NetSession.now()):

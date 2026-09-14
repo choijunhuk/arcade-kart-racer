@@ -275,8 +275,10 @@ func _handshake(client_version: String, password_attempt: String) -> void:
 
 ## Sends the real reason straight out (bypassing the debug delay queue, which
 ## would otherwise be skipped once the peer has left `get_peers()`), then
-## defers the disconnect by a tick so ENet flushes it: the peer sees why it
-## was refused instead of a bare "Host disconnected" (spec item 1).
+## defers the disconnect by NetPeerGate.KICK_GRACE_SECONDS so the reliable
+## send has real time to reach the peer: it sees why it was refused instead
+## of a bare "Host disconnected" (spec item 1). A single tick was not always
+## enough under real scheduling jitter (real-UI acceptance testing).
 func _reject_peer(id: int, message: String) -> void:
 	print("SERVER_REJECT peer=%d reason=%s" % [id, message])
 	_deliver_reject(id, message)
@@ -284,7 +286,7 @@ func _reject_peer(id: int, message: String) -> void:
 	_input_limiter.remove(id)
 	_loss.remove(id)
 	_gate.remove(id)
-	_gate.queue_kick(id)
+	_gate.queue_kick(id, now())
 	_broadcast_lobby()
 
 func _deliver_reject(id: int, message: String) -> void:

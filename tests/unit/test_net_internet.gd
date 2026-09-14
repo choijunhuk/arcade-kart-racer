@@ -216,10 +216,11 @@ func test_peer_gate_expires_a_silent_peer_and_defers_its_kick() -> void:
 	gate.track(6, 0.0)
 	assert_true(gate.expired(NetPeerGate.DEADLINE_SECONDS - 0.1).is_empty())
 	assert_eq(gate.expired(NetPeerGate.DEADLINE_SECONDS), [6] as Array[int])
-	gate.queue_kick(6)
-	gate.queue_kick(6)
-	assert_eq(gate.take_kicks(), [6] as Array[int])
-	assert_true(gate.take_kicks().is_empty())
+	gate.queue_kick(6, 0.0)
+	gate.queue_kick(6, 0.0)
+	assert_true(gate.take_kicks(0.0).is_empty(), "kick must wait for the grace window")
+	assert_eq(gate.take_kicks(NetPeerGate.KICK_GRACE_SECONDS), [6] as Array[int])
+	assert_true(gate.take_kicks(NetPeerGate.KICK_GRACE_SECONDS).is_empty())
 	gate.remove(6)
 	assert_false(gate.allows(6))
 	assert_true(gate.expired(1000.0).is_empty())
@@ -240,7 +241,7 @@ func test_unverified_peer_gets_no_kart_and_is_kicked_after_the_deadline() -> voi
 	assert_eq(session.rejects.size(), 1)
 	assert_eq(int(session.rejects[0]["peer"]), 7)
 	assert_true(String(session.rejects[0]["message"]).findn("handshake") >= 0)
-	assert_eq(session.gate().take_kicks(), [7] as Array[int])
+	assert_eq(session.gate().take_kicks(NetSession.now() + NetPeerGate.KICK_GRACE_SECONDS), [7] as Array[int])
 
 func test_handshake_rejects_wrong_password_and_admits_the_right_one() -> void:
 	var session: GateSession = _gate_session()
@@ -295,7 +296,8 @@ func test_reject_delivers_the_reason_before_deferring_the_disconnect() -> void:
 	assert_eq(String(session.rejects[0]["message"]), "Incorrect session password")
 	assert_eq(session.players.size(), 0)
 	assert_false(session.gate().allows(4))
-	assert_eq(session.gate().take_kicks(), [4] as Array[int])
+	assert_true(session.gate().take_kicks(NetSession.now()).is_empty(), "disconnect waits for the grace window")
+	assert_eq(session.gate().take_kicks(NetSession.now() + NetPeerGate.KICK_GRACE_SECONDS), [4] as Array[int])
 
 func test_dedicated_server_reserves_no_connection_slot_or_roster_row() -> void:
 	assert_eq(NetSessionLobby.connection_slots(8, true), 8)
