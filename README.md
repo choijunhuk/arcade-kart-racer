@@ -117,6 +117,12 @@ Phase 1-4 주행 샌드박스는 계속 직접 열 수 있다:
 /opt/homebrew/bin/godot --path . scenes/test/kart_sandbox.tscn
 ```
 
+Settings → Gameplay의 "Local Handling Telemetry" 토글이 켜져 있으면(기본값) 레이스가
+RESULTS에 들어갈 때마다 로컬 인간 카트의 드리프트/부스트/히트/벽충돌/리스폰을
+`user://telemetry/<YYYYMMDD-HHMMSS>-<track>.json`에 랩별로 저장한다(최신 20개 유지).
+`godot --headless --path . -s tools/telemetry_summary.gd -- <dir>`로 티어 분포/히트
+회복시간/랩당 벽충돌 요약을 볼 수 있다.
+
 ## 조작
 
 | 상황 | 키보드 | 게임패드 |
