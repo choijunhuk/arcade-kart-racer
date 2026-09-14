@@ -30,6 +30,7 @@ var _logs: Dictionary = {}
 var _player_index: Dictionary = {}
 var _known_karts: Dictionary = {}
 var _last_speed: Dictionary = {}
+## kart instance id -> {"hit_time": float, "pre_hit_speed": float, "pending_hits": int}
 var _pending_recovery: Dictionary = {}
 
 

@@ -249,6 +249,32 @@ func test_pending_recovery_at_race_end_is_capped_not_dropped() -> void:
 	assert_almost_eq(float(recovery[0]), 3.0, 0.0001, "the capped recovery must use the elapsed time at race end")
 
 
+## 18d-3 review fix #5: trigger a real boost through the kart's own
+## BoostController request path (KartController.request_boost, the same
+## entry point drift release/boost pads/start boost all use) and assert the
+## real source key is recorded, not "unknown".
+func test_boost_started_through_the_real_boost_controller_path_records_the_real_source() -> void:
+	EventBus.race_started.emit()
+
+	var spec: BoostSpecData = BoostSpecData.new()
+	spec.speed_mult = 1.5
+	spec.duration = 1.0
+	_player_kart.request_boost(spec, &"boost_pad")
+
+	EventBus.lap_completed.emit(_player_kart, 1, 10.0)
+	EventBus.race_state_changed.emit(RaceState.FINISHING, RaceState.RESULTS)
+
+	var files: PackedStringArray = _list_json_files(_directory)
+	assert_eq(files.size(), 1)
+	if files.is_empty():
+		return
+	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(_directory.path_join(files[0])))
+	var lap1: Dictionary = (data["laps"] as Array)[0]
+	var sources: Dictionary = lap1["boosts_by_source"]
+	assert_eq(sources.keys(), ["boost_pad"], "the real BoostController source must be recorded, not unknown")
+	assert_eq(int(sources.get("boost_pad", 0)), 1)
+
+
 func _list_json_files(directory: String) -> PackedStringArray:
 	var dir: DirAccess = DirAccess.open(directory)
 	if dir == null:
