@@ -175,6 +175,7 @@ func _peer_connected(id: int) -> void:
 	if not multiplayer.is_server():
 		return
 	_gate.track(id, now())
+	NetTuning.widen_peer_timeout(peer, id) # Finding 1: survives the client's own race-load stall — see NetTuning.
 func _admit_peer(id: int) -> void:
 	var ok: bool = _roster.add_waiting(id) if started else _roster.add(id, automated)
 	if not ok:
@@ -183,7 +184,6 @@ func _admit_peer(id: int) -> void:
 	send(&"_admitted", id, [started], true)
 	if not started:
 		_broadcast_lobby()
-
 ## Tells a just-admitted client whether it joined mid-race as a `waiting`
 ## spectator (no row until the next lobby, so `local_slot()` stays -1).
 @rpc("authority", "call_remote", "reliable")
@@ -191,6 +191,7 @@ func _admitted(waiting: bool) -> void:
 	admitted.emit(waiting)
 
 func _connected() -> void:
+	NetTuning.widen_peer_timeout(peer, SERVER_ID)
 	send(&"_ping", SERVER_ID, [now()], true)
 	send(&"_handshake", SERVER_ID, [String(ProjectSettings.get_setting("application/config/version", "")), _password_attempt_hash], true)
 	if automated:

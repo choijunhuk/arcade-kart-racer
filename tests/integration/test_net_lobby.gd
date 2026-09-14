@@ -312,3 +312,70 @@ func test_delayed_load_ack_and_clock_reach_countdown_then_racing() -> void:
 	GameState.net_session = null
 	GameState.is_networked = false
 	GameState.automation_mode = false
+
+## A single `SceneTree` has exactly one active `MultiplayerAPI`/peer, so a
+## test cannot run two real, fully-wired `NetSession`s (each assigning its
+## own peer to the shared `multiplayer`) at once — the second `.host()`/
+## `.join()` would simply steal the tree's peer out from under the first.
+## The tests below instead pair one real `NetSession` (the side under test,
+## the only one that touches `multiplayer`) against a bare, manually-polled
+## `ENetMultiplayerPeer` standing in for the other end, giving each of
+## `_peer_connected` (server) and `_connected` (client) a genuine ENet
+## handshake without that clash.
+const _TIMEOUT_TEST_MAX_FRAMES: int = 300
+
+## Finding 1 (audit): `net_session.gd`'s `_peer_connected` must widen the
+## timeout for a real, freshly-connected server-side ENet peer.
+## `ENetPacketPeer` exposes no getter for its configured timeout, so this
+## proves the call path runs without error on a genuine connection instead
+## (a bad `set_timeout()` argument would raise an engine error GUT surfaces,
+## or leave the peer inactive).
+func test_peer_timeout_widening_runs_on_the_server_side_of_a_real_connection() -> void:
+	var port: int = 34711
+	var server: NetSession = NetSession.new()
+	add_child_autofree(server)
+	assert_eq(server.host(port), OK)
+	var raw_client: ENetMultiplayerPeer = ENetMultiplayerPeer.new()
+	assert_eq(raw_client.create_client("127.0.0.1", port, NetTuning.CHANNEL_COUNT), OK)
+	var client_id: int = raw_client.get_unique_id()
+	var connected: bool = false
+	for _i: int in range(_TIMEOUT_TEST_MAX_FRAMES):
+		raw_client.poll()
+		await wait_process_frames(1)
+		if server.multiplayer.get_peers().has(client_id):
+			connected = true
+			break
+	assert_true(connected, "the raw client must actually reach the real server for this test to prove anything")
+	var server_side_peer: ENetPacketPeer = server.peer.get_peer(client_id)
+	assert_not_null(server_side_peer, "the server must have an ENet peer for the connected client")
+	assert_true(server_side_peer.is_active(), "widening the timeout must not itself disconnect the server's peer")
+	raw_client.close()
+
+## Finding 1 (audit): `net_session.gd`'s `_connected` must widen the timeout
+## for this process's own real link to the server the moment it connects.
+func test_peer_timeout_widening_runs_on_the_client_side_of_a_real_connection() -> void:
+	var port: int = 34712
+	var raw_server: ENetMultiplayerPeer = ENetMultiplayerPeer.new()
+	assert_eq(raw_server.create_server(port, 32, NetTuning.CHANNEL_COUNT), OK)
+	var client: NetSession = NetSession.new()
+	add_child_autofree(client)
+	assert_eq(client.join("127.0.0.1", port), OK)
+	var connected: bool = false
+	for _i: int in range(_TIMEOUT_TEST_MAX_FRAMES):
+		raw_server.poll()
+		await wait_process_frames(1)
+		if client.peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED:
+			connected = true
+			break
+	assert_true(connected, "the real client must actually reach the raw server for this test to prove anything")
+	var client_side_peer: ENetPacketPeer = client.peer.get_peer(NetSession.SERVER_ID)
+	assert_not_null(client_side_peer, "the client must have an ENet peer for the server")
+	assert_true(client_side_peer.is_active(), "widening the timeout must not itself disconnect the client's peer")
+	raw_server.close()
+
+func after_each() -> void:
+	# Both tests above leave a real ENetMultiplayerPeer assigned as the
+	# tree's shared multiplayer peer (autofree only closes the NetSession's
+	# own `peer`, not `multiplayer.multiplayer_peer` itself) — restore the
+	# normal offline default so later tests in this file are not affected.
+	get_tree().get_multiplayer().multiplayer_peer = OfflineMultiplayerPeer.new()
