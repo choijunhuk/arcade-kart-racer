@@ -99,6 +99,27 @@ func test_write_and_rotate_appends_a_suffix_on_filename_collision() -> void:
 	assert_eq(int(third_data["index"]), 2)
 
 
+## 18d-4 review fix #3: once every `<stem>-N.<ext>` suffix up to
+## MAX_COLLISION_SUFFIX is taken, the write must be skipped (not clobber the
+## last candidate tried) and every pre-existing file's contents must be
+## untouched.
+func test_write_and_rotate_skips_the_write_when_every_collision_suffix_is_taken() -> void:
+	var base_error: Error = RaceTelemetryService.write_and_rotate(_directory, "20260101-000000-test_loop.json", {"who": "base"}, 100)
+	assert_eq(base_error, OK)
+	for suffix: int in range(2, RaceTelemetryService.MAX_COLLISION_SUFFIX + 2):
+		var suffixed_error: Error = RaceTelemetryService.write_and_rotate(
+			_directory, "20260101-000000-test_loop-%d.json" % suffix, {"who": "suffix-%d" % suffix}, 100
+		)
+		assert_eq(suffixed_error, OK)
+
+	var exhausted_error: Error = RaceTelemetryService.write_and_rotate(_directory, "20260101-000000-test_loop.json", {"who": "exhausted"}, 100)
+
+	assert_eq(exhausted_error, ERR_ALREADY_EXISTS, "the write must be skipped once every collision suffix is taken")
+	var last_candidate_path: String = _directory.path_join("20260101-000000-test_loop-%d.json" % (RaceTelemetryService.MAX_COLLISION_SUFFIX + 1))
+	var last_data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(last_candidate_path))
+	assert_eq(String(last_data["who"]), "suffix-%d" % (RaceTelemetryService.MAX_COLLISION_SUFFIX + 1), "the last candidate file must not be clobbered")
+
+
 func test_disabled_setting_prevents_any_write() -> void:
 	var service: RaceTelemetryService = RaceTelemetryService.new()
 	service.telemetry_directory = _directory

@@ -15,6 +15,11 @@ extends Node
 
 const DEFAULT_DIRECTORY: String = "user://telemetry"
 const MAX_FILES: int = 20
+## Sane upper bound on `<stem>-N.<ext>` collision-suffix attempts before
+## `_resolve_collision_free_filename()` gives up (18d-4 review fix #3).
+## Unrelated to `MAX_FILES`: this only guards the rare same-second-write
+## retry loop, not how many files/races are kept on disk.
+const MAX_COLLISION_SUFFIX: int = 20
 const HIT_RECOVERY_CAP_SECONDS: float = 10.0
 const RECOVERY_SPEED_RATIO: float = 0.8
 
@@ -333,12 +338,18 @@ static func is_local_human_kart(kart: Node) -> bool:
 ## `keep`. 18d-3 review fix #4: if `filename` already exists (two files
 ## written within the same second, e.g. two local players), the write is
 ## retried under `<stem>-2.<ext>`, `<stem>-3.<ext>`, ... until a free name is
-## found, so no writer ever clobbers another's file.
+## found, so no writer ever clobbers another's file. 18d-4 review fix #3: if
+## every suffix up to `MAX_COLLISION_SUFFIX` is already taken, the write is
+## skipped entirely (with a single `push_warning`) rather than clobbering
+## the last candidate tried.
 static func write_and_rotate(directory: String, filename: String, data: Dictionary, keep: int = MAX_FILES) -> Error:
 	var make_error: Error = DirAccess.make_dir_recursive_absolute(directory)
 	if make_error != OK:
 		return make_error
 	var resolved_filename: String = _resolve_collision_free_filename(directory, filename)
+	if resolved_filename.is_empty():
+		push_warning("RaceTelemetryService: skipping write for '%s' — no free filename found after %d collision suffixes" % [filename, MAX_COLLISION_SUFFIX])
+		return ERR_ALREADY_EXISTS
 	var path: String = directory.path_join(resolved_filename)
 	var file: FileAccess = FileAccess.open(path + ".tmp", FileAccess.WRITE)
 	if file == null:
@@ -353,18 +364,20 @@ static func write_and_rotate(directory: String, filename: String, data: Dictiona
 
 
 ## Returns `filename` unchanged if free, otherwise the first `<stem>-N.<ext>`
-## (N starting at 2) that does not already exist in `directory`.
+## (N starting at 2) that does not already exist in `directory`. Returns an
+## empty string if every suffix up to `MAX_COLLISION_SUFFIX` is taken, so the
+## caller skips the write instead of clobbering the last candidate checked
+## (18d-4 review fix #3).
 static func _resolve_collision_free_filename(directory: String, filename: String) -> String:
 	if not FileAccess.file_exists(directory.path_join(filename)):
 		return filename
 	var stem: String = filename.get_basename()
 	var extension: String = filename.get_extension()
-	var candidate: String = filename
-	for suffix: int in range(2, MAX_FILES + 2):
-		candidate = "%s-%d.%s" % [stem, suffix, extension]
+	for suffix: int in range(2, MAX_COLLISION_SUFFIX + 2):
+		var candidate: String = "%s-%d.%s" % [stem, suffix, extension]
 		if not FileAccess.file_exists(directory.path_join(candidate)):
 			return candidate
-	return candidate
+	return ""
 
 
 static func _rotate(directory: String, keep: int) -> void:
