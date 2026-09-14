@@ -10,6 +10,29 @@ func test_online_lobby_has_shared_panels_and_enabled_connection_controls() -> vo
 	assert_true((lobby.get("_ready_button") as Button).disabled)
 	assert_eq(int((lobby.get("_port") as SpinBox).value), NetTuning.PORT)
 
+## Real-UI acceptance testing caught a join showing "Connected" the instant
+## the ENet socket opened, well before the server's handshake actually
+## admitted the peer — a rejection moments later would leave a UI that had
+## already claimed success. The status must stay "verifying" until a roster
+## row for our own peer id actually appears.
+func test_join_shows_verifying_until_handshake_admits_us() -> void:
+	var lobby: OnlineLobby = (load("res://ui/menus/online_lobby.tscn") as PackedScene).instantiate() as OnlineLobby
+	add_child_autofree(lobby)
+	await wait_process_frames(2)
+	var session: NetSession = NetSession.new()
+	add_child_autofree(session)
+	lobby.set("_session", session)
+	lobby._handle_open(OK, true)
+	var status: Label = lobby.get("_status") as Label
+	assert_eq(status.text, "Connecting — verifying handshake…")
+	assert_true(bool(lobby.get("_awaiting_handshake")))
+	# Handshake admits us: the server-broadcast roster now has our own row.
+	var local_id: int = session.multiplayer.get_unique_id()
+	session.players = [{"peer": local_id, "driver": "", "kart": "", "ready": false}]
+	lobby._refresh()
+	assert_eq(status.text, "Connected — choose driver/kart, then READY. Host starts.")
+	assert_false(bool(lobby.get("_awaiting_handshake")))
+
 func test_main_menu_exposes_online_and_disconnection_message() -> void:
 	GameState.network_message = "Host disconnected."
 	var menu: MainMenu = (load("res://ui/menus/main_menu.tscn") as PackedScene).instantiate() as MainMenu
