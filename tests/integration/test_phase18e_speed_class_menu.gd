@@ -21,6 +21,23 @@ func after_each() -> void:
 	SettingsManager.load_settings()
 	DirAccess.remove_absolute(TEST_SETTINGS_PATH)
 	GameState.reset_session()
+	_cancel_leaked_scene_transition()
+
+
+## test_turbo_choice_scales_pending_config_and_roster_max_speed presses
+## ui_accept, which drives the real DifficultySelectMenu -> GameState.change_scene()
+## path and parents a PROCESS_MODE_ALWAYS TransitionOverlay directly onto
+## get_tree().root (outside this test's own scene, so add_child_autofree never
+## sees it). Left alone it keeps animating and eventually calls
+## change_scene_to_packed() on a later, unrelated test's frames, swapping the
+## real current_scene to a live race mid-suite and corrupting other tests'
+## physics. Free it here, before any other test can advance another frame.
+func _cancel_leaked_scene_transition() -> void:
+	var root: Window = get_tree().root
+	var transition: Node = root.get_node_or_null(NodePath(String(GameState.TRANSITION_NODE_NAME)))
+	if transition != null:
+		root.remove_child(transition)
+		transition.free()
 
 
 func test_difficulty_select_lists_three_classes_defaulting_to_standard() -> void:
