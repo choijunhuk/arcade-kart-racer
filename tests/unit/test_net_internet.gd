@@ -302,6 +302,8 @@ func test_resend_during_kick_grace_is_ignored() -> void:
 	session.set_password("secret")
 	session._peer_connected(13)
 	session.handshake_from(13, _version(), "wrong".sha256_text())
+	session.handshake_from(13, _version(), "wrong-again".sha256_text())
+	session.handshake_from(13, _version() + "-old", "secret".sha256_text())
 	session.handshake_from(13, _version(), "secret".sha256_text())
 	assert_eq(session.rejects.size(), 1, "resend must not draw a second reject")
 	assert_eq(session.players.size(), 0, "correct hash during grace must not admit")
