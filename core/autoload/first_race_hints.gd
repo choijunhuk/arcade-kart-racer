@@ -56,9 +56,23 @@ func _maybe_show(hint: FirstRaceHintsState.Hint, kart: Node) -> void:
 ## Excludes automation, the tutorial itself, and every headless/CLI run
 ## (GUT tests, snapshot/perf probes, the sim harness) from ever seeing a hint.
 func _eligible(kart: Node) -> bool:
-	if DisplayServer.get_name() == "headless" or GameState.automation_mode or GameState.tutorial_active:
+	return is_eligible(
+		kart,
+		DisplayServer.get_name() == "headless",
+		GameState.automation_mode,
+		GameState.tutorial_active,
+		GameState.current_mode,
+	)
+
+
+## Pure gate check (no autoload/DisplayServer reads) so it is testable without
+## a scene tree. Mirrors `_eligible()`'s rules exactly.
+static func is_eligible(
+	kart: Node, is_headless: bool, automation_mode: bool, tutorial_active: bool, current_mode: int,
+) -> bool:
+	if is_headless or automation_mode or tutorial_active:
 		return false
-	if GameState.current_mode != GameState.Mode.RACE:
+	if current_mode != GameState.Mode.RACE:
 		return false
 	if kart != null and not (kart is KartController and (kart as KartController).input_provider is PlayerInputProvider):
 		return false
