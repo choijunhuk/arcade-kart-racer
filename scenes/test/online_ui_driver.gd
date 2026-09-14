@@ -194,6 +194,15 @@ func _run_host(c: Dictionary) -> void:
 	var outcome: Dictionary = await _monitor_race(session)
 	if bool(outcome["reached"]):
 		_ok("reach_results", "karts=%d" % int(outcome["karts"]))
+		# The host's own RaceManager reaching RESULTS is not the same instant
+		# as the joined peer seeing it: the server-authoritative "results"
+		# event is only queued this tick and actually goes out over the wire
+		# a tick or more later (net/net_race.gd _server_step). Quitting the
+		# host process immediately here (harness bug, net_session.gd
+		# untouched) raced ahead of that broadcast and of ENet's own
+		# disconnect handshake, so the joined peer saw a bare mid-race
+		# "Host disconnected" instead of ever reaching its own RESULTS.
+		await _wait_for_network_flush()
 		_finish(true, int(outcome["karts"]))
 	else:
 		_fail("reach_results", "race never reached RESULTS (karts=%d)" % int(outcome["karts"]))
@@ -306,6 +315,15 @@ func _wait_for_main_menu_message(timeout: float) -> String:
 	await get_tree().process_frame
 	var label: Label = main_scene.get_node_or_null("MainMenu/Panel/VBox/NetworkMessage") as Label
 	return label.text.strip_edges() if label != null else ""
+
+
+## Real time, not frames: gives the transport's own delay queue and ENet a
+## window to actually put queued reliable traffic (and a graceful disconnect)
+## on the wire before this process exits out from under the connection.
+const NETWORK_FLUSH_SECONDS: float = 1.0
+
+func _wait_for_network_flush() -> void:
+	await get_tree().create_timer(NETWORK_FLUSH_SECONDS).timeout
 
 
 func _await_condition(condition: Callable, timeout: float) -> bool:
