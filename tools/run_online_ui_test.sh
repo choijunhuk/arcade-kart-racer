@@ -106,6 +106,10 @@ if [ -n "$SCENARIO" ]; then
     echo "ONLINE_UI_TEST FAIL: join reported no error text for scenario ($join_result)"
     exit 1
   fi
+  if [ "$SCENARIO" = "wrong-password" ] && ! echo "$join_result" | grep -qiE 'password'; then
+    echo "ONLINE_UI_TEST FAIL: join did not show the password-rejection reason ($join_result)"
+    exit 1
+  fi
   echo "$join_result"
   echo "ONLINE_UI_TEST PASS (scenario=$SCENARIO): $host_log $join_log"
   exit 0
