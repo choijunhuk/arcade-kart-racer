@@ -114,6 +114,8 @@ common/physics_ticks_per_second=60
 
 [rendering]
 
+textures/vram_compression/import_etc2_astc=true
+
 renderer/rendering_method="forward_plus"
 renderer/rendering_method.mobile="forward_plus"
 
