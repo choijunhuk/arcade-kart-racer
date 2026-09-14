@@ -24,6 +24,7 @@ static func start(menu: MenuScreen) -> void:
 		DEFAULT_DRIVER, DEFAULT_KART, track, DEFAULT_DIFFICULTY, 1, 1,
 	)
 	config.items_enabled = true
+	config.speed_class = RaceConfig.SpeedClass.STANDARD
 	GameState.pending_race_config = config
 	GameState.tutorial_active = true
 	menu.go_to(TUTORIAL_RACE_PATH)

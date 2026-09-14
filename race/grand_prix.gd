@@ -112,9 +112,15 @@ func player_slot() -> int:
 	return _base.player_slot if _base != null else -1
 
 
-## Separates saved championship bests by the difficulty used for every round.
+## Separates saved championship bests by difficulty and speed class; STANDARD
+## keeps the pre-18e key exactly so existing bests stay valid (spec §18e).
 func record_key() -> StringName:
-	return StringName("%s/%s" % [CUP_ID, _base.ai_difficulty.id])
+	var suffix: String = ""
+	if _base.speed_class == RaceConfig.SpeedClass.CRUISE:
+		suffix = "_cruise"
+	elif _base.speed_class == RaceConfig.SpeedClass.TURBO:
+		suffix = "_turbo"
+	return StringName("%s%s/%s" % [CUP_ID, suffix, _base.ai_difficulty.id])
 
 
 static func _ahead(a: Standing, b: Standing) -> bool:

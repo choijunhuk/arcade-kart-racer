@@ -57,6 +57,9 @@ horizontal_alignment = 1
 layout_mode = 2
 theme_override_constants/separation = 12
 
+[node name="SpeedClassOption" type="OptionButton" parent="Panel/VBox"]
+layout_mode = 2
+
 [node name="ItemsToggle" type="CheckButton" parent="Panel/VBox"]
 layout_mode = 2
 text = "ITEMS ENABLED"

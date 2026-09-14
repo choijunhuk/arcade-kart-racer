@@ -61,9 +61,14 @@ static func build_local(
 	return config
 
 
-## Returns a deep duplicate with allowlisted driver percentage modifiers applied.
-static func apply_driver_mods(kart: KartData, driver: DriverData) -> KartData:
+## Returns a deep duplicate with the class multiplier and allowlisted driver
+## percentage modifiers applied, in that order, on the same duplicate.
+static func apply_driver_mods(
+	kart: KartData, driver: DriverData, speed_class: RaceConfig.SpeedClass = RaceConfig.SpeedClass.STANDARD,
+) -> KartData:
 	var modified: KartData = kart.duplicate(true) as KartData
+	modified.max_speed *= SpeedClassStats.max_speed_multiplier(speed_class)
+	modified.acceleration *= SpeedClassStats.acceleration_multiplier(speed_class)
 	if driver == null:
 		return modified
 	for stat_name: StringName in driver.stat_mods:
@@ -95,6 +100,7 @@ static func normalize(config: RaceConfig) -> void:
 		config.kart_count = 1
 		config.player_slot = 0
 		config.items_enabled = false
+		config.speed_class = RaceConfig.SpeedClass.STANDARD
 	_normalize_players(config)
 
 
