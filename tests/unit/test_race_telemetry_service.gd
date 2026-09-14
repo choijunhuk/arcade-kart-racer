@@ -73,6 +73,32 @@ func test_write_and_rotate_keeps_only_the_newest_20_files() -> void:
 	assert_eq(remaining[remaining.size() - 1], "024.json")
 
 
+## 18d-3 review fix #4: two writes within the same 1s-resolution filename
+## must not clobber each other; the second (and third, ...) get a -2, -3, ...
+## suffix instead.
+func test_write_and_rotate_appends_a_suffix_on_filename_collision() -> void:
+	var first_error: Error = RaceTelemetryService.write_and_rotate(_directory, "20260101-000000-test_loop.json", {"index": 0}, 20)
+	var second_error: Error = RaceTelemetryService.write_and_rotate(_directory, "20260101-000000-test_loop.json", {"index": 1}, 20)
+	var third_error: Error = RaceTelemetryService.write_and_rotate(_directory, "20260101-000000-test_loop.json", {"index": 2}, 20)
+
+	assert_eq(first_error, OK)
+	assert_eq(second_error, OK)
+	assert_eq(third_error, OK)
+
+	var remaining: PackedStringArray = _list_json_files(_directory)
+	assert_eq(remaining.size(), 3, "all three writes must land in distinct files")
+	assert_true(FileAccess.file_exists(_directory.path_join("20260101-000000-test_loop.json")))
+	assert_true(FileAccess.file_exists(_directory.path_join("20260101-000000-test_loop-2.json")))
+	assert_true(FileAccess.file_exists(_directory.path_join("20260101-000000-test_loop-3.json")))
+
+	var first_data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(_directory.path_join("20260101-000000-test_loop.json")))
+	var second_data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(_directory.path_join("20260101-000000-test_loop-2.json")))
+	var third_data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(_directory.path_join("20260101-000000-test_loop-3.json")))
+	assert_eq(int(first_data["index"]), 0)
+	assert_eq(int(second_data["index"]), 1)
+	assert_eq(int(third_data["index"]), 2)
+
+
 func test_disabled_setting_prevents_any_write() -> void:
 	var service: RaceTelemetryService = RaceTelemetryService.new()
 	service.telemetry_directory = _directory

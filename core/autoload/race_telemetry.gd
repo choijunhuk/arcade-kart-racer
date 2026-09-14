@@ -279,12 +279,17 @@ static func is_local_human_kart(kart: Node) -> bool:
 
 
 ## Writes `data` as JSON to `directory/filename` (atomic tmp+rename, mirrors
-## GhostRecording.save_best) then deletes the oldest `*.json` files beyond `keep`.
+## GhostRecording.save_best) then deletes the oldest `*.json` files beyond
+## `keep`. 18d-3 review fix #4: if `filename` already exists (two files
+## written within the same second, e.g. two local players), the write is
+## retried under `<stem>-2.<ext>`, `<stem>-3.<ext>`, ... until a free name is
+## found, so no writer ever clobbers another's file.
 static func write_and_rotate(directory: String, filename: String, data: Dictionary, keep: int = MAX_FILES) -> Error:
 	var make_error: Error = DirAccess.make_dir_recursive_absolute(directory)
 	if make_error != OK:
 		return make_error
-	var path: String = directory.path_join(filename)
+	var resolved_filename: String = _resolve_collision_free_filename(directory, filename)
+	var path: String = directory.path_join(resolved_filename)
 	var file: FileAccess = FileAccess.open(path + ".tmp", FileAccess.WRITE)
 	if file == null:
 		return FileAccess.get_open_error()
@@ -295,6 +300,21 @@ static func write_and_rotate(directory: String, filename: String, data: Dictiona
 		return rename_error
 	_rotate(directory, keep)
 	return OK
+
+
+## Returns `filename` unchanged if free, otherwise the first `<stem>-N.<ext>`
+## (N starting at 2) that does not already exist in `directory`.
+static func _resolve_collision_free_filename(directory: String, filename: String) -> String:
+	if not FileAccess.file_exists(directory.path_join(filename)):
+		return filename
+	var stem: String = filename.get_basename()
+	var extension: String = filename.get_extension()
+	var candidate: String = filename
+	for suffix: int in range(2, MAX_FILES + 2):
+		candidate = "%s-%d.%s" % [stem, suffix, extension]
+		if not FileAccess.file_exists(directory.path_join(candidate)):
+			return candidate
+	return candidate
 
 
 static func _rotate(directory: String, keep: int) -> void:
