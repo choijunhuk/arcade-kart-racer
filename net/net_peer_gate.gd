@@ -16,10 +16,18 @@ extends RefCounted
 ## and disconnect side effects.
 
 const DEADLINE_SECONDS: float = 3.0
+## Grace window between sending a rejected peer's reason RPC and actually
+## disconnecting it. A single physics tick was not always enough for the
+## reliable send to really reach the peer before the disconnect landed
+## (real-UI testing caught a rejected join seeing a bare "Host disconnected"
+## instead of the real reason under real-world scheduling jitter); this
+## keeps the reason ahead of the disconnect without leaving the peer
+## connected for long.
+const KICK_GRACE_SECONDS: float = 1.0
 
 var _deadlines: Dictionary[int, float] = {}
 var _verified: Dictionary[int, bool] = {}
-var _kicks: Array[int] = []
+var _kicks: Dictionary[int, float] = {}
 
 
 ## Starts the handshake deadline for a freshly connected peer.
@@ -43,6 +51,21 @@ func allows(id: int) -> bool:
 	return bool(_verified.get(id, false))
 
 
+## True only while a peer is still inside its handshake deadline (tracked but
+## not yet verified, rejected, or expired). A rejected/kicked peer's deadline
+## is erased by `remove`, so this goes false the instant it is rejected —
+## closing the resend-during-grace-window loophole where a peer could keep
+## resending `_handshake` to stay connected forever (spec item 1).
+func is_pending(id: int) -> bool:
+	return _deadlines.has(id)
+
+
+## True once a disconnect has been queued for this peer, so callers can avoid
+## re-queuing (which would otherwise push the deadline later).
+func is_kicking(id: int) -> bool:
+	return _kicks.has(id)
+
+
 ## Number of connected peers still inside the handshake deadline.
 func pending_count() -> int:
 	return _deadlines.size()
@@ -64,15 +87,19 @@ func expired(now: float) -> Array[int]:
 	return ids
 
 
-## Queues a disconnect to be drained on a later tick, after the reason RPC
-## has had a tick to flush.
-func queue_kick(id: int) -> void:
+## Queues a disconnect to be drained once KICK_GRACE_SECONDS have passed,
+## giving the reason RPC sent just before this call real time to flush.
+func queue_kick(id: int, now: float) -> void:
 	if not _kicks.has(id):
-		_kicks.append(id)
+		_kicks[id] = now + KICK_GRACE_SECONDS
 
 
-## Returns and clears the queued disconnects.
-func take_kicks() -> Array[int]:
-	var pending: Array[int] = _kicks.duplicate()
-	_kicks.clear()
+## Returns and clears the disconnects whose grace window has elapsed.
+func take_kicks(now: float) -> Array[int]:
+	var pending: Array[int] = []
+	for id: int in _kicks.keys():
+		if now >= float(_kicks[id]):
+			pending.append(id)
+	for id: int in pending:
+		_kicks.erase(id)
 	return pending

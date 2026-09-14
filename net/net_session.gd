@@ -8,6 +8,7 @@ signal test_report_received(report: Dictionary)
 signal snapshot_received(snapshot: RaceSnapshot)
 signal prediction_measured(snapshot: RaceSnapshot, row: Dictionary, predicted_position: Vector3, error: float, replay_frames: int)
 signal event_received(kind: String, args: Array)
+signal admitted(waiting: bool)
 const SERVER_ID: int = 1
 const RACE_PATH: String = "res://race/race.tscn"
 var players: Array[Dictionary] = []
@@ -51,10 +52,8 @@ func _ready() -> void:
 	multiplayer.connection_failed.connect(_connection_failed)
 	multiplayer.server_disconnected.connect(_server_disconnected)
 
-## Opens a listen server, with no TLS or extra autoload. `dedicated` must be
-## set before calling so a headless server never occupies a player row — and
-## therefore never reserves an ENet slot either, so `--max-players 8` really
-## admits 8 clients on a dedicated server and 7 plus the host on a listen one.
+## Opens a listen server. `dedicated` (set before calling) keeps a headless
+## server off the player row/slot, so `--max-players 8` admits 8 dedicated, 7+host listen.
 func host(port: int = NetTuning.PORT, max_players_value: int = NetTuning.MAX_PLAYERS) -> Error:
 	peer = ENetMultiplayerPeer.new()
 	var slots: int = NetSessionLobby.connection_slots(max_players_value, dedicated)
@@ -68,9 +67,8 @@ func host(port: int = NetTuning.PORT, max_players_value: int = NetTuning.MAX_PLA
 	lobby_changed.emit()
 	return OK
 
-## Connects to the supplied address (LAN or internet host); completion
-## arrives through lobby_changed. `password` is hashed locally, never sent
-## or logged in cleartext (spec item 6).
+## Connects to the supplied address; completion arrives through lobby_changed.
+## `password` is hashed locally, never sent or logged in cleartext (spec 6).
 func join(ip: String, port: int = NetTuning.PORT, password: String = "") -> Error:
 	peer = ENetMultiplayerPeer.new()
 	var error: Error = peer.create_client(ip, port, NetTuning.CHANNEL_COUNT)
@@ -91,8 +89,7 @@ func local_slot() -> int:
 	return _roster.index_of(multiplayer.get_unique_id())
 
 ## Real transport loss (0.0-1.0) measured from sequence gaps over a 2 s
-## window: snapshot ticks on a client, per-peer input-packet ticks on the
-## server (spec item 5). Unlike `conditions.dropped` this counts traffic that
+## window (spec item 5). Unlike `conditions.dropped` this counts traffic that
 ## actually went missing, not the synthetic drops this process injected.
 func get_loss_estimate() -> float:
 	return _loss.loss(now())
@@ -173,11 +170,19 @@ func _peer_connected(id: int) -> void:
 		return
 	_gate.track(id, now())
 func _admit_peer(id: int) -> void:
-	var admitted: bool = _roster.add_waiting(id) if started else _roster.add(id, automated)
-	if admitted:
-		print("SERVER_ADMIT peer=%d" % id)
-	if admitted and not started:
+	var ok: bool = _roster.add_waiting(id) if started else _roster.add(id, automated)
+	if not ok:
+		return
+	print("SERVER_ADMIT peer=%d" % id)
+	send(&"_admitted", id, [started], true)
+	if not started:
 		_broadcast_lobby()
+
+## Tells a just-admitted client whether it joined mid-race as a `waiting`
+## spectator (no roster row until the next lobby, so `local_slot()` stays -1).
+@rpc("authority", "call_remote", "reliable")
+func _admitted(waiting: bool) -> void:
+	admitted.emit(waiting)
 
 func _connected() -> void:
 	send(&"_ping", SERVER_ID, [now()], true)
@@ -197,8 +202,7 @@ func _broadcast_lobby() -> void:
 	lobby_changed.emit()
 
 ## Sender id of the `any_peer` RPC being handled, or -1 when this process is
-## not the server or the sender has not passed the handshake yet (spec item
-## 6: every packet from an unverified peer is dropped, not just its inputs).
+## not the server or the sender has not passed the handshake yet (spec 6).
 func _verified_sender() -> int:
 	var id: int = _sender()
 	return id if multiplayer.is_server() and _gate.allows(id) else -1
@@ -240,13 +244,12 @@ func _prepare_race(roster: Array, bots: int, lap_count: int, race_seed: int, rac
 	GameState.current_mode = GameState.Mode.RACE
 	get_tree().change_scene_to_file.call_deferred(RACE_PATH)
 
-## Validates a newly connected peer's version/password (spec item 6);
-## rejection never logs the password itself. Only a peer that gets here with
-## an acceptable handshake earns a roster row.
+## Validates a newly connected peer's version/password (spec 6); rejection
+## never logs the password. Only an acceptable handshake earns a roster row.
 @rpc("any_peer", "call_remote", "reliable")
 func _handshake(client_version: String, password_attempt: String) -> void:
 	var id: int = _sender()
-	if not multiplayer.is_server() or _gate.allows(id):
+	if not multiplayer.is_server() or _gate.allows(id) or not _gate.is_pending(id):
 		return
 	var expected_version: String = String(ProjectSettings.get_setting("application/config/version", ""))
 	var reason: String = NetHandshake.reject_reason(client_version, expected_version, password_attempt, password_hash)
@@ -255,18 +258,18 @@ func _handshake(client_version: String, password_attempt: String) -> void:
 	elif _gate.verify(id):
 		_admit_peer(id)
 
-## Sends the real reason straight out (bypassing the debug delay queue, which
-## would otherwise be skipped once the peer has left `get_peers()`), then
-## defers the disconnect by a tick so ENet flushes it: the peer sees why it
-## was refused instead of a bare "Host disconnected" (spec item 1).
+## Sends the reason first, then defers the disconnect via KICK_GRACE_SECONDS
+## (spec item 1); a no-op once a kick is queued so a resend can't delay it.
 func _reject_peer(id: int, message: String) -> void:
+	if _gate.is_kicking(id):
+		return
 	print("SERVER_REJECT peer=%d reason=%s" % [id, message])
 	_deliver_reject(id, message)
 	_roster.remove(id)
 	_input_limiter.remove(id)
 	_loss.remove(id)
 	_gate.remove(id)
-	_gate.queue_kick(id)
+	_gate.queue_kick(id, now())
 	_broadcast_lobby()
 
 func _deliver_reject(id: int, message: String) -> void:
@@ -293,11 +296,9 @@ func _begin_race() -> void:
 	if race != null:
 		race.begin()
 
-## Rate-limited (spec item 6) against a runaway/hostile peer flooding input.
-## A sender can only ever supply input for its own roster slot: `race`
-## resolves the slot from the RPC sender id, never client-sent data, so
-## spoofing another slot is already structurally impossible (see
-## NetRace._receive_input_frame).
+## Rate-limited (spec 6) against a runaway/hostile peer flooding input. A
+## sender can only ever supply input for its own roster slot: `race` resolves
+## the slot from the RPC sender id, so spoofing another slot is impossible.
 @rpc("any_peer", "call_remote", "unreliable_ordered", 1)
 func _receive_input(data: Dictionary) -> void:
 	var sender: int = _verified_sender()
@@ -386,9 +387,8 @@ func _session_ended(message: String) -> void:
 	if not automated:
 		get_tree().change_scene_to_file.call_deferred("res://scenes/main.tscn")
 
-## Broadened beyond `automated` so a dedicated server (never automated,
-## spec item 3) can relay the "test_done" ack to automated test clients
-## joining it (tools/run_server_test.sh); a no-op for real play otherwise.
+## Broadened beyond `automated` so a dedicated server can relay the
+## "test_done" ack to automated test clients joining it; a no-op otherwise.
 @rpc("any_peer", "call_remote", "reliable")
 func _test_report(report: Dictionary) -> void:
 	if _verified_sender() > 0:

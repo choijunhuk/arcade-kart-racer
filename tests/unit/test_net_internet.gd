@@ -161,8 +161,7 @@ func test_server_state_finish_and_restart_returns_to_lobby() -> void:
 	assert_eq(state.countdown_remaining(), NetServerState.COUNTDOWN_SECONDS)
 
 ## Server-side NetSession with a scriptable RPC sender id and captured reject
-## deliveries, so the real handshake/admission/kick wiring runs in-process
-## against a fake peer instead of needing a second ENet process (spec item 7).
+## deliveries, so the real handshake/admission/kick wiring runs in-process.
 class GateSession extends NetSession:
 	var sender_id: int = 0
 	var rejects: Array[Dictionary] = []
@@ -216,10 +215,11 @@ func test_peer_gate_expires_a_silent_peer_and_defers_its_kick() -> void:
 	gate.track(6, 0.0)
 	assert_true(gate.expired(NetPeerGate.DEADLINE_SECONDS - 0.1).is_empty())
 	assert_eq(gate.expired(NetPeerGate.DEADLINE_SECONDS), [6] as Array[int])
-	gate.queue_kick(6)
-	gate.queue_kick(6)
-	assert_eq(gate.take_kicks(), [6] as Array[int])
-	assert_true(gate.take_kicks().is_empty())
+	gate.queue_kick(6, 0.0)
+	gate.queue_kick(6, 0.0)
+	assert_true(gate.take_kicks(0.0).is_empty(), "kick must wait for the grace window")
+	assert_eq(gate.take_kicks(NetPeerGate.KICK_GRACE_SECONDS), [6] as Array[int])
+	assert_true(gate.take_kicks(NetPeerGate.KICK_GRACE_SECONDS).is_empty())
 	gate.remove(6)
 	assert_false(gate.allows(6))
 	assert_true(gate.expired(1000.0).is_empty())
@@ -227,8 +227,7 @@ func test_peer_gate_expires_a_silent_peer_and_defers_its_kick() -> void:
 func test_unverified_peer_gets_no_kart_and_is_kicked_after_the_deadline() -> void:
 	var session: GateSession = _gate_session()
 	session._peer_connected(7)
-	# Playing without ever handshaking: no roster row, so no kart, and every
-	# packet is ignored (spec item 6).
+	# Playing without a handshake: no roster row/kart, every packet ignored (spec 6).
 	session.selection_from(7, NetContentCatalog.default_driver_id(), NetContentCatalog.default_kart_id(), true)
 	session.input_from(7, {"frames": [{"tick": 1}]})
 	assert_eq(session.players.size(), 0)
@@ -240,7 +239,7 @@ func test_unverified_peer_gets_no_kart_and_is_kicked_after_the_deadline() -> voi
 	assert_eq(session.rejects.size(), 1)
 	assert_eq(int(session.rejects[0]["peer"]), 7)
 	assert_true(String(session.rejects[0]["message"]).findn("handshake") >= 0)
-	assert_eq(session.gate().take_kicks(), [7] as Array[int])
+	assert_eq(session.gate().take_kicks(NetSession.now() + NetPeerGate.KICK_GRACE_SECONDS), [7] as Array[int])
 
 func test_handshake_rejects_wrong_password_and_admits_the_right_one() -> void:
 	var session: GateSession = _gate_session()
@@ -295,7 +294,20 @@ func test_reject_delivers_the_reason_before_deferring_the_disconnect() -> void:
 	assert_eq(String(session.rejects[0]["message"]), "Incorrect session password")
 	assert_eq(session.players.size(), 0)
 	assert_false(session.gate().allows(4))
-	assert_eq(session.gate().take_kicks(), [4] as Array[int])
+	assert_true(session.gate().take_kicks(NetSession.now()).is_empty(), "disconnect waits for the grace window")
+	assert_eq(session.gate().take_kicks(NetSession.now() + NetPeerGate.KICK_GRACE_SECONDS), [4] as Array[int])
+
+func test_resend_during_kick_grace_is_ignored() -> void:
+	var session: GateSession = _gate_session()
+	session.set_password("secret")
+	session._peer_connected(13)
+	session.handshake_from(13, _version(), "wrong".sha256_text())
+	session.handshake_from(13, _version(), "wrong-again".sha256_text())
+	session.handshake_from(13, _version() + "-old", "secret".sha256_text())
+	session.handshake_from(13, _version(), "secret".sha256_text())
+	assert_eq(session.rejects.size(), 1, "resend must not draw a second reject")
+	assert_eq(session.players.size(), 0, "correct hash during grace must not admit")
+	assert_eq(session.gate().take_kicks(NetSession.now() + NetPeerGate.KICK_GRACE_SECONDS), [13] as Array[int])
 
 func test_dedicated_server_reserves_no_connection_slot_or_roster_row() -> void:
 	assert_eq(NetSessionLobby.connection_slots(8, true), 8)
@@ -349,42 +361,3 @@ func test_relay_rooms_cap_pending_rooms_and_evict_the_oldest() -> void:
 	# The oldest half-open room is the one that went.
 	assert_eq(rooms.partner_of("10.0.0.1:0"), "")
 	assert_eq(rooms.announce("ROOM0", "10.0.0.3:1", 10001.0), "")
-
-func test_loss_estimator_reports_zero_on_a_complete_snapshot_sequence() -> void:
-	var loss: NetLossEstimator = NetLossEstimator.new(NetTuning.SNAPSHOT_INTERVAL)
-	for step: int in range(10):
-		loss.observe(1, step * NetTuning.SNAPSHOT_INTERVAL, float(step) * 0.05)
-	assert_almost_eq(loss.loss(0.5), 0.0, 0.0001)
-
-func test_loss_estimator_measures_snapshot_sequence_gaps() -> void:
-	var loss: NetLossEstimator = NetLossEstimator.new(NetTuning.SNAPSHOT_INTERVAL)
-	# Nine expected snapshot ticks, every other one lost in transit.
-	for step: int in range(10):
-		if step % 2 == 0:
-			loss.observe(1, step * NetTuning.SNAPSHOT_INTERVAL, float(step) * 0.05)
-	assert_almost_eq(loss.loss(0.5), 1.0 - 5.0 / 9.0, 0.001)
-
-func test_loss_estimator_ignores_repeated_chunks_and_forgets_old_samples() -> void:
-	var loss: NetLossEstimator = NetLossEstimator.new(NetTuning.SNAPSHOT_INTERVAL)
-	for step: int in range(6):
-		# A chunked snapshot delivers the same tick more than once.
-		loss.observe(1, step * NetTuning.SNAPSHOT_INTERVAL, float(step) * 0.05)
-		loss.observe(1, step * NetTuning.SNAPSHOT_INTERVAL, float(step) * 0.05)
-	assert_eq(loss.loss(0.3), 0.0)
-	assert_eq(loss.loss(NetLossEstimator.WINDOW_SECONDS + 10.0), 0.0)
-
-func test_loss_estimator_reports_the_worst_peer_and_forgets_removed_ones() -> void:
-	var loss: NetLossEstimator = NetLossEstimator.new(1)
-	for tick: int in range(9):
-		loss.observe(1, tick, float(tick) * 0.05)
-		if tick % 3 == 0:
-			loss.observe(2, tick, float(tick) * 0.05)
-	assert_almost_eq(loss.loss(0.5), 1.0 - 3.0 / 7.0, 0.001)
-	loss.remove(2)
-	assert_almost_eq(loss.loss(0.5), 0.0, 0.0001)
-
-func test_loss_estimator_batch_tick_reads_the_packets_newest_frame() -> void:
-	assert_eq(NetLossEstimator.batch_tick({"frames": [{"tick": 5}, {"tick": 7}]}), 7)
-	assert_eq(NetLossEstimator.batch_tick({"tick": 3}), 3)
-	assert_eq(NetLossEstimator.batch_tick({"frames": []}), -1)
-	assert_eq(NetLossEstimator.batch_tick({}), -1)

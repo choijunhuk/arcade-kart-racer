@@ -27,6 +27,11 @@ var _relay_client: NetRelayClient
 var _drivers: Array[Resource] = []
 var _karts: Array[Resource] = []
 var _panels: Array[LocalLobby.PanelView] = []
+## True from a JOIN attempt until the server's handshake actually admits us
+## (a roster row appears): the ENet socket opens instantly, but "Connected"
+## before the password/version check finishes is misleading — a peer that
+## gets rejected a moment later would have seen a UI claiming success.
+var _awaiting_handshake: bool = false
 
 func _ready() -> void:
 	super._ready()
@@ -111,6 +116,7 @@ func _create_session() -> void:
 	GameState.net_session = _session
 	GameState.add_child(_session)
 	_session.lobby_changed.connect(_refresh)
+	_session.admitted.connect(_on_admitted)
 
 func _host_game() -> void:
 	_create_session()
@@ -139,7 +145,7 @@ func _join_game() -> void:
 			_session.close()
 			_session = null
 			return
-		_handle_open(_session.join("127.0.0.1", loopback_port, _password.text))
+		_handle_open(_session.join("127.0.0.1", loopback_port, _password.text), true)
 		return
 	if NetJoinCode.looks_like_code(target):
 		var decoded: Dictionary = NetJoinCode.decode(target)
@@ -156,7 +162,7 @@ func _join_game() -> void:
 		target = parts[0]
 		if parts.size() > 1 and parts[1].is_valid_int():
 			port = int(parts[1])
-	_handle_open(_session.join(target, port, _password.text))
+	_handle_open(_session.join(target, port, _password.text), true)
 
 func _start_relay_client(loopback_port: int, dial_target_port: int, relay_target: String, room_code: String) -> bool:
 	var parts: PackedStringArray = relay_target.split(":")
@@ -178,7 +184,12 @@ func _start_upnp(port: int) -> void:
 	_copy_button.disabled = true
 	_upnp_status.text = "Mapping port via UPnP…"
 	_upnp = NetUpnp.new()
-	add_child(_upnp)
+	# Owned by the persistent GameState, not this lobby: START frees the lobby
+	# through the race scene change while discovery can still be running
+	# (measured ~11 s with no IGD), and freeing NetUpnp with the lobby joined
+	# that worker on the main thread, starving ENet until the joined peer
+	# timed the host out. BACK still releases it explicitly in go_back().
+	GameState.add_child(_upnp)
 	_upnp.mapping_finished.connect(_on_upnp_finished.bind(port))
 	_upnp.map_port(port)
 
@@ -196,17 +207,37 @@ func _copy_host_code() -> void:
 	if not code.is_empty() and DisplayServer.get_name() != "headless":
 		DisplayServer.clipboard_set(code)
 
-func _handle_open(error: Error) -> void:
+## `verifying` marks a JOIN attempt: the socket is open but the server has
+## not yet accepted our handshake, so the status must not claim "Connected"
+## until a roster row for us actually appears (see `_awaiting_handshake`).
+func _handle_open(error: Error, verifying: bool = false) -> void:
 	if error != OK:
 		_session.close()
 		_session = null
 		_status.text = "Connection failed: %s" % error_string(error)
+	elif verifying:
+		_awaiting_handshake = true
+		_status.text = "Connecting — verifying handshake…"
 	else:
 		_status.text = "Connected — choose driver/kart, then READY. Host starts."
 	_refresh()
 
+## Server-side admission confirmation (net_session.gd `_admitted`): a peer
+## joining mid-race gets no roster row until the next lobby, so `_refresh`'s
+## `local_slot() >= 0` check alone would leave this stuck on "verifying
+## handshake" for the whole race.
+func _on_admitted(waiting: bool) -> void:
+	_awaiting_handshake = false
+	if waiting:
+		_status.text = "Admitted — waiting for the current race to finish."
+	else:
+		_status.text = "Connected — choose driver/kart, then READY. Host starts."
+
 func _refresh() -> void:
 	var connected: bool = is_instance_valid(_session)
+	if _awaiting_handshake and connected and _session.local_slot() >= 0:
+		_awaiting_handshake = false
+		_status.text = "Connected — choose driver/kart, then READY. Host starts."
 	_host.disabled = connected
 	_join.disabled = connected
 	_ready_button.disabled = not connected or _session.local_slot() < 0
