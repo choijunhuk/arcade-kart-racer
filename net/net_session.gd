@@ -22,15 +22,13 @@ var automated: bool = false
 var ai_count: int = 6
 var laps: int = 1
 var seed: int = 15
-## Dedicated headless server (spec item 3): occupies no player row/kart.
-## Independent of `automated` ("this is a scripted test harness").
+## Dedicated headless server (spec item 3): occupies no player row/kart; independent of `automated` ("this is a scripted test harness").
 var dedicated: bool = false
 var max_players: int = NetTuning.MAX_PLAYERS
 ## "" keeps the default track/AI difficulty; only the dedicated server CLI sets track_id.
 var track_id: String = ""
 var difficulty_id: String = ""
-## SHA-256 of the session password ("" = none); plaintext is never stored
-## or logged (spec item 6).
+## SHA-256 of the session password ("" = none); plaintext is never stored or logged (spec item 6).
 var password_hash: String = ""
 var _password_attempt_hash: String = ""
 var _input_limiter: NetRateLimiter = NetRateLimiter.new()
@@ -53,8 +51,7 @@ func _ready() -> void:
 	multiplayer.connection_failed.connect(_connection_failed)
 	multiplayer.server_disconnected.connect(_server_disconnected)
 
-## Opens a listen server. `dedicated` (set before calling) keeps a headless
-## server off the player row/slot, so `--max-players 8` admits 8 dedicated, 7+host listen.
+## Opens a listen server; `dedicated` keeps a headless server off the player row/slot, so `--max-players 8` admits 8 dedicated, 7+host listen.
 func host(port: int = NetTuning.PORT, max_players_value: int = NetTuning.MAX_PLAYERS) -> Error:
 	peer = ENetMultiplayerPeer.new()
 	var slots: int = NetSessionLobby.connection_slots(max_players_value, dedicated)
@@ -89,9 +86,8 @@ func set_password(plain: String) -> void:
 func local_slot() -> int:
 	return _roster.index_of(multiplayer.get_unique_id())
 
-## Real transport loss (0.0-1.0) measured from sequence gaps over a 2 s
-## window (spec item 5). Unlike `conditions.dropped` this counts traffic that
-## actually went missing, not the synthetic drops this process injected.
+## Real transport loss (0.0-1.0) measured from sequence gaps over a 2 s window
+## (spec item 5); unlike `conditions.dropped`, this counts genuinely missing traffic.
 func get_loss_estimate() -> float:
 	return _loss.loss(now())
 
@@ -116,6 +112,13 @@ func retry_start() -> void:
 ## Host-only: reopens the lobby after RESULTS (NetSessionLobby, spec item 3).
 func restart_to_lobby() -> void:
 	_roster.restart_to_lobby()
+
+## Non-host counterpart to `restart_to_lobby()`: clears only local race state
+## on BACK TO LOBBY; `started` waits for the host's own broadcast to clear.
+func clear_local_race_state() -> void:
+	race = null
+	running = false
+	_roster.preparing = false
 
 ## Registers a loaded race and waits until all peers have matching scene nodes.
 func bind_race(value: NetRace) -> void:
@@ -167,8 +170,7 @@ func _deliver(method: StringName, target: int, args: Array, reliable: bool) -> v
 func _service_peers() -> void:
 	_transport.service_peers()
 
-## A connected peer is not a joined player yet: it holds no roster row (and so
-## no kart) until its handshake passes, and is kicked if it never sends one.
+## A connected peer is not a joined player yet: no roster row/kart until its handshake passes, and it is kicked if it never sends one.
 func _peer_connected(id: int) -> void:
 	if not multiplayer.is_server():
 		return
@@ -183,7 +185,7 @@ func _admit_peer(id: int) -> void:
 		_broadcast_lobby()
 
 ## Tells a just-admitted client whether it joined mid-race as a `waiting`
-## spectator (no roster row until the next lobby, so `local_slot()` stays -1).
+## spectator (no row until the next lobby, so `local_slot()` stays -1).
 @rpc("authority", "call_remote", "reliable")
 func _admitted(waiting: bool) -> void:
 	admitted.emit(waiting)
@@ -205,8 +207,7 @@ func _broadcast_lobby() -> void:
 	send(&"_lobby", 0, [players, laps, ai_count, track_id, difficulty_id], true)
 	lobby_changed.emit()
 
-## Sender id of the `any_peer` RPC being handled, or -1 when this process is
-## not the server or the sender has not passed the handshake yet (spec 6).
+## Sender id of the `any_peer` RPC being handled, or -1 off-server / unverified (spec 6).
 func _verified_sender() -> int:
 	var id: int = _sender()
 	return id if multiplayer.is_server() and _gate.allows(id) else -1
@@ -244,8 +245,8 @@ func _prepare_race(roster: Array, bots: int, lap_count: int, race_seed: int, rac
 	GameState.current_mode = GameState.Mode.RACE
 	get_tree().change_scene_to_file.call_deferred(RACE_PATH)
 
-## Validates a newly connected peer's version/password (spec 6); rejection
-## never logs the password. Only an acceptable handshake earns a roster row.
+## Validates a newly connected peer's version/password (spec 6, never logging
+## the password); only an acceptable handshake earns a roster row.
 @rpc("any_peer", "call_remote", "reliable")
 func _handshake(client_version: String, password_attempt: String) -> void:
 	var id: int = _sender()
@@ -259,7 +260,7 @@ func _handshake(client_version: String, password_attempt: String) -> void:
 		_admit_peer(id)
 
 ## Sends the reason first, then defers the disconnect via KICK_GRACE_SECONDS
-## (spec item 1); a no-op once a kick is queued so a resend can't delay it.
+## (spec item 1); a no-op once queued so a resend can't delay it.
 func _reject_peer(id: int, message: String) -> void:
 	if _gate.is_kicking(id):
 		return
@@ -296,9 +297,8 @@ func _begin_race() -> void:
 	if race != null:
 		race.begin()
 
-## Rate-limited (spec 6) against a runaway/hostile peer flooding input. A
-## sender can only ever supply input for its own roster slot: `race` resolves
-## the slot from the RPC sender id, so spoofing another slot is impossible.
+## Rate-limited (spec 6) against a runaway/hostile peer flooding input; `race`
+## resolves the slot from the RPC sender id, so spoofing another slot is impossible.
 @rpc("any_peer", "call_remote", "unreliable_ordered", 1)
 func _receive_input(data: Dictionary) -> void:
 	var sender: int = _verified_sender()
@@ -387,8 +387,7 @@ func _session_ended(message: String) -> void:
 	if not automated:
 		get_tree().change_scene_to_file.call_deferred("res://scenes/main.tscn")
 
-## Broadened beyond `automated` so a dedicated server can relay the
-## "test_done" ack to automated test clients joining it; a no-op otherwise.
+## Broadened beyond `automated` so a dedicated server can relay "test_done" to automated test clients joining it; a no-op otherwise.
 @rpc("any_peer", "call_remote", "reliable")
 func _test_report(report: Dictionary) -> void:
 	if _verified_sender() > 0:

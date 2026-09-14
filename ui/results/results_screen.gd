@@ -171,8 +171,13 @@ func _on_menu_pressed() -> void:
 ## Every peer clears its own local race state unconditionally (review
 ## finding 2): a non-host that skipped this kept a dangling `session.race`,
 ## which made its next `_prepare_race` bail out and ack a race it never
-## loaded, corrupting the host's loaded count. Only the host additionally
-## rebroadcasts the lobby, since it alone owns the authoritative roster.
+## loaded, corrupting the host's loaded count. A non-host only clears its
+## own `race`/`preparing` (`NetSession.clear_local_race_state()`) — `started`
+## stays true until the host's own `restart_to_lobby()` broadcast clears it
+## for everyone, so the lobby's `mid_race` gate keeps showing the waiting
+## state instead of a stale "choose driver/kart" while the server is still
+## mid-race. Only the host additionally rebroadcasts the lobby, since it
+## alone owns the authoritative roster.
 func _on_back_to_lobby_pressed() -> void:
 	var session: NetSession = GameState.net_session
 	if not is_instance_valid(session):
@@ -181,7 +186,7 @@ func _on_back_to_lobby_pressed() -> void:
 	if session.multiplayer.is_server():
 		session.restart_to_lobby()
 	else:
-		session._roster.clear_race_state()
+		session.clear_local_race_state()
 	GameState.change_scene("res://ui/menus/online_lobby.tscn")
 
 

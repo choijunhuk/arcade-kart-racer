@@ -24,7 +24,13 @@ func after_each() -> void:
 	# A non-host test may have assigned a real client peer to the default
 	# multiplayer API (shared by the whole SceneTree, not per-node) to make
 	# `is_server()` read false; restore the normal offline/host default so
-	# later tests are not left thinking they are a client.
+	# later tests are not left thinking they are a client. Close it first
+	# (spec item 5) — an ENetMultiplayerPeer left assigned and connecting can
+	# still fire `connection_failed` after the test moves on, and closing an
+	# already-closed peer is a harmless no-op.
+	var previous_peer: MultiplayerPeer = get_tree().get_multiplayer().multiplayer_peer
+	if previous_peer is ENetMultiplayerPeer:
+		(previous_peer as ENetMultiplayerPeer).close()
 	get_tree().get_multiplayer().multiplayer_peer = OfflineMultiplayerPeer.new()
 	GameState.net_session = null
 	GameState.is_networked = false
@@ -167,15 +173,23 @@ func test_results_back_to_lobby_keeps_the_session_alive_and_reopens_it() -> void
 	assert_false(session.started, "restart_to_lobby must reopen the lobby for another race")
 
 
-## Review finding 2: a non-host peer's BACK TO LOBBY must clear its own
-## dangling `race`/`started`/`preparing` too, not only the host's copy — or
-## the next `_prepare_race` on this peer bails on `race != null` and acks a
-## race it never loaded, corrupting the host's loaded count. A real (never
-## actually connecting) client `ENetMultiplayerPeer` makes `is_server()`
-## read false without needing an actual socket handshake.
+## Review finding 2 (and its own fix-vs-fix regression): a non-host peer's
+## BACK TO LOBBY must clear its own dangling `race`/`preparing` too, not only
+## the host's copy — or the next `_prepare_race` on this peer bails on
+## `race != null` and acks a race it never loaded, corrupting the host's
+## loaded count. It must NOT also clear `started`: online_lobby.gd's
+## `mid_race` gate reads `_session.started` to keep READY disabled and the
+## status on "waiting for the host" while the server's race is still
+## genuinely in progress — only the authority's own `restart_to_lobby()`
+## broadcast (`_return_to_lobby`) may clear `started`, for every peer at
+## once. A real (never actually connecting) client `ENetMultiplayerPeer`
+## makes `is_server()` read false without needing an actual socket
+## handshake; `automated = true` and closing that peer (spec item 5) keep a
+## stray `connection_failed` from tearing down the scene mid-test.
 func test_back_to_lobby_clears_local_race_state_for_a_non_host_peer() -> void:
 	var session: NetSession = NetSession.new()
 	add_child_autofree(session)
+	session.automated = true
 	var client_peer: ENetMultiplayerPeer = ENetMultiplayerPeer.new()
 	client_peer.create_client("127.0.0.1", 34599)
 	get_tree().get_multiplayer().multiplayer_peer = client_peer
@@ -193,11 +207,26 @@ func test_back_to_lobby_clears_local_race_state_for_a_non_host_peer() -> void:
 	assert_false(session.multiplayer.is_server(), "test setup must simulate a non-host peer")
 	screen._on_back_to_lobby_pressed()
 	assert_null(session.race, "the client's dangling race reference must be cleared")
-	assert_false(session.started, "started must be cleared so the next lobby's _prepare_race is not bailed on")
-	assert_false(session._roster.preparing, "preparing must be cleared alongside started/race")
+	assert_true(session.started, "started must stay true until the host's own broadcast clears it for everyone")
+	assert_false(session._roster.preparing, "preparing must be cleared alongside race")
 	assert_same(GameState.net_session, session, "the session must stay alive, not be closed")
 	assert_eq(_last_scene_path, "res://ui/menus/online_lobby.tscn")
 	dangling_race.free()
+	client_peer.close()
+	# A closed ENetMultiplayerPeer left assigned as the tree's active peer
+	# trips a benign engine "!_is_active()" warning the moment anything
+	# (e.g. OnlineLobby's own `multiplayer.is_server()`) queries it below;
+	# detach it the same way `after_each` restores the offline default.
+	get_tree().get_multiplayer().multiplayer_peer = OfflineMultiplayerPeer.new()
+	# The lobby must still show the waiting state (online_lobby.gd's
+	# `mid_race` gate) since `started` is still true on this peer.
+	var lobby: OnlineLobby = (load("res://ui/menus/online_lobby.tscn") as PackedScene).instantiate() as OnlineLobby
+	add_child_autofree(lobby)
+	await wait_process_frames(2)
+	lobby.set("_session", session)
+	lobby._refresh()
+	assert_true((lobby.get("_ready_button") as Button).disabled, "READY must stay disabled while started is still true")
+	assert_eq((lobby.get("_status") as Label).text, "Waiting for the host to reopen the lobby.")
 
 
 func test_results_hides_back_to_lobby_for_a_local_offline_race() -> void:
