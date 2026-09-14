@@ -35,9 +35,10 @@ host_pid=
 join_pid=
 
 cleanup() {
+  # Kill only this run's own captured PIDs -- a name-matching pkill would
+  # also reap other worktrees' concurrent online_ui_driver runs.
   if [ -n "$host_pid" ]; then kill "$host_pid" 2>/dev/null || true; wait "$host_pid" 2>/dev/null || true; fi
   if [ -n "$join_pid" ]; then kill "$join_pid" 2>/dev/null || true; wait "$join_pid" 2>/dev/null || true; fi
-  pkill -f online_ui_driver 2>/dev/null || true
 }
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
@@ -91,9 +92,10 @@ fi
 
 if [ -n "$SCENARIO" ]; then
   # wrong-password / host-leaves intentionally never reach RESULTS; success
-  # means the join process bounced back with a captured rejection message.
-  if [ "$join_status" -ne 0 ]; then
-    echo "ONLINE_UI_TEST FAIL: join_status=$join_status"
+  # means the join process bounced back with a captured rejection message,
+  # and the host driver must still have exited cleanly.
+  if [ "$host_status" -ne 0 ] || [ "$join_status" -ne 0 ]; then
+    echo "ONLINE_UI_TEST FAIL: host_status=$host_status join_status=$join_status"
     tail -30 "$host_log" "$join_log"
     exit 1
   fi
