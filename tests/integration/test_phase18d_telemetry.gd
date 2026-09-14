@@ -170,6 +170,28 @@ func test_split_screen_two_local_karts_write_separate_files_with_no_cross_contam
 	assert_almost_eq(float(p2_lap1["lap_time"]), 25.0, 0.001)
 
 
+## 18d-3 review fix #2: `_update_pending_recoveries()` must resolve every
+## kart's pending recovery in a single pass (verifying `keys()` remains a
+## safe erase-while-iterating snapshot after dropping the redundant
+## `.duplicate()`), and must not error when nothing is pending.
+func test_physics_process_resolves_every_pending_recovery_in_one_pass() -> void:
+	_service.set_physics_process(false)
+	EventBus.race_started.emit()
+
+	# Nothing pending yet: must be a safe no-op.
+	_service._physics_process(1.0 / 60.0)
+	assert_true(_service._pending_recovery.is_empty())
+
+	EventBus.kart_hit.emit(_player_kart, HitReactor.HitType.BUMP)
+	EventBus.kart_hit.emit(_second_player_kart, HitReactor.HitType.BUMP)
+	assert_eq(_service._pending_recovery.size(), 2)
+
+	# Both karts are at rest (speed 0 == 0 * ratio), so the very next pass
+	# must resolve both pending recoveries in the same call.
+	_service._physics_process(1.0 / 60.0)
+	assert_true(_service._pending_recovery.is_empty(), "every pending recovery must resolve in one _update_pending_recoveries() pass")
+
+
 func _list_json_files(directory: String) -> PackedStringArray:
 	var dir: DirAccess = DirAccess.open(directory)
 	if dir == null:

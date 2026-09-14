@@ -142,7 +142,14 @@ func _track(kart: Node) -> RaceTelemetryLog:
 
 
 func _update_pending_recoveries() -> void:
-	for id: Variant in _pending_recovery.keys().duplicate():
+	if _pending_recovery.is_empty():
+		return
+	# `keys()` already returns a fresh Array snapshot (not a live view into the
+	# Dictionary), so it is safe to erase from `_pending_recovery` below while
+	# iterating it without an extra `.duplicate()` allocation (18d-3 review
+	# fix #2: avoid a per-tick allocation when nothing is pending, and avoid
+	# doubling it when something is).
+	for id: Variant in _pending_recovery.keys():
 		var kart: Node = _known_karts.get(id)
 		if not is_instance_valid(kart):
 			_pending_recovery.erase(id)
