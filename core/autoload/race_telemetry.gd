@@ -64,6 +64,7 @@ func _on_race_started() -> void:
 func _on_race_state_changed(_old_state: int, new_state: int) -> void:
 	if new_state != RaceState.RESULTS or not _recording:
 		return
+	_close_pending_recoveries_at_race_end()
 	_write_logs()
 	_reset_state(false)
 
@@ -98,13 +99,23 @@ func _on_kart_hit(kart: Node, _hit_type: int) -> void:
 	var log: RaceTelemetryLog = _track(kart)
 	if log == null:
 		return
-	_finish_recovery(kart, _elapsed_seconds)
 	var id: int = kart.get_instance_id()
 	log.hit(_elapsed_seconds)
-	_pending_recovery[id] = {
-		"hit_time": _elapsed_seconds,
-		"pre_hit_speed": float(_last_speed.get(id, (kart as KartController).get_speed())),
-	}
+	if _pending_recovery.has(id):
+		# 18d-3 review fix #3: a hit landing before the previous one resolved
+		# must not force-close it with a fabricated value at the new hit's
+		# time. Keep the original hit_time/pre_hit_speed for gating and just
+		# count the extra hit; _close_pending_recovery() replays one
+		# log.recovered() call per counted hit once the real criteria (80% of
+		# pre-hit speed, a boost starting, or the 10s cap) resolves.
+		var pending: Dictionary = _pending_recovery[id]
+		pending["pending_hits"] = int(pending["pending_hits"]) + 1
+	else:
+		_pending_recovery[id] = {
+			"hit_time": _elapsed_seconds,
+			"pre_hit_speed": float(_last_speed.get(id, (kart as KartController).get_speed())),
+			"pending_hits": 1,
+		}
 
 
 func _on_wall_impacted(kart: Node) -> void:
@@ -158,19 +169,40 @@ func _update_pending_recoveries() -> void:
 		var elapsed_since_hit: float = _elapsed_seconds - float(pending["hit_time"])
 		var current_speed: float = float(_last_speed.get(id, (kart as KartController).get_speed()))
 		if is_recovered(current_speed, float(pending["pre_hit_speed"]), elapsed_since_hit):
-			var log: RaceTelemetryLog = _logs.get(id)
-			if log != null:
-				log.recovered(minf(_elapsed_seconds, float(pending["hit_time"]) + HIT_RECOVERY_CAP_SECONDS))
+			_close_pending_recovery(id, minf(_elapsed_seconds, float(pending["hit_time"]) + HIT_RECOVERY_CAP_SECONDS))
 			_pending_recovery.erase(id)
 
 
 func _finish_recovery(kart: Node, t: float) -> void:
 	var id: int = kart.get_instance_id()
 	if _pending_recovery.has(id):
-		var log: RaceTelemetryLog = _logs.get(id)
-		if log != null:
-			log.recovered(t)
+		_close_pending_recovery(id, t)
 		_pending_recovery.erase(id)
+
+
+## Closes every hit stacked on kart `id`'s pending recovery at time `t`,
+## replaying one `log.recovered()` call per counted hit (see `_on_kart_hit`).
+## Does not erase `_pending_recovery[id]`; callers own that.
+func _close_pending_recovery(id: int, t: float) -> void:
+	var log: RaceTelemetryLog = _logs.get(id)
+	if log == null:
+		return
+	var pending_hits: int = int((_pending_recovery[id] as Dictionary).get("pending_hits", 1))
+	for _i: int in range(pending_hits):
+		log.recovered(t)
+
+
+## 18d-3 review fix #3 decision: a recovery still pending when the race ends
+## is recorded as CAPPED, not dropped. It is closed at the current elapsed
+## time, which is always <= the 10s cap (a genuine cap-triggered close would
+## already have resolved it in `_update_pending_recoveries` before now).
+## Capping keeps `hits == hit_recovery_seconds.size()` and avoids silently
+## excluding slow recoveries from the mean/median that
+## `tools/telemetry_summary.gd` reports.
+func _close_pending_recoveries_at_race_end() -> void:
+	for id: int in _pending_recovery.keys():
+		_close_pending_recovery(id, _elapsed_seconds)
+	_pending_recovery.clear()
 
 
 func _write_logs() -> void:

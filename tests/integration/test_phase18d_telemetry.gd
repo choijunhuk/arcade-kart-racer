@@ -192,6 +192,63 @@ func test_physics_process_resolves_every_pending_recovery_in_one_pass() -> void:
 	assert_true(_service._pending_recovery.is_empty(), "every pending recovery must resolve in one _update_pending_recoveries() pass")
 
 
+## 18d-3 review fix #3: a second hit landing before the first recovery
+## resolves must not fabricate the first hit's recovery time at the second
+## hit's timestamp. Both hits are counted and each closes with its own,
+## real elapsed recovery time once resolution (here, a boost) happens.
+func test_second_hit_before_recovery_does_not_fabricate_the_first_recovery() -> void:
+	EventBus.race_started.emit()
+
+	EventBus.kart_hit.emit(_player_kart, HitReactor.HitType.BUMP)
+	_service._elapsed_seconds = 0.5
+	EventBus.kart_hit.emit(_player_kart, HitReactor.HitType.BUMP)
+	_service._elapsed_seconds = 1.2
+	EventBus.boost_started.emit(_player_kart, BoostSpecData.new())
+
+	EventBus.lap_completed.emit(_player_kart, 1, 5.0)
+	EventBus.race_state_changed.emit(RaceState.FINISHING, RaceState.RESULTS)
+
+	var files: PackedStringArray = _list_json_files(_directory)
+	assert_eq(files.size(), 1)
+	if files.is_empty():
+		return
+	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(_directory.path_join(files[0])))
+	var lap1: Dictionary = (data["laps"] as Array)[0]
+	assert_eq(int(lap1["hits"]), 2)
+	var recovery: Array = lap1["hit_recovery_seconds"]
+	assert_eq(recovery.size(), 2, "both hits must produce a recovery entry")
+	if recovery.size() != 2:
+		return
+	assert_almost_eq(float(recovery[0]), 1.2, 0.0001, "the first hit's recovery must use its own original hit time (0.0), not the second hit's time")
+	assert_almost_eq(float(recovery[1]), 0.7, 0.0001, "the second hit's recovery must use its own hit time (0.5)")
+
+
+## 18d-3 review fix #3 decision: a recovery still pending when the race ends
+## is recorded as capped (not silently dropped), so hits and
+## hit_recovery_seconds stay in sync.
+func test_pending_recovery_at_race_end_is_capped_not_dropped() -> void:
+	EventBus.race_started.emit()
+
+	EventBus.kart_hit.emit(_player_kart, HitReactor.HitType.BUMP)
+	_service._elapsed_seconds = 3.0
+
+	EventBus.lap_completed.emit(_player_kart, 1, 5.0)
+	EventBus.race_state_changed.emit(RaceState.FINISHING, RaceState.RESULTS)
+
+	var files: PackedStringArray = _list_json_files(_directory)
+	assert_eq(files.size(), 1)
+	if files.is_empty():
+		return
+	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(_directory.path_join(files[0])))
+	var lap1: Dictionary = (data["laps"] as Array)[0]
+	assert_eq(int(lap1["hits"]), 1)
+	var recovery: Array = lap1["hit_recovery_seconds"]
+	assert_eq(recovery.size(), 1, "a pending recovery at race end must still be recorded, not dropped")
+	if recovery.size() != 1:
+		return
+	assert_almost_eq(float(recovery[0]), 3.0, 0.0001, "the capped recovery must use the elapsed time at race end")
+
+
 func _list_json_files(directory: String) -> PackedStringArray:
 	var dir: DirAccess = DirAccess.open(directory)
 	if dir == null:
