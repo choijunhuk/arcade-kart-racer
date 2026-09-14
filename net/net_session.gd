@@ -246,7 +246,7 @@ func _prepare_race(roster: Array, bots: int, lap_count: int, race_seed: int, rac
 @rpc("any_peer", "call_remote", "reliable")
 func _handshake(client_version: String, password_attempt: String) -> void:
 	var id: int = _sender()
-	if not multiplayer.is_server() or _gate.allows(id):
+	if not multiplayer.is_server() or _gate.allows(id) or not _gate.is_pending(id):
 		return
 	var expected_version: String = String(ProjectSettings.get_setting("application/config/version", ""))
 	var reason: String = NetHandshake.reject_reason(client_version, expected_version, password_attempt, password_hash)
@@ -255,13 +255,11 @@ func _handshake(client_version: String, password_attempt: String) -> void:
 	elif _gate.verify(id):
 		_admit_peer(id)
 
-## Sends the real reason straight out (bypassing the debug delay queue, which
-## would otherwise be skipped once the peer has left `get_peers()`), then
-## defers the disconnect by NetPeerGate.KICK_GRACE_SECONDS so the reliable
-## send has real time to reach the peer: it sees why it was refused instead
-## of a bare "Host disconnected" (spec item 1). A single tick was not always
-## enough under real scheduling jitter (real-UI acceptance testing).
+## Sends the reason first, then defers the disconnect via KICK_GRACE_SECONDS
+## (spec item 1); a no-op once a kick is queued so a resend can't delay it.
 func _reject_peer(id: int, message: String) -> void:
+	if _gate.is_kicking(id):
+		return
 	print("SERVER_REJECT peer=%d reason=%s" % [id, message])
 	_deliver_reject(id, message)
 	_roster.remove(id)

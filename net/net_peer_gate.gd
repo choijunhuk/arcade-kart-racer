@@ -51,6 +51,21 @@ func allows(id: int) -> bool:
 	return bool(_verified.get(id, false))
 
 
+## True only while a peer is still inside its handshake deadline (tracked but
+## not yet verified, rejected, or expired). A rejected/kicked peer's deadline
+## is erased by `remove`, so this goes false the instant it is rejected —
+## closing the resend-during-grace-window loophole where a peer could keep
+## resending `_handshake` to stay connected forever (spec item 1).
+func is_pending(id: int) -> bool:
+	return _deadlines.has(id)
+
+
+## True once a disconnect has been queued for this peer, so callers can avoid
+## re-queuing (which would otherwise push the deadline later).
+func is_kicking(id: int) -> bool:
+	return _kicks.has(id)
+
+
 ## Number of connected peers still inside the handshake deadline.
 func pending_count() -> int:
 	return _deadlines.size()

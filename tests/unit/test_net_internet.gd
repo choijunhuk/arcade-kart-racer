@@ -161,8 +161,7 @@ func test_server_state_finish_and_restart_returns_to_lobby() -> void:
 	assert_eq(state.countdown_remaining(), NetServerState.COUNTDOWN_SECONDS)
 
 ## Server-side NetSession with a scriptable RPC sender id and captured reject
-## deliveries, so the real handshake/admission/kick wiring runs in-process
-## against a fake peer instead of needing a second ENet process (spec item 7).
+## deliveries, so the real handshake/admission/kick wiring runs in-process.
 class GateSession extends NetSession:
 	var sender_id: int = 0
 	var rejects: Array[Dictionary] = []
@@ -228,8 +227,7 @@ func test_peer_gate_expires_a_silent_peer_and_defers_its_kick() -> void:
 func test_unverified_peer_gets_no_kart_and_is_kicked_after_the_deadline() -> void:
 	var session: GateSession = _gate_session()
 	session._peer_connected(7)
-	# Playing without ever handshaking: no roster row, so no kart, and every
-	# packet is ignored (spec item 6).
+	# Playing without a handshake: no roster row/kart, every packet ignored (spec 6).
 	session.selection_from(7, NetContentCatalog.default_driver_id(), NetContentCatalog.default_kart_id(), true)
 	session.input_from(7, {"frames": [{"tick": 1}]})
 	assert_eq(session.players.size(), 0)
@@ -298,6 +296,16 @@ func test_reject_delivers_the_reason_before_deferring_the_disconnect() -> void:
 	assert_false(session.gate().allows(4))
 	assert_true(session.gate().take_kicks(NetSession.now()).is_empty(), "disconnect waits for the grace window")
 	assert_eq(session.gate().take_kicks(NetSession.now() + NetPeerGate.KICK_GRACE_SECONDS), [4] as Array[int])
+
+func test_resend_during_kick_grace_is_ignored() -> void:
+	var session: GateSession = _gate_session()
+	session.set_password("secret")
+	session._peer_connected(13)
+	session.handshake_from(13, _version(), "wrong".sha256_text())
+	session.handshake_from(13, _version(), "secret".sha256_text())
+	assert_eq(session.rejects.size(), 1, "resend must not draw a second reject")
+	assert_eq(session.players.size(), 0, "correct hash during grace must not admit")
+	assert_eq(session.gate().take_kicks(NetSession.now() + NetPeerGate.KICK_GRACE_SECONDS), [13] as Array[int])
 
 func test_dedicated_server_reserves_no_connection_slot_or_roster_row() -> void:
 	assert_eq(NetSessionLobby.connection_slots(8, true), 8)
