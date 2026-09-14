@@ -105,3 +105,42 @@ text = "QUIT"
 [node name="NetworkMessage" type="Label" parent="Panel/VBox"]
 layout_mode = 2
 autowrap_mode = 2
+
+[node name="TutorialPrompt" type="PanelContainer" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -220.0
+offset_top = -110.0
+offset_right = 220.0
+offset_bottom = 110.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBox" type="VBoxContainer" parent="TutorialPrompt"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Title" type="Label" parent="TutorialPrompt/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 26
+horizontal_alignment = 1
+text = "NEW HERE?"
+
+[node name="Body" type="Label" parent="TutorialPrompt/VBox"]
+layout_mode = 2
+autowrap_mode = 2
+horizontal_alignment = 1
+text = "Learn drifting, boosts, tricks, and items on a short practice lap."
+
+[node name="StartTutorialButton" type="Button" parent="TutorialPrompt/VBox"]
+layout_mode = 2
+text = "START TUTORIAL"
+
+[node name="SkipTutorialButton" type="Button" parent="TutorialPrompt/VBox"]
+layout_mode = 2
+text = "SKIP"
