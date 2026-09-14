@@ -16,7 +16,7 @@ fog_light_color = Color(0.018, 0.025, 0.08, 1)
 [node name="Track02" type="Node3D"]
 script = ExtResource("1")
 half_width = 300.0
-half_depth = 110.0
+half_depth = 320.0
 corner_radius = 24.0
 road_width = 16.0
 wall_height = 3.0
