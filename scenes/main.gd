@@ -4,7 +4,9 @@ extends Node
 func _ready() -> void:
 	GameState.current_mode = GameState.Mode.MENU
 	var args: PackedStringArray = OS.get_cmdline_user_args()
-	if args.has("--relay"):
+	if args.has("--selftest"):
+		add_child(ExportSelftest.new())
+	elif args.has("--relay"):
 		_start_relay.call_deferred(args)
 	elif args.has("--server"):
 		_start_server.call_deferred(args)
