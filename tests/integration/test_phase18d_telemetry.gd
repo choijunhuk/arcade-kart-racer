@@ -1,12 +1,15 @@
 extends GutTest
 
-## Headless smoke test (Phase 18d-3): a short simulated local race, driven
-## purely through EventBus, writes one telemetry JSON matching the documented
-## schema to an injected directory, while a remote/AI kart's events are
-## ignored entirely.
+## Headless smoke test (Phase 18d-3, plus 18d-3 review fix #1): a short
+## simulated local race, driven purely through EventBus, writes one
+## telemetry JSON per locally-recorded kart matching the documented schema
+## to an injected directory, while a remote/AI kart's events are ignored
+## entirely. Also covers split-screen isolation: two local human karts must
+## never share a log bucket.
 
 var _service: RaceTelemetryService
 var _player_kart: KartController
+var _second_player_kart: KartController
 var _ai_kart: KartController
 var _directory: String
 
@@ -22,6 +25,10 @@ func before_each() -> void:
 	_player_kart = (load("res://kart/kart.tscn") as PackedScene).instantiate() as KartController
 	add_child_autofree(_player_kart)
 	_player_kart.input_provider = PlayerInputProvider.new()
+
+	_second_player_kart = (load("res://kart/kart.tscn") as PackedScene).instantiate() as KartController
+	add_child_autofree(_second_player_kart)
+	_second_player_kart.input_provider = PlayerInputProvider.new()
 
 	_ai_kart = (load("res://kart/kart.tscn") as PackedScene).instantiate() as KartController
 	add_child_autofree(_ai_kart)
@@ -68,10 +75,10 @@ func test_short_race_writes_one_json_file_matching_the_documented_schema() -> vo
 	EventBus.race_state_changed.emit(RaceState.FINISHING, RaceState.RESULTS)
 
 	var files: PackedStringArray = _list_json_files(_directory)
-	assert_eq(files.size(), 1, "exactly one telemetry file must be written on RESULTS")
+	assert_eq(files.size(), 1, "exactly one telemetry file must be written for one recorded local kart")
 	if files.is_empty():
 		return
-	assert_true(files[0].ends_with("-test_loop.json"), "the filename must end with -<track>.json")
+	assert_true(files[0].ends_with("-test_loop-p1.json"), "the filename must end with -<track>-p<player_index+1>.json")
 
 	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(_directory.path_join(files[0])))
 	assert_true(parsed is Dictionary)
@@ -79,6 +86,8 @@ func test_short_race_writes_one_json_file_matching_the_documented_schema() -> vo
 	assert_eq(int(data["version"]), 1)
 	assert_true(data.has("laps"))
 	assert_true(data.has("totals"))
+	assert_eq(int(data["player_index"]), 0, "the only recorded kart must be player_index 0")
+	assert_eq(String(data.get("kart_id", "")), "medium", "kart_id must be included when cheaply available")
 
 	var laps: Array = data["laps"]
 	assert_eq(laps.size(), 2)
@@ -100,6 +109,65 @@ func test_short_race_writes_one_json_file_matching_the_documented_schema() -> vo
 	var totals: Dictionary = data["totals"]
 	assert_eq(int(totals["laps_completed"]), 2)
 	assert_eq(int(totals["drifts_started"]), 2, "only the local human kart's drifts must be counted")
+
+
+## 18d-3 review fix #1: two local human karts (split-screen) must never share
+## a log bucket. Interleaved events land in separate per-player files with no
+## cross-contamination.
+func test_split_screen_two_local_karts_write_separate_files_with_no_cross_contamination() -> void:
+	EventBus.race_started.emit()
+
+	EventBus.drift_started.emit(_player_kart, 1)
+	EventBus.drift_started.emit(_second_player_kart, -1)
+	EventBus.drift_ended.emit(_player_kart, 2)
+	EventBus.drift_ended.emit(_second_player_kart, 1)
+	EventBus.kart_hit.emit(_second_player_kart, HitReactor.HitType.BUMP)
+	EventBus.wall_impacted.emit(_player_kart)
+	EventBus.boost_started.emit(_second_player_kart, BoostSpecData.new())
+	EventBus.lap_completed.emit(_player_kart, 1, 20.0)
+	EventBus.lap_completed.emit(_second_player_kart, 1, 25.0)
+
+	EventBus.race_state_changed.emit(RaceState.FINISHING, RaceState.RESULTS)
+
+	var files: PackedStringArray = _list_json_files(_directory)
+	assert_eq(files.size(), 2, "one file per recorded local kart must be written")
+	if files.size() != 2:
+		return
+
+	var p1_file: String = ""
+	var p2_file: String = ""
+	for file_name: String in files:
+		if file_name.ends_with("-p1.json"):
+			p1_file = file_name
+		elif file_name.ends_with("-p2.json"):
+			p2_file = file_name
+	assert_false(p1_file.is_empty(), "a -p1.json file must exist")
+	assert_false(p2_file.is_empty(), "a -p2.json file must exist")
+	if p1_file.is_empty() or p2_file.is_empty():
+		return
+
+	var p1: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(_directory.path_join(p1_file)))
+	var p2: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(_directory.path_join(p2_file)))
+
+	assert_eq(int(p1["player_index"]), 0)
+	assert_eq(int(p2["player_index"]), 1)
+
+	var p1_lap1: Dictionary = (p1["laps"] as Array)[0]
+	var p1_tiers: Dictionary = p1_lap1["drift_release_tiers"]
+	assert_eq(p1_tiers.keys(), ["2"], "player 1's drift tier must not include player 2's release")
+	assert_eq(int(p1_tiers.get("2", 0)), 1)
+	assert_eq(int(p1_lap1["hits"]), 0, "player 2's hit must not leak into player 1's log")
+	assert_eq(int(p1_lap1["wall_impacts"]), 1)
+	assert_almost_eq(float(p1_lap1["lap_time"]), 20.0, 0.001)
+
+	var p2_lap1: Dictionary = (p2["laps"] as Array)[0]
+	var p2_tiers: Dictionary = p2_lap1["drift_release_tiers"]
+	assert_eq(p2_tiers.keys(), ["1"], "player 2's drift tier must not include player 1's release")
+	assert_eq(int(p2_tiers.get("1", 0)), 1)
+	assert_eq(int(p2_lap1["hits"]), 1)
+	assert_eq(int(p2_lap1["wall_impacts"]), 0, "player 1's wall impact must not leak into player 2's log")
+	assert_false((p2_lap1["hit_recovery_seconds"] as Array).is_empty(), "player 2's hit must have a recorded recovery time")
+	assert_almost_eq(float(p2_lap1["lap_time"]), 25.0, 0.001)
 
 
 func _list_json_files(directory: String) -> PackedStringArray:

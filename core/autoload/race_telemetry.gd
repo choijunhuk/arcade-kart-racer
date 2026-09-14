@@ -1,12 +1,15 @@
 class_name RaceTelemetryService
 extends Node
 
-## Phase 18d-3 glue: turns real EventBus signals from local human karts into a
-## `RaceTelemetryLog` and writes it to disk on RESULTS. Gating, hit-recovery
-## math, and identity checks are pure static functions below so they are
-## testable without a scene tree; only signal wiring and file I/O are
-## stateful here. `enabled_override`/`telemetry_directory`/`track_id_override`
-## let tests drive a real instance without touching `user://`.
+## Phase 18d-3 glue: turns real EventBus signals from local human karts into
+## one `RaceTelemetryLog` per recorded local kart and writes one file per
+## kart to disk on RESULTS (18d-3 review fix #1: split-screen must not merge
+## every local kart's events into a single shared bucket). Gating,
+## hit-recovery math, and identity checks are pure static functions below so
+## they are testable without a scene tree; only signal wiring and file I/O
+## are stateful here. `enabled_override`/`telemetry_directory`/
+## `track_id_override` let tests drive a real instance without touching
+## `user://`.
 
 const DEFAULT_DIRECTORY: String = "user://telemetry"
 const MAX_FILES: int = 20
@@ -19,8 +22,12 @@ var enabled_override: Variant = null
 ## Test-only escape hatch: non-null replaces GameState.selected_track_id in the filename.
 var track_id_override: Variant = null
 
-var _log: RaceTelemetryLog
+var _recording: bool = false
 var _elapsed_seconds: float = 0.0
+## kart instance id -> RaceTelemetryLog, one per recorded local kart.
+var _logs: Dictionary = {}
+## kart instance id -> stable 0-based player index (join order for this race).
+var _player_index: Dictionary = {}
 var _known_karts: Dictionary = {}
 var _last_speed: Dictionary = {}
 var _pending_recovery: Dictionary = {}
@@ -40,7 +47,7 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if _log == null:
+	if not _recording:
 		return
 	_elapsed_seconds += delta
 	for id: Variant in _known_karts:
@@ -51,48 +58,49 @@ func _physics_process(delta: float) -> void:
 
 
 func _on_race_started() -> void:
-	_log = RaceTelemetryLog.new() if _should_record() else null
-	_elapsed_seconds = 0.0
-	_known_karts.clear()
-	_last_speed.clear()
-	_pending_recovery.clear()
+	_reset_state(_should_record())
 
 
 func _on_race_state_changed(_old_state: int, new_state: int) -> void:
-	if new_state != RaceState.RESULTS or _log == null:
+	if new_state != RaceState.RESULTS or not _recording:
 		return
-	_write_log()
-	_log = null
+	_write_logs()
+	_reset_state(false)
 
 
 func _on_drift_started(kart: Node, _direction: int) -> void:
-	if _track(kart):
-		_log.drift_started()
+	var log: RaceTelemetryLog = _track(kart)
+	if log != null:
+		log.drift_started()
 
 
 func _on_drift_ended(kart: Node, released_tier: int) -> void:
-	if _track(kart):
-		_log.drift_ended(released_tier)
+	var log: RaceTelemetryLog = _track(kart)
+	if log != null:
+		log.drift_ended(released_tier)
 
 
 func _on_boost_started(kart: Node, _spec: Resource) -> void:
-	if not _track(kart):
+	var log: RaceTelemetryLog = _track(kart)
+	if log == null:
 		return
-	_log.boost_started((kart as KartController).boost_controller.get_source())
+	log.boost_started((kart as KartController).boost_controller.get_source())
 	_finish_recovery(kart, _elapsed_seconds)
 
 
 func _on_item_used(kart: Node, _item_id: StringName) -> void:
-	if _track(kart):
-		_log.item_used()
+	var log: RaceTelemetryLog = _track(kart)
+	if log != null:
+		log.item_used()
 
 
 func _on_kart_hit(kart: Node, _hit_type: int) -> void:
-	if not _track(kart):
+	var log: RaceTelemetryLog = _track(kart)
+	if log == null:
 		return
 	_finish_recovery(kart, _elapsed_seconds)
 	var id: int = kart.get_instance_id()
-	_log.hit(_elapsed_seconds)
+	log.hit(_elapsed_seconds)
 	_pending_recovery[id] = {
 		"hit_time": _elapsed_seconds,
 		"pre_hit_speed": float(_last_speed.get(id, (kart as KartController).get_speed())),
@@ -100,30 +108,37 @@ func _on_kart_hit(kart: Node, _hit_type: int) -> void:
 
 
 func _on_wall_impacted(kart: Node) -> void:
-	if _track(kart):
-		_log.wall_impact()
+	var log: RaceTelemetryLog = _track(kart)
+	if log != null:
+		log.wall_impact()
 
 
 func _on_kart_respawned(kart: Node) -> void:
-	if _track(kart):
-		_log.respawn()
+	var log: RaceTelemetryLog = _track(kart)
+	if log != null:
+		log.respawn()
 
 
 func _on_lap_completed(kart: Node, lap: int, lap_time_seconds: float) -> void:
-	if _track(kart):
-		_log.lap_completed(lap, lap_time_seconds)
+	var log: RaceTelemetryLog = _track(kart)
+	if log != null:
+		log.lap_completed(lap, lap_time_seconds)
 
 
-## Returns whether `kart` is a local human kart and, while recording, remembers
-## it for per-frame speed sampling (hit recovery needs a pre-hit baseline).
-func _track(kart: Node) -> bool:
-	if _log == null or not is_local_human_kart(kart):
-		return false
+## Returns whether `kart` is a local human kart currently being recorded and,
+## the first time each kart is seen, opens its own `RaceTelemetryLog` and
+## assigns it a stable 0-based player index (join order for this race) so
+## split-screen karts never share a bucket (18d-3 review fix #1).
+func _track(kart: Node) -> RaceTelemetryLog:
+	if not _recording or not is_local_human_kart(kart):
+		return null
 	var id: int = kart.get_instance_id()
-	if not _known_karts.has(id):
+	if not _logs.has(id):
 		_known_karts[id] = kart
 		_last_speed[id] = (kart as KartController).get_speed()
-	return true
+		_player_index[id] = _logs.size()
+		_logs[id] = RaceTelemetryLog.new()
+	return _logs[id]
 
 
 func _update_pending_recoveries() -> void:
@@ -136,23 +151,60 @@ func _update_pending_recoveries() -> void:
 		var elapsed_since_hit: float = _elapsed_seconds - float(pending["hit_time"])
 		var current_speed: float = float(_last_speed.get(id, (kart as KartController).get_speed()))
 		if is_recovered(current_speed, float(pending["pre_hit_speed"]), elapsed_since_hit):
-			_log.recovered(minf(_elapsed_seconds, float(pending["hit_time"]) + HIT_RECOVERY_CAP_SECONDS))
+			var log: RaceTelemetryLog = _logs.get(id)
+			if log != null:
+				log.recovered(minf(_elapsed_seconds, float(pending["hit_time"]) + HIT_RECOVERY_CAP_SECONDS))
 			_pending_recovery.erase(id)
 
 
 func _finish_recovery(kart: Node, t: float) -> void:
 	var id: int = kart.get_instance_id()
 	if _pending_recovery.has(id):
-		_log.recovered(t)
+		var log: RaceTelemetryLog = _logs.get(id)
+		if log != null:
+			log.recovered(t)
 		_pending_recovery.erase(id)
 
 
-func _write_log() -> void:
+func _write_logs() -> void:
+	if _logs.is_empty():
+		return
 	var track_id: String = String(track_id_override) if track_id_override != null else String(GameState.selected_track_id)
 	if track_id.is_empty():
 		track_id = "unknown"
 	var stamp: String = Time.get_datetime_string_from_system(false, true).replace(":", "").replace("-", "").replace("T", "-")
-	write_and_rotate(telemetry_directory, "%s-%s.json" % [stamp, track_id], _log.to_dict(), MAX_FILES)
+	for id: int in _logs:
+		var player_index: int = int(_player_index.get(id, 0))
+		var data: Dictionary = _logs[id].to_dict()
+		data["player_index"] = player_index
+		_add_kart_identity(data, _known_karts.get(id))
+		var filename: String = "%s-%s-p%d.json" % [stamp, track_id, player_index + 1]
+		write_and_rotate(telemetry_directory, filename, data, MAX_FILES)
+
+
+## Adds `kart_id`/`driver_id` to `data` when cheaply available on `kart`
+## (plain property reads already on the loaded KartController; spec 18d-3
+## review fix #1's "if cheaply available").
+func _add_kart_identity(data: Dictionary, kart: Node) -> void:
+	if not is_instance_valid(kart) or not (kart is KartController):
+		return
+	var kart_controller: KartController = kart as KartController
+	var kart_data: KartData = kart_controller.get_kart_data()
+	if kart_data != null and not String(kart_data.id).is_empty():
+		data["kart_id"] = String(kart_data.id)
+	var driver_data: DriverData = kart_controller.get_driver_data()
+	if driver_data != null and not String(driver_data.id).is_empty():
+		data["driver_id"] = String(driver_data.id)
+
+
+func _reset_state(recording: bool) -> void:
+	_recording = recording
+	_elapsed_seconds = 0.0
+	_logs.clear()
+	_player_index.clear()
+	_known_karts.clear()
+	_last_speed.clear()
+	_pending_recovery.clear()
 
 
 func _should_record() -> bool:
