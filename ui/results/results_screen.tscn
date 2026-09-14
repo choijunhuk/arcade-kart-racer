@@ -100,3 +100,8 @@ text = "TRACK SELECT"
 [node name="MenuButton" type="Button" parent="Panel/VBox/Actions"]
 layout_mode = 2
 text = "MAIN MENU"
+
+[node name="BackToLobbyButton" type="Button" parent="Panel/VBox/Actions"]
+visible = false
+layout_mode = 2
+text = "BACK TO LOBBY"

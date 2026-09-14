@@ -17,6 +17,7 @@ const SECONDS_PER_MINUTE: int = 60
 @onready var _restart_button: Button = $Panel/VBox/Actions/RestartButton
 @onready var _track_select_button: Button = $Panel/VBox/Actions/TrackSelectButton
 @onready var _menu_button: Button = $Panel/VBox/Actions/MenuButton
+@onready var _back_to_lobby_button: Button = $Panel/VBox/Actions/BackToLobbyButton
 
 var _manager: RaceManager
 var _gp_label: Label
@@ -30,6 +31,7 @@ func _ready() -> void:
 	_restart_button.pressed.connect(_on_restart_pressed)
 	_track_select_button.pressed.connect(_on_track_select_pressed)
 	_menu_button.pressed.connect(_on_menu_pressed)
+	_back_to_lobby_button.pressed.connect(_on_back_to_lobby_pressed)
 	_wire_action_focus()
 	visible = false
 
@@ -51,6 +53,7 @@ func show_results(entries: Array[RaceResults.Entry], manager: RaceManager) -> vo
 		_record_badge.visible = _record_badge.visible or entry.is_new_record
 	_show_grand_prix()
 	_show_speed_class()
+	_back_to_lobby_button.visible = is_instance_valid(GameState.net_session)
 	visible = true
 	_restart_button.call_deferred("grab_focus")
 
@@ -129,12 +132,12 @@ func _show_speed_class() -> void:
 
 
 func _wire_action_focus() -> void:
-	_restart_button.focus_neighbor_left = _restart_button.get_path_to(_menu_button)
-	_restart_button.focus_neighbor_right = _restart_button.get_path_to(_track_select_button)
-	_track_select_button.focus_neighbor_left = _track_select_button.get_path_to(_restart_button)
-	_track_select_button.focus_neighbor_right = _track_select_button.get_path_to(_menu_button)
-	_menu_button.focus_neighbor_left = _menu_button.get_path_to(_track_select_button)
-	_menu_button.focus_neighbor_right = _menu_button.get_path_to(_restart_button)
+	var buttons: Array[Button] = [_restart_button, _track_select_button, _menu_button, _back_to_lobby_button]
+	for index: int in range(buttons.size()):
+		var previous: Button = buttons[(index - 1 + buttons.size()) % buttons.size()]
+		var next: Button = buttons[(index + 1) % buttons.size()]
+		buttons[index].focus_neighbor_left = buttons[index].get_path_to(previous)
+		buttons[index].focus_neighbor_right = buttons[index].get_path_to(next)
 
 
 func _on_restart_pressed() -> void:
@@ -159,6 +162,20 @@ func _on_track_select_pressed() -> void:
 func _on_menu_pressed() -> void:
 	if _manager != null:
 		_manager.back_to_menu()
+
+
+## Networked-only (spec item 3): unlike the other actions, this neither
+## closes the session nor touches the race state machine — it reopens the
+## shared online lobby scene, re-bound to the still-alive NetSession, so
+## host and clients regroup instead of the client sitting on RESULTS forever.
+func _on_back_to_lobby_pressed() -> void:
+	var session: NetSession = GameState.net_session
+	if not is_instance_valid(session):
+		return
+	visible = false
+	if session.multiplayer.is_server():
+		session.restart_to_lobby()
+	GameState.change_scene("res://ui/menus/online_lobby.tscn")
 
 
 func _show_grand_prix() -> void:
