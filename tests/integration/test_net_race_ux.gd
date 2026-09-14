@@ -229,6 +229,31 @@ func test_back_to_lobby_clears_local_race_state_for_a_non_host_peer() -> void:
 	assert_eq((lobby.get("_status") as Label).text, "Waiting for the host to reopen the lobby.")
 
 
+## Review finding 3: RESULTS' MENU button must not end the session for every
+## connected peer from a single press either — `_manager.back_to_menu()`
+## closes the session unconditionally, same as PauseMenu's LEAVE/END button,
+## so a listen host with other players still connected gets the same
+## "END SESSION" label + confirm-then-act flow tested on PauseMenu above.
+## Uses `_hosted_manager()` (not a bare `RaceManager.new()`) because
+## `back_to_menu()` calls `get_tree()`, which is null off the scene tree.
+func test_results_menu_on_a_multiplayer_host_requires_confirmation() -> void:
+	var manager: RaceManager = _hosted_manager()
+	await wait_process_frames(2)
+	var session: NetSession = GameState.net_session
+	session.players.append({"peer": 2, "driver": NetContentCatalog.default_driver_id(), "kart": NetContentCatalog.default_kart_id(), "ready": true})
+	var screen: ResultsScreen = manager.get_node("ResultsScreen") as ResultsScreen
+	screen.show_results([], manager)
+	var menu_button: Button = screen.get_node("Panel/VBox/Actions/MenuButton") as Button
+	assert_eq(menu_button.text, "END SESSION")
+	screen._on_menu_pressed() # First press: confirmation only.
+	assert_not_null(GameState.net_session, "the first press must not end the session")
+	assert_ne(menu_button.text, "END SESSION", "the button must show a confirmation prompt")
+	screen._on_menu_pressed() # Second press: actually ends it.
+	assert_null(GameState.net_session, "the second press must end the session")
+	manager.free()
+	await wait_process_frames(1)
+
+
 func test_results_hides_back_to_lobby_for_a_local_offline_race() -> void:
 	var manager: RaceManager = RaceManager.new()
 	autofree(manager)

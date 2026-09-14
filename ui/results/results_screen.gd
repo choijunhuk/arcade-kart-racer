@@ -23,6 +23,10 @@ var _manager: RaceManager
 var _gp_label: Label
 var _class_label: Label
 var _is_grand_prix: bool = false
+## True once MENU has been pressed once as a listen host with other players
+## present (mirrors PauseMenu's networked overlay): the next press actually
+## ends the session. Reset whenever results are (re)shown.
+var _pending_end_session_confirm: bool = false
 
 
 func _ready() -> void:
@@ -54,6 +58,8 @@ func show_results(entries: Array[RaceResults.Entry], manager: RaceManager) -> vo
 	_show_grand_prix()
 	_show_speed_class()
 	_back_to_lobby_button.visible = is_instance_valid(GameState.net_session)
+	_pending_end_session_confirm = false
+	_menu_button.text = "END SESSION" if _ends_session_for_everyone() else "MAIN MENU"
 	visible = true
 	_restart_button.call_deferred("grab_focus")
 
@@ -159,9 +165,25 @@ func _on_track_select_pressed() -> void:
 		_manager.back_to_track_select()
 
 
+## Reuses PauseMenu's "ends session for everyone" predicate and confirm
+## flow (review finding 3): a listen host on RESULTS with other players
+## still connected must not end everyone's session from a single press —
+## `back_to_menu()` closes the session unconditionally. Plain clients (and
+## an offline race) never satisfy the predicate, so MENU stays single-press.
 func _on_menu_pressed() -> void:
-	if _manager != null:
-		_manager.back_to_menu()
+	if _manager == null:
+		return
+	if _ends_session_for_everyone() and not _pending_end_session_confirm:
+		_pending_end_session_confirm = true
+		_menu_button.text = "CONFIRM END SESSION?"
+		return
+	_manager.back_to_menu()
+
+## Same predicate as `PauseMenu._ends_session_for_everyone()`: true only for
+## a listen host with other players still in the session.
+func _ends_session_for_everyone() -> bool:
+	var session: NetSession = GameState.net_session
+	return is_instance_valid(session) and session.multiplayer.is_server() and session.players.size() > 1
 
 
 ## Networked-only (spec item 3): unlike the other actions, this neither
