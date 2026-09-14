@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://data/schemas/track_data.gd" id="1"]
 [ext_resource type="PackedScene" path="res://track/tracks/track_02_lumen_underpass/track_02_lumen_underpass.tscn" id="2"]
-[ext_resource type="AudioStream" path="res://assets/audio/placeholder/race.wav" id="3"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/lumen_underpass.wav" id="3"]
 
 [sub_resource type="Gradient" id="Color"]
 colors = PackedColorArray(0.12, 0.14, 0.24, 1, 0.2, 0.8, 1, 1)

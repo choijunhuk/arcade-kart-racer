@@ -1,7 +1,8 @@
-[gd_resource type="Resource" script_class="TrackData" load_steps=3 format=3]
+[gd_resource type="Resource" script_class="TrackData" load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://data/schemas/track_data.gd" id="1_track_data"]
 [ext_resource type="PackedScene" path="res://track/tracks/track_01_ridgeline_circuit/track_01_ridgeline_circuit.tscn" id="2_scene"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/ridgeline_circuit.wav" id="3_bgm"]
 
 [resource]
 script = ExtResource("1_track_data")
@@ -9,4 +10,6 @@ id = &"track_01_ridgeline_circuit"
 display_name = "Ridgeline Circuit"
 scene = ExtResource("2_scene")
 laps_default = 3
+bgm = ExtResource("3_bgm")
+bgm_id = &"ridgeline_circuit"
 lap_length_hint = 1498.9

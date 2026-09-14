@@ -1,9 +1,13 @@
-[gd_resource type="Resource" script_class="SfxLibrary" load_steps=5 format=3]
+[gd_resource type="Resource" script_class="SfxLibrary" load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://data/schemas/sfx_library.gd" id="1"]
 [ext_resource type="AudioStream" path="res://assets/audio/placeholder/menu.wav" id="2"]
 [ext_resource type="AudioStream" path="res://assets/audio/placeholder/race.wav" id="3"]
 [ext_resource type="AudioStream" path="res://assets/audio/placeholder/results.wav" id="4"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/ridgeline_circuit.wav" id="5"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/lumen_underpass.wav" id="6"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/glacier_crown.wav" id="7"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/ochre_rift.wav" id="8"]
 
 [resource]
 script = ExtResource("1")
@@ -11,17 +15,26 @@ streams = Dictionary[StringName, AudioStream]({
 &"menu": ExtResource("2"),
 &"race": ExtResource("3"),
 &"results": ExtResource("4"),
-&"lumen_underpass": ExtResource("3"),
-&"glacier_crown": ExtResource("3"),
-&"ochre_rift": ExtResource("3")
+&"ridgeline_circuit": ExtResource("5"),
+&"lumen_underpass": ExtResource("6"),
+&"glacier_crown": ExtResource("7"),
+&"ochre_rift": ExtResource("8")
 })
 volume_db = Dictionary[StringName, float]({
 &"menu": -6.0,
 &"race": -6.0,
-&"results": -6.0
+&"results": -6.0,
+&"ridgeline_circuit": -6.0,
+&"lumen_underpass": -6.0,
+&"glacier_crown": -6.0,
+&"ochre_rift": -6.0
 })
 pitch_variance = Dictionary[StringName, float]({
 &"menu": 0.0,
 &"race": 0.0,
-&"results": 0.0
+&"results": 0.0,
+&"ridgeline_circuit": 0.0,
+&"lumen_underpass": 0.0,
+&"glacier_crown": 0.0,
+&"ochre_rift": 0.0
 })

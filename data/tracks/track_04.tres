@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://data/schemas/track_data.gd" id="1"]
 [ext_resource type="PackedScene" path="res://track/tracks/track_04_ochre_rift/track_04_ochre_rift.tscn" id="2"]
-[ext_resource type="AudioStream" path="res://assets/audio/placeholder/race.wav" id="3"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/ochre_rift.wav" id="3"]
 
 [sub_resource type="Gradient" id="Color"]
 colors = PackedColorArray(0.62, 0.38, 0.18, 1, 0.8, 0.42, 0.16, 1)

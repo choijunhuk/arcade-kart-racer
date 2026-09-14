@@ -27,7 +27,6 @@ const ITEM_IDS: Array[StringName] = [
 const AUDIO_ALIASES: Dictionary[StringName, StringName] = {
 	&"triple_dart_fire": &"rocket_dart_fire", &"triple_dart_hit": &"rocket_dart_hit",
 	&"phantom_decoy_fire": &"spike_mine_fire", &"phantom_decoy_hit": &"spike_mine_hit",
-	&"lumen_underpass": &"race", &"glacier_crown": &"race", &"ochre_rift": &"race",
 }
 const TONES: Dictionary[StringName, float] = {
 	&"drift_tier_1": 660.0, &"drift_tier_2": 880.0, &"drift_tier_3": 1100.0,
@@ -44,6 +43,20 @@ const BGM_TEMPOS: Dictionary[StringName, float] = {
 	&"menu": 108.0, &"race": 144.0, &"results": 120.0,
 }
 const BGM_TRANSPOSE: Dictionary[StringName, int] = {&"menu": 0, &"race": 7, &"results": 12}
+## Per-track theme loops (Phase 18c): distinct 32-48s bass+lead compositions
+## replacing the shared "race" loop so each track has its own musical identity.
+const TRACK_THEMES: Dictionary[StringName, Dictionary] = {
+	&"ridgeline_circuit": {"tempo": 150.0, "bars": 20, "roots": [50, 55, 57, 53], "register": 0, "style": &"pluck"},
+	&"lumen_underpass": {"tempo": 96.0, "bars": 18, "roots": [46, 41, 44, 49], "register": -12, "style": &"pad"},
+	&"glacier_crown": {"tempo": 132.0, "bars": 22, "roots": [59, 62, 57, 55], "register": 12, "style": &"arpeggio"},
+	&"ochre_rift": {"tempo": 120.0, "bars": 20, "roots": [45, 50, 52, 48], "register": -5, "style": &"percussive"},
+}
+const PAD_ATTACK_RATIO: float = 0.6
+const PAD_DETUNE_RATIO: float = 1.01
+const PAD_DETUNE_GAIN: float = 0.35
+const COLD_ENVELOPE_POWER: float = 3.0
+const COLD_OVERTONE_GAIN: float = 0.3
+const PERCUSSIVE_BASS_DECAY: float = 9.0
 const ITEM_BASE_HZ: float = 240.0
 const ITEM_STEP_HZ: float = 95.0
 const HIT_PITCH_RATIO: float = 0.65
@@ -96,11 +109,14 @@ func _initialize() -> void:
 		_write_tone(StringName("%s_hit" % ITEM_IDS[index]), frequency * HIT_PITCH_RATIO)
 	for id: StringName in BGM_TEMPOS:
 		_write_bgm(id, BGM_TEMPOS[id])
+	for id: StringName in TRACK_THEMES:
+		_write_track_theme(id, TRACK_THEMES[id])
 	_write_library("sfx_default", _sfx_ids)
 	var bgm_ids: Array[StringName] = []
 	bgm_ids.assign(BGM_TEMPOS.keys())
+	bgm_ids.append_array(TRACK_THEMES.keys())
 	_write_library("bgm_default", bgm_ids)
-	print("Generated %d SFX and %d eight-bar BGM loops (mono 22050 Hz PCM16)." % [_sfx_ids.size(), bgm_ids.size()])
+	print("Generated %d SFX and %d BGM loops (mono 22050 Hz PCM16)." % [_sfx_ids.size(), bgm_ids.size()])
 	quit(1 if _failed else 0)
 
 
@@ -178,6 +194,70 @@ func _write_bgm(id: StringName, tempo: float) -> void:
 		var edge: float = minf(1.0, minf(time, float(count - 1 - index) / SAMPLE_RATE) / EDGE_SECONDS)
 		samples[index] = (sin(TAU * frequency * note_time) * envelope * ARPEGGIO_GAIN + sin(TAU * bass_hz * beat_time) * bass_envelope * BASS_GAIN) * edge
 	_save_wav(id, samples, true)
+
+
+## Renders a track theme's bass+lead loop from its tuning dictionary; pure
+## (no file I/O) so both generation and tests can call it deterministically.
+func _render_track_theme(theme: Dictionary) -> PackedFloat32Array:
+	var tempo: float = theme["tempo"]
+	var bars: int = theme["bars"]
+	var roots: Array = theme["roots"]
+	var register: int = theme["register"]
+	var style: StringName = theme["style"]
+	var beat_seconds: float = SECONDS_PER_MINUTE / tempo
+	var note_seconds: float = beat_seconds / NOTES_PER_BEAT
+	var count: int = int(round(bars * BEATS_PER_BAR * beat_seconds * SAMPLE_RATE))
+	var samples: PackedFloat32Array = PackedFloat32Array()
+	samples.resize(count)
+	for index: int in range(count):
+		var time: float = float(index) / SAMPLE_RATE
+		var note: int = int(time / note_seconds)
+		var bar: int = note / (BEATS_PER_BAR * NOTES_PER_BEAT)
+		var root_note: int = int(roots[bar % roots.size()]) + register
+		var note_time: float = fmod(time, note_seconds)
+		var beat_time: float = fmod(time, beat_seconds)
+		var bass_hz: float = A4_HZ * pow(2.0, float(root_note - SEMITONES - A4_MIDI) / SEMITONES)
+		var edge: float = minf(1.0, minf(time, float(count - 1 - index) / SAMPLE_RATE) / EDGE_SECONDS)
+		var lead: float = _track_lead_sample(style, root_note, note, note_time, note_seconds)
+		var bass: float = _track_bass_sample(style, bass_hz, beat_time, beat_seconds)
+		samples[index] = (lead * ARPEGGIO_GAIN + bass * BASS_GAIN) * edge
+	return samples
+
+
+## Lead layer, shaped per theme: plucky arpeggio (default), sustained
+## detuned pad (Lumen), thin bell-like overtone (Glacier), matches the
+## default pluck for Ochre (its identity comes from the percussive bass).
+func _track_lead_sample(style: StringName, root_note: int, note: int, note_time: float, note_seconds: float) -> float:
+	var semitone: int = ARPEGGIO[note % ARPEGGIO.size()]
+	var frequency: float = A4_HZ * pow(2.0, float(root_note + semitone - A4_MIDI) / SEMITONES)
+	match style:
+		&"pad":
+			var envelope: float = minf(1.0, note_time / (note_seconds * PAD_ATTACK_RATIO))
+			var detune: float = sin(TAU * frequency * PAD_DETUNE_RATIO * note_time) * PAD_DETUNE_GAIN
+			return (sin(TAU * frequency * note_time) + detune) * envelope
+		&"arpeggio":
+			var envelope: float = minf(1.0, note_time / EDGE_SECONDS) * pow(1.0 - note_time / note_seconds, COLD_ENVELOPE_POWER)
+			var overtone: float = sin(TAU * frequency * 2.0 * note_time) * COLD_OVERTONE_GAIN
+			return (sin(TAU * frequency * note_time) + overtone) * envelope
+		_:
+			var envelope: float = minf(1.0, note_time / EDGE_SECONDS) * pow(1.0 - note_time / note_seconds, ENVELOPE_POWER)
+			return sin(TAU * frequency * note_time) * envelope
+
+
+## Bass layer, shaped per theme: smooth beat pulse (default), sustained pad
+## bass (Lumen), sharp decaying thump for the Ochre desert-percussion feel.
+func _track_bass_sample(style: StringName, bass_hz: float, beat_time: float, beat_seconds: float) -> float:
+	match style:
+		&"percussive":
+			return sin(TAU * bass_hz * beat_time) * exp(-beat_time * PERCUSSIVE_BASS_DECAY)
+		&"pad":
+			return sin(TAU * bass_hz * beat_time)
+		_:
+			return sin(TAU * bass_hz * beat_time) * sin(PI * beat_time / beat_seconds)
+
+
+func _write_track_theme(id: StringName, theme: Dictionary) -> void:
+	_save_wav(id, _render_track_theme(theme), true)
 
 
 func _save_wav(id: StringName, samples: PackedFloat32Array, looped: bool) -> void:
