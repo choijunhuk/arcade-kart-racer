@@ -24,6 +24,9 @@ var grand_prix_state: GrandPrix
 ## Set by automated tools (snapshot/perf probes): disables focus-loss pause and
 ## other human-only conveniences so unattended windows keep running.
 var automation_mode: bool = false
+## True while a TutorialController-driven onboarding race is active; gates the
+## first-race contextual hints so they never fire during the tutorial itself.
+var tutorial_active: bool = false
 var is_networked: bool = false
 var net_session: NetSession
 var network_message: String = ""
@@ -49,6 +52,7 @@ func reset_session() -> void:
 	selected_items_enabled = true
 	grand_prix_state = null
 	is_networked = false
+	tutorial_active = false
 
 
 ## Announces a validated scene transition request for the bootstrap coordinator.

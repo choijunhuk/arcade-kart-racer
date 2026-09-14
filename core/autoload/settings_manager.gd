@@ -77,6 +77,11 @@ func default_settings() -> Dictionary:
 			"speedometer": true,
 			"camera_preset": CameraPreset.ARCADE_ID,
 		},
+		"tutorial": {
+			"tutorial_done": false,
+			"hints_enabled": true,
+			"hints_seen": {},
+		},
 	}
 
 
@@ -187,7 +192,7 @@ func apply_section(section: StringName) -> void:
 			_apply_video()
 		&"controls":
 			_apply_controls()
-		&"accessibility", &"gameplay":
+		&"accessibility", &"gameplay", &"tutorial":
 			pass
 		_:
 			push_warning("Unknown settings section: %s" % String(section))

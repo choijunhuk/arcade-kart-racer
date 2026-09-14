@@ -11,6 +11,9 @@ const KART_DIRECTORY: String = "res://data/karts"
 @onready var _settings_button: Button = $Panel/VBox/SettingsButton
 @onready var _quit_button: Button = $Panel/VBox/QuitButton
 @onready var _orbit_kart: KartPreview = $OrbitKart
+@onready var _tutorial_prompt: PanelContainer = $TutorialPrompt
+@onready var _start_tutorial_button: Button = $TutorialPrompt/VBox/StartTutorialButton
+@onready var _skip_tutorial_button: Button = $TutorialPrompt/VBox/SkipTutorialButton
 
 
 func _ready() -> void:
@@ -25,6 +28,36 @@ func _ready() -> void:
 	($Panel/VBox/NetworkMessage as Label).text = GameState.network_message
 	GameState.network_message = ""
 	_quit_button.pressed.connect(_quit_game)
+	wire_vertical_focus([_play_button, _time_trial_button, _online_button, _settings_button, _quit_button])
+	focus_initial(_play_button)
+	_start_tutorial_button.pressed.connect(_on_start_tutorial_pressed)
+	_skip_tutorial_button.pressed.connect(_on_skip_tutorial_pressed)
+	_maybe_show_first_run_prompt()
+
+
+## Shows the first-run tutorial offer; never seen by automated/headless runs
+## (GUT tests, snapshot/perf probes, the sim harness) or once already handled.
+func _maybe_show_first_run_prompt() -> void:
+	if DisplayServer.get_name() == "headless" or GameState.automation_mode:
+		return
+	if bool(SettingsManager.get_setting(&"tutorial", &"tutorial_done", false)):
+		return
+	_tutorial_prompt.visible = true
+	for button: Button in [_play_button, _time_trial_button, _online_button, _settings_button, _quit_button]:
+		button.disabled = true
+	wire_vertical_focus([_start_tutorial_button, _skip_tutorial_button])
+	focus_initial(_start_tutorial_button)
+
+
+func _on_start_tutorial_pressed() -> void:
+	TutorialLauncher.start(self)
+
+
+func _on_skip_tutorial_pressed() -> void:
+	SettingsManager.update_setting(&"tutorial", &"tutorial_done", true)
+	_tutorial_prompt.visible = false
+	for button: Button in [_play_button, _time_trial_button, _online_button, _settings_button, _quit_button]:
+		button.disabled = false
 	wire_vertical_focus([_play_button, _time_trial_button, _online_button, _settings_button, _quit_button])
 	focus_initial(_play_button)
 

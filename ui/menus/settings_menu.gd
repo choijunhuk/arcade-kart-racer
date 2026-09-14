@@ -31,6 +31,7 @@ const ACTION_LABELS: Dictionary = {
 @onready var _tabs: TabContainer = $Panel/VBox/Tabs
 @onready var _remap_rows_root: VBoxContainer = $Panel/VBox/Tabs/Controls/Scroll/Rows/RemapRows
 @onready var _back_button: Button = $Panel/VBox/BackButton
+@onready var _replay_tutorial_button: Button = $Panel/VBox/Tabs/Gameplay/ReplayTutorialButton
 
 var _remap_rows: Array[RemapRow] = []
 var _embedded: bool = false
@@ -60,10 +61,13 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 ## Opens this shared screen inside PauseMenu without unpausing the race tree.
+## Hides REPLAY TUTORIAL: mid-race it would abandon the active race (and, if
+## networked, the live GameState.net_session) without RaceManager's teardown.
 func open_embedded(closed_callback: Callable) -> void:
 	_embedded = true
 	_closed_callback = closed_callback
 	visible = true
+	_replay_tutorial_button.visible = false
 	_sync_values()
 	focus_initial(_section_picker)
 
@@ -113,9 +117,11 @@ func _connect_controls() -> void:
 	_connect_toggle($Panel/VBox/Tabs/Accessibility/TierIconsToggle, &"accessibility", &"drift_tier_icons")
 	_connect_toggle($Panel/VBox/Tabs/Accessibility/MultiplayerMinimapToggle, &"accessibility", &"multiplayer_minimap_all")
 	_connect_toggle($Panel/VBox/Tabs/Gameplay/SpeedometerToggle, &"gameplay", &"speedometer")
+	_connect_toggle($Panel/VBox/Tabs/Gameplay/HintsToggle, &"tutorial", &"hints_enabled")
 	($Panel/VBox/Tabs/Video/ResolutionOption as OptionButton).item_selected.connect(_on_resolution_selected)
 	($Panel/VBox/Tabs/Video/ParticleQualityOption as OptionButton).item_selected.connect(_on_particle_quality_selected)
 	($Panel/VBox/Tabs/Gameplay/CameraPresetOption as OptionButton).item_selected.connect(_on_camera_preset_selected)
+	($Panel/VBox/Tabs/Gameplay/ReplayTutorialButton as Button).pressed.connect(_on_replay_tutorial_pressed)
 
 
 func _connect_slider(slider: HSlider, section: StringName, key: StringName) -> void:
@@ -145,6 +151,7 @@ func _sync_values() -> void:
 	_set_toggle($Panel/VBox/Tabs/Accessibility/TierIconsToggle, &"accessibility", &"drift_tier_icons", true)
 	_set_toggle($Panel/VBox/Tabs/Accessibility/MultiplayerMinimapToggle, &"accessibility", &"multiplayer_minimap_all", false)
 	_set_toggle($Panel/VBox/Tabs/Gameplay/SpeedometerToggle, &"gameplay", &"speedometer", true)
+	_set_toggle($Panel/VBox/Tabs/Gameplay/HintsToggle, &"tutorial", &"hints_enabled", true)
 	var stored_preset: String = CameraPreset.resolve_id(String(SettingsManager.get_setting(&"gameplay", &"camera_preset", CameraPreset.ARCADE_ID)))
 	($Panel/VBox/Tabs/Gameplay/CameraPresetOption as OptionButton).select(CameraPreset.VALID_IDS.find(stored_preset))
 	var resolution_value: Variant = SettingsManager.get_setting(&"video", &"resolution", Vector2i(1600, 900))
@@ -205,6 +212,14 @@ func _on_camera_preset_selected(index: int) -> void:
 	if index >= 0 and index < CameraPreset.VALID_IDS.size():
 		preset_id = CameraPreset.VALID_IDS[index]
 	SettingsManager.update_setting(&"gameplay", &"camera_preset", preset_id)
+
+
+## Replays the onboarding tutorial regardless of `tutorial_done`; always
+## navigates away (never embeds), matching the main menu's tutorial launch.
+func _on_replay_tutorial_pressed() -> void:
+	_embedded = false
+	get_tree().paused = false
+	TutorialLauncher.start(self)
 
 
 func _on_remap_requested(action: StringName, event: InputEvent) -> void:
