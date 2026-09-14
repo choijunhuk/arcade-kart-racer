@@ -183,7 +183,12 @@ func _start_upnp(port: int) -> void:
 	_copy_button.disabled = true
 	_upnp_status.text = "Mapping port via UPnP…"
 	_upnp = NetUpnp.new()
-	add_child(_upnp)
+	# Owned by the persistent GameState, not this lobby: START frees the lobby
+	# through the race scene change while discovery can still be running
+	# (measured ~11 s with no IGD), and freeing NetUpnp with the lobby joined
+	# that worker on the main thread, starving ENet until the joined peer
+	# timed the host out. BACK still releases it explicitly in go_back().
+	GameState.add_child(_upnp)
 	_upnp.mapping_finished.connect(_on_upnp_finished.bind(port))
 	_upnp.map_port(port)
 
