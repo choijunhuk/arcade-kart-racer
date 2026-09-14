@@ -43,6 +43,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not _player_device_ids.has(PlayerInputProvider.DEVICE_ANY) and not _player_device_ids.has(device_id):
 		return
 	if GameState.is_networked:
+		if not _network_paused and not _can_open_network_pause():
+			return
 		_toggle_network_pause(device_id)
 		get_viewport().set_input_as_handled()
 		return
@@ -67,6 +69,16 @@ func _toggle_network_pause(device_id: int) -> void:
 	else:
 		_pause_owner_device_id = device_id
 		_show_network_pause()
+
+
+## Review finding 4: only opens the overlay in the same states the offline
+## path's `RaceManager.pause_race()` guard allows, so it can no longer stack
+## over RESULTS (including over BACK TO LOBBY) or any other state pause
+## makes no sense in. Only gates opening — RESUME still works regardless of
+## state, since the overlay itself never changes `_manager`'s state machine.
+func _can_open_network_pause() -> bool:
+	var state: int = _manager.get_state()
+	return state == RaceState.COUNTDOWN or state == RaceState.RACING
 
 
 func _show_network_pause() -> void:

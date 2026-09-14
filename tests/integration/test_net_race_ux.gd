@@ -79,6 +79,30 @@ func test_networked_pause_toggles_overlay_without_pausing_tree_or_race_state() -
 	assert_false(pause_menu.visible)
 
 
+## Review finding 4: `_unhandled_input` must gate opening the networked
+## overlay to COUNTDOWN/RACING (same states the offline path's
+## `RaceManager.pause_race()` guard allows), so it can no longer stack over
+## RESULTS (or any other state) — only over the actual `_toggle_network_pause`
+## call tested above, which the production code still reaches unconditionally
+## once the gate passes.
+func test_networked_pause_does_not_open_outside_countdown_or_racing() -> void:
+	var manager: RaceManager = _hosted_manager()
+	await wait_process_frames(2)
+	var pause_menu: PauseMenu = manager.get_node("PauseMenu") as PauseMenu
+	var pause_event: InputEventAction = InputEventAction.new()
+	pause_event.device = PlayerSlot.KEYBOARD_DEVICE_ID
+	pause_event.action = &"pause"
+	pause_event.pressed = true
+	manager._force_state(RaceState.RESULTS)
+	pause_menu._unhandled_input(pause_event)
+	assert_false(bool(pause_menu.get("_network_paused")), "must not open over RESULTS")
+	assert_false(pause_menu.visible)
+	manager._force_state(RaceState.COUNTDOWN)
+	pause_menu._unhandled_input(pause_event)
+	assert_true(bool(pause_menu.get("_network_paused")), "must still open during COUNTDOWN")
+	assert_true(pause_menu.visible)
+
+
 func test_leave_race_closes_the_session_and_requests_the_main_menu() -> void:
 	var manager: RaceManager = _hosted_manager()
 	await wait_process_frames(2)
