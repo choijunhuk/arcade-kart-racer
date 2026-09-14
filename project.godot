@@ -19,6 +19,7 @@ SaveManager="*res://core/autoload/save_manager.gd"
 AudioManager="*res://core/autoload/audio_manager.gd"
 FirstRaceHints="*res://core/autoload/first_race_hints.gd"
 DebugOverlay="*res://core/autoload/debug_overlay.tscn"
+RaceTelemetry="*res://core/autoload/race_telemetry.gd"
 
 [display]
 

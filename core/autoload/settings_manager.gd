@@ -77,6 +77,7 @@ func default_settings() -> Dictionary:
 			"fov_effect_strength": 100.0,
 			"speedometer": true,
 			"camera_preset": CameraPreset.ARCADE_ID,
+			"telemetry_enabled": true,
 		},
 		"tutorial": {
 			"tutorial_done": false,
