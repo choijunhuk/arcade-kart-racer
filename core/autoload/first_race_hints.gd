@@ -17,7 +17,9 @@ const HINT_TEXT: Dictionary = {
 
 @onready var _label: Label = _build_label()
 
-var _hide_timer: SceneTreeTimer
+## Bumped on every _display() call so a stale SceneTreeTimer from an earlier
+## hint can't hide a newer one that is still showing.
+var _display_generation: int = 0
 
 
 func _ready() -> void:
@@ -68,11 +70,13 @@ func _display(text: String) -> void:
 		return
 	_label.text = text
 	_label.visible = true
-	_hide_timer = get_tree().create_timer(DISPLAY_SECONDS)
-	_hide_timer.timeout.connect(_on_hide_timeout)
+	_display_generation += 1
+	get_tree().create_timer(DISPLAY_SECONDS).timeout.connect(_on_hide_timeout.bind(_display_generation))
 
 
-func _on_hide_timeout() -> void:
+func _on_hide_timeout(generation: int) -> void:
+	if generation != _display_generation:
+		return # A newer hint is already showing; let its own timer hide it.
 	if is_instance_valid(_label):
 		_label.visible = false
 
