@@ -1,6 +1,15 @@
-[gd_resource type="Resource" script_class="DriverData" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="DriverData" load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://data/schemas/driver_data.gd" id="1_driver"]
+[ext_resource type="Script" path="res://data/schemas/ai_personality.gd" id="2_personality"]
+
+[sub_resource type="Resource" id="Resource_aurora_vale_personality"]
+script = ExtResource("2_personality")
+aggression = 0.55
+defense = 0.55
+overtake_boldness = 0.6
+drift_ambition = 0.5
+line_discipline = 0.55
 
 [resource]
 script = ExtResource("1_driver")
@@ -9,3 +18,4 @@ display_name = "Aurora Vale"
 driver_color = Color(0.18, 0.78, 1, 1)
 stat_mods = {&"max_speed": 0.03, &"handling": -0.03}
 voice_set = &"aurora"
+ai_personality = SubResource("Resource_aurora_vale_personality")

@@ -1,6 +1,15 @@
-[gd_resource type="Resource" script_class="DriverData" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="DriverData" load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://data/schemas/driver_data.gd" id="1_driver"]
+[ext_resource type="Script" path="res://data/schemas/ai_personality.gd" id="2_personality"]
+
+[sub_resource type="Resource" id="Resource_orin_gale_personality"]
+script = ExtResource("2_personality")
+aggression = 0.4
+defense = 0.45
+overtake_boldness = 0.55
+drift_ambition = 0.85
+line_discipline = 0.9
 
 [resource]
 script = ExtResource("1_driver")
@@ -9,3 +18,4 @@ display_name = "Orin Gale"
 driver_color = Color(0.12, 0.88, 0.72, 1)
 stat_mods = {&"drift_factor": 0.03, &"weight": -0.03}
 voice_set = &"orin"
+ai_personality = SubResource("Resource_orin_gale_personality")
