@@ -1,10 +1,6 @@
 class_name RaceManager
 extends Node3D
 const KART_SCENE: PackedScene = preload("res://kart/kart.tscn")
-const DEFAULT_TRACK: TrackData = preload("res://data/tracks/track_01.tres")
-const DEFAULT_KART: KartData = preload("res://data/karts/medium.tres")
-const DEFAULT_LAPS: int = 3
-const DEFAULT_KART_COUNT: int = 8
 const MAX_KART_COUNT: int = 12
 const FINISHED_SPEED_RATIO: float = 0.5
 const LEGAL_TRANSITIONS: Dictionary = {
@@ -60,7 +56,7 @@ func _ready() -> void:
 	if _config == null:
 		_config = GameState.pending_race_config
 	if _config == null:
-		_config = _make_default_config()
+		_config = RaceConfigBuilder.build_default()
 	_begin_loading(false)
 	if GameState.net_session != null:
 		network = NetRace.new()
@@ -84,6 +80,18 @@ func get_karts() -> Array[KartController]:
 	return _karts.duplicate()
 func get_human_karts() -> Array[KartController]:
 	return _player_karts.duplicate()
+## Local subset of get_human_karts() (audit finding 3): offline every human
+## kart is local; online only this process's own roster-slot kart is — every
+## other human kart is a remote player. Used wherever "local" used to mean
+## "any PlayerInputProvider kart" (telemetry roster, first-race hints).
+func get_local_human_karts() -> Array[KartController]:
+	if GameState.net_session == null:
+		return _player_karts.duplicate()
+	var slot: int = GameState.net_session.local_slot()
+	var result: Array[KartController] = []
+	if slot >= 0 and slot < _karts.size():
+		result.append(_karts[slot])
+	return result
 func get_results() -> Array[RaceResults.Entry]:
 	return _final_entries.duplicate()
 func restart() -> void:
@@ -140,9 +148,7 @@ func _begin_loading(is_restart: bool) -> void:
 	if not network_replica:
 		_register_track_elements()
 	_race_results.setup_players(_config.track.id, _karts, _player_karts)
-	var local_players: Array[KartController] = _player_karts
-	if GameState.net_session != null and GameState.net_session.local_slot() >= 0:
-		local_players = [_karts[GameState.net_session.local_slot()]]
+	var local_players: Array[KartController] = get_local_human_karts()
 	_audio.configure(local_players[0] if not local_players.is_empty() else null, _config.laps, _config.track.bgm_id)
 	_countdown.setup(tuning, _karts)
 	var primary_hud: RaceHud = RacePresentation.configure(
@@ -362,13 +368,6 @@ func _clear_runtime() -> void:
 	if is_instance_valid(_track):
 		_track.free()
 	_track = null
-func _make_default_config() -> RaceConfig:
-	var config: RaceConfig = RaceConfig.new()
-	config.track = DEFAULT_TRACK
-	config.laps = DEFAULT_LAPS
-	config.kart_count = DEFAULT_KART_COUNT
-	config.player_kart = DEFAULT_KART
-	return config
 ## Updates a replica state without enabling authoritative systems.
 func apply_network_state(value: int) -> void:
 	if not network_replica or value == RaceState.RESULTS or _state == RaceState.RESULTS:

@@ -21,6 +21,11 @@ const HINT_TEXT: Dictionary = {
 ## hint can't hide a newer one that is still showing.
 var _display_generation: int = 0
 
+## Test-only escape hatch: non-null Array replaces the RaceManager-derived
+## local-human roster used by `_is_local()`'s network locality check (mirrors
+## `RaceTelemetryService.roster_override`).
+var local_karts_override: Variant = null
+
 
 func _ready() -> void:
 	EventBus.race_started.connect(_on_race_started)
@@ -54,15 +59,33 @@ func _maybe_show(hint: FirstRaceHintsState.Hint, kart: Node) -> void:
 
 
 ## Excludes automation, the tutorial itself, and every headless/CLI run
-## (GUT tests, snapshot/perf probes, the sim harness) from ever seeing a hint.
+## (GUT tests, snapshot/perf probes, the sim harness) from ever seeing a hint,
+## and (audit finding 3) a remote networked player's actions from ever
+## triggering a hint on this machine.
 func _eligible(kart: Node) -> bool:
-	return is_eligible(
+	if not is_eligible(
 		kart,
 		DisplayServer.get_name() == "headless",
 		GameState.automation_mode,
 		GameState.tutorial_active,
 		GameState.current_mode,
-	)
+	):
+		return false
+	return _is_local(kart)
+
+
+## `kart`'s InputProvider type alone can't tell local from remote online — a
+## remote human kart uses the same `PlayerInputProvider` this machine's own
+## kart does (see `RaceManager.get_local_human_karts()`). Offline,
+## `GameState.net_session` is null and every eligible kart is local, matching
+## prior behavior.
+func _is_local(kart: Node) -> bool:
+	if GameState.net_session == null or kart == null:
+		return true
+	if local_karts_override != null:
+		return (local_karts_override as Array).has(kart)
+	var manager: RaceManager = get_tree().current_scene as RaceManager
+	return manager == null or manager.get_local_human_karts().has(kart)
 
 
 ## Pure gate check (no autoload/DisplayServer reads) so it is testable without

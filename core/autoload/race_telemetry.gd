@@ -158,20 +158,21 @@ func _on_lap_completed(kart: Node, lap: int, lap_time_seconds: float) -> void:
 
 
 ## Returns the local human karts in stable race/grid join order for the
-## active race (18d-4 review fix #1): the current scene's `RaceManager`
-## (production always sets this via `GameState.change_scene` ->
+## active race (18d-4 review fix #1; audit finding 3): the current scene's
+## `RaceManager` (production always sets this via `GameState.change_scene` ->
 ## `change_scene_to_packed`, matching `race/race_manager.gd`'s own
-## `get_human_karts()` join-order roster) or `roster_override` in tests.
-## Returns an empty roster when no RaceManager is reachable (e.g. isolated
-## unit tests that drive EventBus directly), which leaves `_track()`'s
-## lazy first-signal registration as the fallback.
+## `get_local_human_karts()` — offline every human kart, online only this
+## process's own roster slot) or `roster_override` in tests. Returns an
+## empty roster when no RaceManager is reachable (e.g. isolated unit tests
+## that drive EventBus directly), which leaves `_track()`'s lazy
+## first-signal registration as the fallback.
 func _resolve_roster() -> Array:
 	if roster_override != null:
 		return roster_override as Array
 	var manager: RaceManager = get_tree().current_scene as RaceManager
 	if manager == null:
 		return []
-	return manager.get_human_karts()
+	return manager.get_local_human_karts()
 
 
 ## Eagerly opens a log (and reserves its stable player_index) for every
@@ -208,10 +209,24 @@ func _register_kart(kart: Node) -> void:
 ## `_register_kart()` (fallback path for karts not covered by
 ## `_prime_roster()`, e.g. no RaceManager reachable).
 func _track(kart: Node) -> RaceTelemetryLog:
-	if not _recording or not is_local_human_kart(kart):
+	if not _recording or not is_local_human_kart(kart) or not _is_local(kart):
 		return null
 	_register_kart(kart)
 	return _logs[kart.get_instance_id()]
+
+
+## Excludes a remote-networked kart from this lazy fallback path (audit
+## finding 3): `_prime_roster()` already limits eager registration to
+## `_resolve_roster()`'s local-only roster, but EventBus signals fire for
+## every human kart online too — a remote kart is replicated with the same
+## `PlayerInputProvider` this machine's own kart uses, and `is_local_human_kart()`
+## only checks that InputProvider type (kept pure/testable on its own), not
+## network locality. Offline, `GameState.net_session` is null and every
+## `PlayerInputProvider` kart still counts as local, matching prior behavior.
+func _is_local(kart: Node) -> bool:
+	if GameState.net_session == null:
+		return true
+	return _resolve_roster().has(kart)
 
 
 func _update_pending_recoveries() -> void:

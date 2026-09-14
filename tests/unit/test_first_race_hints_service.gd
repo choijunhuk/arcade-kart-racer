@@ -52,6 +52,45 @@ func test_non_kart_node_is_not_eligible() -> void:
 	assert_false(FirstRaceHintsService.is_eligible(not_a_kart, false, false, false, RACE_MODE))
 
 
+## Audit finding 3: a remote player's kart action must never trigger a hint
+## on this machine — it uses the same PlayerInputProvider this machine's own
+## kart does, so only the local-roster check (`local_karts_override` here,
+## `RaceManager.get_local_human_karts()` in production) can exclude it.
+## Exercises `_is_local()` directly (not `_eligible()`) since the other
+## gates in `_eligible()`/`is_eligible()` read the real `DisplayServer`,
+## which reports "headless" for every GUT run regardless of this fix.
+func test_is_local_excludes_a_remote_kart_when_networked() -> void:
+	var session: NetSession = NetSession.new()
+	add_child_autofree(session)
+	GameState.net_session = session
+	var local_kart: KartController = KartController.new()
+	local_kart.input_provider = PlayerInputProvider.new()
+	autofree(local_kart)
+	var remote_kart: KartController = KartController.new()
+	remote_kart.input_provider = PlayerInputProvider.new()
+	autofree(remote_kart)
+	var service: FirstRaceHintsService = FirstRaceHintsService.new()
+	add_child_autofree(service)
+	await wait_process_frames(1)
+	service.local_karts_override = [local_kart]
+	assert_true(service.call("_is_local", local_kart))
+	assert_false(service.call("_is_local", remote_kart), "a remote networked kart must never count as local")
+	GameState.net_session = null
+
+
+## Offline regression: with no net_session, any kart (including null) still
+## counts as local, matching prior (pre-network-fix) behavior.
+func test_is_local_still_true_for_any_kart_when_offline() -> void:
+	GameState.net_session = null
+	var kart: KartController = KartController.new()
+	kart.input_provider = PlayerInputProvider.new()
+	autofree(kart)
+	var service: FirstRaceHintsService = FirstRaceHintsService.new()
+	add_child_autofree(service)
+	await wait_process_frames(1)
+	assert_true(service.call("_is_local", kart))
+
+
 func test_stale_hide_timer_does_not_hide_a_newer_hint() -> void:
 	var service: FirstRaceHintsService = FirstRaceHintsService.new()
 	add_child_autofree(service)

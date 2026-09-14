@@ -261,3 +261,54 @@ func test_results_hides_back_to_lobby_for_a_local_offline_race() -> void:
 	add_child_autofree(screen)
 	screen.show_results([], manager)
 	assert_false((screen.get_node("Panel/VBox/Actions/BackToLobbyButton") as Button).visible)
+
+
+## Audit finding 3: `race_manager.gd`'s own `get_local_human_karts()` must
+## filter to this process's own roster slot online (every other human kart
+## is a remote player replicated the same way an AI kart is from here),
+## while still returning every human kart offline.
+func test_get_local_human_karts_only_returns_this_processs_own_slot_online() -> void:
+	var session: NetSession = NetSession.new()
+	add_child_autofree(session)
+	session.peer = ENetMultiplayerPeer.new()
+	session.players = [
+		{"peer": 1, "driver": NetContentCatalog.default_driver_id(), "kart": NetContentCatalog.default_kart_id(), "ready": true},
+		{"peer": 99, "driver": NetContentCatalog.default_driver_id(), "kart": NetContentCatalog.default_kart_id(), "ready": true},
+	]
+	GameState.net_session = session
+	GameState.is_networked = true
+	var local_slot: PlayerSlot = PlayerSlot.new()
+	local_slot.grid_slot = 0
+	local_slot.device_id = -1
+	local_slot.driver_id = &"aurora_vale"
+	local_slot.kart_id = &"basalt_crown"
+	var remote_slot: PlayerSlot = PlayerSlot.new()
+	remote_slot.grid_slot = 1
+	remote_slot.device_id = -2
+	remote_slot.driver_id = &"aurora_vale"
+	remote_slot.kart_id = &"basalt_crown"
+	var config: RaceConfig = RaceConfigBuilder.build_local([local_slot, remote_slot], LocalLobby.DEFAULT_TRACK, LocalLobby.DEFAULT_DIFFICULTY, 4)
+	config.laps = 1
+	var manager: RaceManager = RACE_SCENE.instantiate() as RaceManager
+	manager.configure(config)
+	add_child_autofree(manager)
+	assert_eq(manager.get_human_karts().size(), 2, "get_human_karts() must still list every human kart, local and remote")
+	var local_karts: Array[KartController] = manager.get_local_human_karts()
+	assert_eq(local_karts.size(), 1, "only this process's own roster slot must count as local online")
+	assert_same(local_karts[0], manager.get_karts()[0], "the local kart must be this process's own grid slot 0 (peer 1)")
+
+
+func test_get_local_human_karts_returns_every_human_kart_offline() -> void:
+	GameState.net_session = null
+	GameState.is_networked = false
+	var slot: PlayerSlot = PlayerSlot.new()
+	slot.grid_slot = 0
+	slot.device_id = -1
+	slot.driver_id = &"aurora_vale"
+	slot.kart_id = &"basalt_crown"
+	var config: RaceConfig = RaceConfigBuilder.build_local([slot], LocalLobby.DEFAULT_TRACK, LocalLobby.DEFAULT_DIFFICULTY, 4)
+	config.laps = 1
+	var manager: RaceManager = RACE_SCENE.instantiate() as RaceManager
+	manager.configure(config)
+	add_child_autofree(manager)
+	assert_eq(manager.get_local_human_karts().size(), manager.get_human_karts().size(), "offline every human kart must count as local")

@@ -4,6 +4,8 @@ extends GutTest
 ## plus the write_and_rotate file helper and the disabled-setting/automation/
 ## tutorial/headless recording gate on a real (test-directed) instance.
 
+const KART_SCENE: PackedScene = preload("res://kart/kart.tscn")
+
 var _directory: String
 
 
@@ -13,6 +15,7 @@ func before_each() -> void:
 
 func after_each() -> void:
 	_remove_directory(_directory)
+	GameState.net_session = null
 
 
 func test_is_recording_enabled_requires_every_gate_to_pass() -> void:
@@ -50,6 +53,49 @@ func test_is_local_human_kart_true_only_for_player_input_provider() -> void:
 	autofree(not_a_kart)
 	assert_false(RaceTelemetryService.is_local_human_kart(not_a_kart))
 
+
+## Audit finding 3: online, a remote player's kart uses the exact same
+## `PlayerInputProvider` this machine's own kart does, so `is_local_human_kart()`
+## alone can't exclude it — only `_resolve_roster()`'s local-only roster
+## (`roster_override` here, `RaceManager.get_local_human_karts()` in
+## production) can. Without the fix this test's remote kart would get its
+## own telemetry file written on the local machine for a race it wasn't
+## controlled from here.
+func test_track_excludes_a_remote_kart_when_networked_even_with_player_input_provider() -> void:
+	var session: NetSession = NetSession.new()
+	add_child_autofree(session)
+	GameState.net_session = session
+	var local_kart: KartController = KART_SCENE.instantiate() as KartController
+	local_kart.input_provider = PlayerInputProvider.new()
+	add_child_autofree(local_kart)
+	var remote_kart: KartController = KART_SCENE.instantiate() as KartController
+	remote_kart.input_provider = PlayerInputProvider.new()
+	add_child_autofree(remote_kart)
+	var service: RaceTelemetryService = RaceTelemetryService.new()
+	service.enabled_override = true
+	service.roster_override = [local_kart]
+	add_child_autofree(service)
+	service._on_race_started()
+	service._on_drift_started(local_kart, 1)
+	service._on_drift_started(remote_kart, 1)
+	var logs: Dictionary = service.get("_logs")
+	assert_eq(logs.size(), 1, "only the local kart may ever open a log")
+	assert_true(logs.has(local_kart.get_instance_id()))
+	assert_false(logs.has(remote_kart.get_instance_id()), "a remote networked kart must never get its own telemetry log")
+
+## Offline regression: with no net_session, every PlayerInputProvider kart is
+## still local (18d-4's lazy fallback for when no RaceManager is reachable).
+func test_track_still_includes_any_player_kart_when_offline() -> void:
+	GameState.net_session = null
+	var kart: KartController = KART_SCENE.instantiate() as KartController
+	kart.input_provider = PlayerInputProvider.new()
+	add_child_autofree(kart)
+	var service: RaceTelemetryService = RaceTelemetryService.new()
+	service.enabled_override = true
+	add_child_autofree(service)
+	service._on_race_started()
+	service._on_drift_started(kart, 1)
+	assert_true((service.get("_logs") as Dictionary).has(kart.get_instance_id()))
 
 func test_write_and_rotate_creates_a_json_file_with_the_given_contents() -> void:
 	var error: Error = RaceTelemetryService.write_and_rotate(_directory, "20260101-000000-test_loop.json", {"version": 1, "laps": []}, 20)

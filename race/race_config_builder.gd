@@ -3,6 +3,9 @@ extends RefCounted
 
 const DEFAULT_KART_COUNT: int = 8
 const MIN_LAPS: int = 1
+const DEFAULT_TRACK: TrackData = preload("res://data/tracks/track_01.tres")
+const DEFAULT_PLAYER_KART: KartData = preload("res://data/karts/medium.tres")
+const DEFAULT_LAPS: int = 3
 const MAX_KART_COUNT: int = 12
 const MAX_LOCAL_PLAYERS: int = 4
 const MAX_DRIVER_MODIFIER: float = 0.05
@@ -79,6 +82,18 @@ static func apply_driver_mods(kart: KartData, driver: DriverData) -> KartData:
 		)
 		modified.set(stat_name, base_value * (1.0 + modifier))
 	return modified
+
+
+## Fallback config for a scene entered without a real menu selection (e.g. a
+## RaceManager dropped straight into a test scene). Moved out of
+## RaceManager.gd (race/race_manager.gd) to stay under its 400-line cap.
+static func build_default() -> RaceConfig:
+	var config: RaceConfig = RaceConfig.new()
+	config.track = DEFAULT_TRACK
+	config.laps = DEFAULT_LAPS
+	config.kart_count = DEFAULT_KART_COUNT
+	config.player_kart = DEFAULT_PLAYER_KART
+	return config
 
 
 ## Normalizes scene-entry configs; time trial always has one human and no items.
