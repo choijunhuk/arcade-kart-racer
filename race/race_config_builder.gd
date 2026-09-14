@@ -61,14 +61,12 @@ static func build_local(
 	return config
 
 
-## Returns a deep duplicate with the class multiplier and allowlisted driver
-## percentage modifiers applied, in that order, on the same duplicate.
-static func apply_driver_mods(
-	kart: KartData, driver: DriverData, speed_class: RaceConfig.SpeedClass = RaceConfig.SpeedClass.STANDARD,
-) -> KartData:
+## Returns a deep duplicate with allowlisted driver percentage modifiers
+## applied. Speed class is applied once, upstream, in
+## `RaceRoster.kart_for_slot()` via `SpeedClassStats.apply()`; this function
+## must not re-apply it or the class multiplier would be double-counted.
+static func apply_driver_mods(kart: KartData, driver: DriverData) -> KartData:
 	var modified: KartData = kart.duplicate(true) as KartData
-	modified.max_speed *= SpeedClassStats.max_speed_multiplier(speed_class)
-	modified.acceleration *= SpeedClassStats.acceleration_multiplier(speed_class)
 	if driver == null:
 		return modified
 	for stat_name: StringName in driver.stat_mods:

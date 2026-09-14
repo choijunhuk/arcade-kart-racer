@@ -33,16 +33,53 @@ func test_speed_class_apply_only_scales_speed_and_acceleration_leaving_kart_unmu
 	assert_almost_eq(kart.max_speed, 30.0, FLOAT_EPSILON, "original KartData must stay unmutated")
 
 
-func test_apply_driver_mods_composes_class_multiplier_then_driver_mod() -> void:
-	var kart: KartData = KartData.new()
-	kart.max_speed = 20.0
-	kart.acceleration = 10.0
+## Chains exactly what RaceManager._spawn_karts() does: RaceRoster.kart_for_slot()
+## (the single place SpeedClassStats applies the class multiplier) feeding
+## RaceConfigBuilder.apply_driver_mods() with 2 args. Guards against the class
+## multiplier ever being reapplied inside apply_driver_mods() and double-counted.
+func test_race_manager_chain_applies_class_multiplier_exactly_once_turbo() -> void:
+	var roster: RaceRoster = RaceRoster.new()
+	var config: RaceConfig = RaceConfig.new()
+	config.speed_class = RaceConfig.SpeedClass.TURBO
+	var base_kart: KartData = KartData.new()
+	base_kart.max_speed = 20.0
+	config.kart_roster = [base_kart]
+	config.player_kart = base_kart
 	var driver: DriverData = DriverData.new()
 	driver.stat_mods = {&"max_speed": 0.05}
-	var modified: KartData = RaceConfigBuilder.apply_driver_mods(kart, driver, RaceConfig.SpeedClass.TURBO)
+	var kart_for_slot: KartData = roster.kart_for_slot(config, 0, null)
+	var modified: KartData = RaceConfigBuilder.apply_driver_mods(kart_for_slot, driver)
 	assert_almost_eq(modified.max_speed, 20.0 * 1.15 * 1.05, FLOAT_EPSILON)
-	assert_almost_eq(modified.acceleration, 10.0 * 1.1, FLOAT_EPSILON)
-	assert_almost_eq(kart.max_speed, 20.0, FLOAT_EPSILON, "original KartData must stay unmutated")
+
+
+func test_race_manager_chain_applies_class_multiplier_exactly_once_cruise() -> void:
+	var roster: RaceRoster = RaceRoster.new()
+	var config: RaceConfig = RaceConfig.new()
+	config.speed_class = RaceConfig.SpeedClass.CRUISE
+	var base_kart: KartData = KartData.new()
+	base_kart.max_speed = 20.0
+	config.kart_roster = [base_kart]
+	config.player_kart = base_kart
+	var driver: DriverData = DriverData.new()
+	driver.stat_mods = {&"max_speed": 0.05}
+	var kart_for_slot: KartData = roster.kart_for_slot(config, 0, null)
+	var modified: KartData = RaceConfigBuilder.apply_driver_mods(kart_for_slot, driver)
+	assert_almost_eq(modified.max_speed, 20.0 * 0.85 * 1.05, FLOAT_EPSILON)
+
+
+func test_race_manager_chain_leaves_max_speed_unscaled_by_class_standard() -> void:
+	var roster: RaceRoster = RaceRoster.new()
+	var config: RaceConfig = RaceConfig.new()
+	config.speed_class = RaceConfig.SpeedClass.STANDARD
+	var base_kart: KartData = KartData.new()
+	base_kart.max_speed = 20.0
+	config.kart_roster = [base_kart]
+	config.player_kart = base_kart
+	var driver: DriverData = DriverData.new()
+	driver.stat_mods = {&"max_speed": 0.05}
+	var kart_for_slot: KartData = roster.kart_for_slot(config, 0, null)
+	var modified: KartData = RaceConfigBuilder.apply_driver_mods(kart_for_slot, driver)
+	assert_almost_eq(modified.max_speed, 20.0 * 1.05, FLOAT_EPSILON)
 
 
 func test_apply_driver_mods_defaults_to_standard_matching_prior_behavior() -> void:
