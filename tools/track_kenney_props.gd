@@ -1,12 +1,8 @@
 class_name TrackKenneyProps
 extends RefCounted
 
-## Kenney "Racing Kit" (CC0) trackside dressing: guardrail visuals aligned to
-## the existing wall collision, a start/finish gantry + flags + grid decals,
-## corner pylons, perimeter trees/lampposts, main-straight grandstand/tent/
-## billboard dressing and one pits garage. Visual only, batched via
-## MultiMeshInstance3D/merged MeshInstance3D siblings next to TrackDressing's
-## own nodes -- collision geometry (`tools/track_builder.gd`) is never touched.
+## Kenney "Racing Kit" (CC0) trackside dressing (guardrails, gantry, pylons, trees,
+## stands, pits). Visual only, batched; collision (`tools/track_builder.gd`) untouched.
 
 const MODEL_DIR: String = "res://assets/kenney/racing_kit/"
 ## Matches content_track.gd's wall lateral offset formula exactly, so
@@ -29,8 +25,7 @@ const STAND_TARGET_HEIGHT: float = 2.6
 const STAND_OUTSET: float = 9.5
 const PITS_TARGET_LENGTH: float = 6.0
 const PITS_OUTSET: float = 22.0
-## Minimum clearance (beyond the road's half width) any scattered/off-track
-## prop must keep from the racing line so it never blocks sightlines.
+## Min clearance beyond road half width for scattered props (sightlines).
 const PLACEMENT_MARGIN: float = 2.0
 const NIGHT_THEME: int = 1
 const GLACIER_THEME: int = 2
@@ -202,8 +197,6 @@ static func _main_straight(root: Node3D, line: RacingLine, half_width: float, th
 	for index: int in range(count):
 		var offset: float = straight.x + straight.y * (float(index) + 0.5) / float(count)
 		var basis: Basis = Basis.looking_at(-line.tangent_at(offset), Vector3.UP)
-		if not is_clear_of_racing_line(half_width + STAND_OUTSET, half_width, PLACEMENT_MARGIN):
-			continue
 		var at: Vector3 = line.sample(offset) + line.right_at(offset) * (half_width + STAND_OUTSET)
 		transforms.append(Transform3D(basis, root.to_local(at)))
 		if billboard_mesh != null and index % 2 == 0:
@@ -220,8 +213,6 @@ static func _pits(root: Node3D, line: RacingLine, half_width: float) -> void:
 	if mesh == null:
 		return
 	var lateral: float = half_width + PITS_OUTSET
-	if not is_clear_of_racing_line(lateral, half_width, PLACEMENT_MARGIN):
-		return
 	var offset: float = line.length() * 0.03
 	var at: Vector3 = line.sample(offset) + line.right_at(offset) * lateral
 	var node: MeshInstance3D = MeshInstance3D.new()
