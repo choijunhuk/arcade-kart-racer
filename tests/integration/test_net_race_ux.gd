@@ -21,6 +21,11 @@ func before_each() -> void:
 
 func after_each() -> void:
 	get_tree().paused = false
+	# A non-host test may have assigned a real client peer to the default
+	# multiplayer API (shared by the whole SceneTree, not per-node) to make
+	# `is_server()` read false; restore the normal offline/host default so
+	# later tests are not left thinking they are a client.
+	get_tree().get_multiplayer().multiplayer_peer = OfflineMultiplayerPeer.new()
 	GameState.net_session = null
 	GameState.is_networked = false
 	if GameState.scene_change_requested.is_connected(_on_scene_requested):
@@ -160,6 +165,39 @@ func test_results_back_to_lobby_keeps_the_session_alive_and_reopens_it() -> void
 	assert_eq(_last_scene_path, "res://ui/menus/online_lobby.tscn")
 	assert_same(GameState.net_session, session, "the session must stay alive, not be closed")
 	assert_false(session.started, "restart_to_lobby must reopen the lobby for another race")
+
+
+## Review finding 2: a non-host peer's BACK TO LOBBY must clear its own
+## dangling `race`/`started`/`preparing` too, not only the host's copy — or
+## the next `_prepare_race` on this peer bails on `race != null` and acks a
+## race it never loaded, corrupting the host's loaded count. A real (never
+## actually connecting) client `ENetMultiplayerPeer` makes `is_server()`
+## read false without needing an actual socket handshake.
+func test_back_to_lobby_clears_local_race_state_for_a_non_host_peer() -> void:
+	var session: NetSession = NetSession.new()
+	add_child_autofree(session)
+	var client_peer: ENetMultiplayerPeer = ENetMultiplayerPeer.new()
+	client_peer.create_client("127.0.0.1", 34599)
+	get_tree().get_multiplayer().multiplayer_peer = client_peer
+	session.peer = ENetMultiplayerPeer.new()
+	GameState.net_session = session
+	session.started = true
+	session._roster.preparing = true
+	var dangling_race: NetRace = NetRace.new()
+	session.race = dangling_race
+	var manager: RaceManager = RaceManager.new()
+	autofree(manager)
+	var screen: ResultsScreen = RESULTS_SCENE.instantiate() as ResultsScreen
+	add_child_autofree(screen)
+	screen.show_results([], manager)
+	assert_false(session.multiplayer.is_server(), "test setup must simulate a non-host peer")
+	screen._on_back_to_lobby_pressed()
+	assert_null(session.race, "the client's dangling race reference must be cleared")
+	assert_false(session.started, "started must be cleared so the next lobby's _prepare_race is not bailed on")
+	assert_false(session._roster.preparing, "preparing must be cleared alongside started/race")
+	assert_same(GameState.net_session, session, "the session must stay alive, not be closed")
+	assert_eq(_last_scene_path, "res://ui/menus/online_lobby.tscn")
+	dangling_race.free()
 
 
 func test_results_hides_back_to_lobby_for_a_local_offline_race() -> void:

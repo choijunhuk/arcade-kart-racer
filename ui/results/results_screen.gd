@@ -168,6 +168,11 @@ func _on_menu_pressed() -> void:
 ## closes the session nor touches the race state machine — it reopens the
 ## shared online lobby scene, re-bound to the still-alive NetSession, so
 ## host and clients regroup instead of the client sitting on RESULTS forever.
+## Every peer clears its own local race state unconditionally (review
+## finding 2): a non-host that skipped this kept a dangling `session.race`,
+## which made its next `_prepare_race` bail out and ack a race it never
+## loaded, corrupting the host's loaded count. Only the host additionally
+## rebroadcasts the lobby, since it alone owns the authoritative roster.
 func _on_back_to_lobby_pressed() -> void:
 	var session: NetSession = GameState.net_session
 	if not is_instance_valid(session):
@@ -175,6 +180,8 @@ func _on_back_to_lobby_pressed() -> void:
 	visible = false
 	if session.multiplayer.is_server():
 		session.restart_to_lobby()
+	else:
+		session._roster.clear_race_state()
 	GameState.change_scene("res://ui/menus/online_lobby.tscn")
 
 
