@@ -320,9 +320,14 @@ The Phase 13 finish check on this machine returned exit 2: matching export
 templates are absent from the project-local HOME. Install them into the printed
 directory and rerun the same command.
 Installed templates produce `build/windows/TurboCircuit.exe`,
-`build/macos/TurboCircuit.zip`, and `build/linux/TurboCircuit.x86_64`.
-The macOS export is unsigned. Cross-platform runtime testing is not implied by an
-export command succeeding.
+`build/macos/TurboCircuit.zip`, and `build/linux/TurboCircuit-linux.tar.gz`
+(the Linux binary/`.pck` are also kept loose in `build/linux/`). The script
+chmods the Linux binary executable, packages it, prints one summary line per
+artifact, and on macOS runs a headless `--selftest` smoke check against the
+exported `.app` (failing the build if it doesn't report `"passed":true`).
+All three builds are unsigned. Cross-platform runtime testing is not implied by an
+export command succeeding — see [`docs/RELEASE.md`](docs/RELEASE.md) for how to
+open each unsigned build and what has/hasn't actually been run on real hardware.
 
 Original art is generated offline:
 
