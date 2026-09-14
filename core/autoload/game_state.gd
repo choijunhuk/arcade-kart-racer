@@ -23,8 +23,12 @@ var selected_items_enabled: bool = true
 var selected_speed_class: RaceConfig.SpeedClass = RaceConfig.SpeedClass.STANDARD
 var grand_prix_state: GrandPrix
 ## Set by automated tools (snapshot/perf probes): disables focus-loss pause and
-## other human-only conveniences so unattended windows keep running.
-var automation_mode: bool = false
+## other human-only conveniences so unattended windows keep running, and mutes
+## the master bus so windowed harness runs never play sound at the developer.
+var automation_mode: bool = false:
+	set(value):
+		automation_mode = value
+		_mute_audio(value)
 ## True while a TutorialController-driven onboarding race is active; gates the
 ## first-race contextual hints so they never fire during the tutorial itself.
 var tutorial_active: bool = false
@@ -79,3 +83,11 @@ func change_scene(scene_path: String) -> Error:
 	root.add_child(overlay)
 	overlay.transition_to(scene_path)
 	return OK
+
+
+## Mutes/unmutes the master bus; used by automation_mode so unattended windowed
+## tools stay silent. No-ops when the bus is missing (bare test harnesses).
+func _mute_audio(muted: bool) -> void:
+	var master: int = AudioServer.get_bus_index(&"Master")
+	if master >= 0:
+		AudioServer.set_bus_mute(master, muted)
