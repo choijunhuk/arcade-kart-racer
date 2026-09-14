@@ -55,6 +55,15 @@ func build_theme() -> void:
 	pass
 
 
+## Seam hook: an empty result keeps the default rounded-rectangle centerline;
+## a non-empty result replaces it with a closed loop through these points
+## (still run through `_append_point`, so straight-segment subdivision and
+## `surface_height` sampling apply the same as the default path). The first
+## and last point must coincide to close the loop.
+func authored_points() -> Array[Vector3]:
+	return []
+
+
 ## Authored elevation; subclasses can supply a smooth height profile.
 func surface_height(_point: Vector3) -> float:
 	return ROAD_HEIGHT
@@ -156,21 +165,26 @@ func shortcut(node_name: String, entry: float, exit: float, points: Array[Vector
 
 func _build_line() -> void:
 	line.curve = Curve3D.new()
-	_append_point(Vector3(0.0, 0.0, -half_depth))
-	var centers: Array[Vector2] = [
-		Vector2(-half_width + corner_radius, -half_depth + corner_radius),
-		Vector2(-half_width + corner_radius, half_depth - corner_radius),
-		Vector2(half_width - corner_radius, half_depth - corner_radius),
-		Vector2(half_width - corner_radius, -half_depth + corner_radius),
-	]
-	for corner: int in range(centers.size()):
-		var center: Vector2 = centers[corner]
-		var start_angle: float = -90.0 - float(corner) * 90.0
-		var steps: int = roundi(90.0 / ARC_STEP)
-		for step: int in range(steps + 1):
-			var angle: float = deg_to_rad(start_angle - float(step) * ARC_STEP)
-			_append_point(Vector3(center.x + cos(angle) * corner_radius, 0.0, center.y + sin(angle) * corner_radius))
-	_append_point(Vector3(0.0, 0.0, -half_depth))
+	var authored: Array[Vector3] = authored_points()
+	if authored.is_empty():
+		_append_point(Vector3(0.0, 0.0, -half_depth))
+		var centers: Array[Vector2] = [
+			Vector2(-half_width + corner_radius, -half_depth + corner_radius),
+			Vector2(-half_width + corner_radius, half_depth - corner_radius),
+			Vector2(half_width - corner_radius, half_depth - corner_radius),
+			Vector2(half_width - corner_radius, -half_depth + corner_radius),
+		]
+		for corner: int in range(centers.size()):
+			var center: Vector2 = centers[corner]
+			var start_angle: float = -90.0 - float(corner) * 90.0
+			var steps: int = roundi(90.0 / ARC_STEP)
+			for step: int in range(steps + 1):
+				var angle: float = deg_to_rad(start_angle - float(step) * ARC_STEP)
+				_append_point(Vector3(center.x + cos(angle) * corner_radius, 0.0, center.y + sin(angle) * corner_radius))
+		_append_point(Vector3(0.0, 0.0, -half_depth))
+	else:
+		for point: Vector3 in authored:
+			_append_point(point)
 	line.bake()
 
 
