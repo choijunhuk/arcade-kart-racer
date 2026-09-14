@@ -141,16 +141,25 @@ func shortcut(node_name: String, entry: float, exit: float, points: Array[Vector
 	trigger.name = "TriggerArea"
 	trigger.collision_layer = 256
 	trigger.collision_mask = 2
-	var shape_node: CollisionShape3D = CollisionShape3D.new()
-	var shape: BoxShape3D = BoxShape3D.new()
-	var start: Vector3 = points[0]
-	var end: Vector3 = points.back()
-	shape.size = Vector3(8.0, 8.0, start.distance_to(end))
-	shape_node.shape = shape
-	trigger.add_child(shape_node)
 	route.add_child(trigger)
 	$Shortcuts.add_child(route)
-	trigger.global_transform = Transform3D(Basis.looking_at(end - start), (start + end) * 0.5)
+	# One box per consecutive point pair, each oriented along its own segment,
+	# so a curved shortcut's trigger volume follows the alt route instead of
+	# a single chord box that can strand a curved path far outside it. A
+	# 2-point shortcut still yields exactly one box, identical to before.
+	# body_entered/body_exited on the Area3D (not the per-shape variants) fire
+	# once per overlapping-shape-count transition to/from zero, so exit only
+	# fires once the kart has left every box.
+	for index: int in range(points.size() - 1):
+		var start: Vector3 = points[index]
+		var end: Vector3 = points[index + 1]
+		var shape_node: CollisionShape3D = CollisionShape3D.new()
+		shape_node.name = "Shape%02d" % index
+		var shape: BoxShape3D = BoxShape3D.new()
+		shape.size = Vector3(8.0, 8.0, start.distance_to(end))
+		shape_node.shape = shape
+		trigger.add_child(shape_node)
+		shape_node.global_transform = Transform3D(Basis.looking_at(end - start), (start + end) * 0.5)
 	route.alt_curve = make_path("Shortcuts/%s" % node_name, "AltCurve", points)
 	if build_surface:
 		TrackBuilder.build_road_segments(geometry, route.alt_curve, 8.0, ROAD_HEIGHT, wall_material)

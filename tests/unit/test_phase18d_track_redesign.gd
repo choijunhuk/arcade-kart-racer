@@ -9,6 +9,10 @@ extends GutTest
 ##    closing straight) satisfies the redesign's own constraints: minimum
 ##    curvature radius, no self-intersection with adequate road clearance,
 ##    and total length within +-25% of the old rounded-rectangle length.
+## 3. ContentTrack.shortcut()'s per-segment trigger volume: a 2-point route
+##    still builds exactly one box (unchanged from the old single-chord
+##    box), and PrismAlley's curved multi-point route stays covered by its
+##    trigger along its whole length instead of only near the chord.
 
 ## Closed-form perimeter of the pre-redesign track_02 rectangle:
 ## 4*half_width + 4*half_depth - 8*corner_radius + 2*PI*corner_radius,
@@ -87,6 +91,58 @@ func test_track02_racing_line_does_not_self_intersect() -> void:
 			if _segments_cross(points[i], points[i + 1], points[j], points[j + 1]):
 				crossings += 1
 	assert_eq(crossings, 0, "track_02 racing line crosses itself %d time(s)" % crossings)
+
+
+## Regression guard: shortcut()'s per-segment trigger volume must still
+## degenerate to exactly the old single chord box when given only 2 points
+## (e.g. a straight shortcut), matching the pre-fix geometry exactly.
+func test_shortcut_with_two_points_produces_a_single_unchanged_box() -> void:
+	var track: ContentTrack = _track("track_03")
+	var start: Vector3 = Vector3(20.0, 0.4, -30.0)
+	var end: Vector3 = Vector3(60.0, 0.4, 10.0)
+	var route: TrackShortcut = track.shortcut("TestChordShortcut", 0.0, 40.0, [start, end], 20.0, false)
+	var trigger: Area3D = route.get_node("TriggerArea") as Area3D
+	assert_eq(trigger.get_child_count(), 1, "a 2-point shortcut should still build exactly one trigger box")
+	var shape_node: CollisionShape3D = trigger.get_child(0) as CollisionShape3D
+	var box: BoxShape3D = shape_node.shape as BoxShape3D
+	var expected_size: Vector3 = Vector3(8.0, 8.0, start.distance_to(end))
+	assert_almost_eq(box.size.distance_to(expected_size), 0.0, 0.001, "2-point trigger box size changed")
+	var expected_transform: Transform3D = Transform3D(Basis.looking_at(end - start), (start + end) * 0.5)
+	assert_almost_eq(shape_node.global_transform.origin.distance_to(expected_transform.origin), 0.0, 0.001,
+		"2-point trigger box origin changed")
+	assert_almost_eq(shape_node.global_transform.basis.z.distance_to(expected_transform.basis.z), 0.0, 0.001,
+		"2-point trigger box orientation changed")
+
+
+## PrismAlley's alt route curves up to ~14m away from its own entry->exit
+## chord, so the old single chord-box trigger left most of the curve
+## uncovered. Every baked sample along the real alt route must land inside
+## at least one of the fixed per-segment boxes.
+func test_prism_alley_trigger_covers_samples_along_its_curved_alt_route() -> void:
+	var track: ContentTrack = _track("track_02")
+	var route: TrackShortcut = track.get_node("Shortcuts/PrismAlley") as TrackShortcut
+	var trigger: Area3D = route.get_node("TriggerArea") as Area3D
+	var boxes: Array[CollisionShape3D] = []
+	for child: Node in trigger.get_children():
+		boxes.append(child as CollisionShape3D)
+	assert_gt(boxes.size(), 1, "PrismAlley's curved alt route should build more than one trigger box")
+	var baked: PackedVector3Array = route.alt_curve.curve.get_baked_points()
+	assert_gt(baked.size(), 20, "PrismAlley alt curve should have many baked samples")
+	var margin: float = 0.05
+	var uncovered: int = 0
+	for local_point: Vector3 in baked:
+		var global_point: Vector3 = route.alt_curve.to_global(local_point)
+		var inside: bool = false
+		for box: CollisionShape3D in boxes:
+			var local_in_box: Vector3 = box.to_local(global_point)
+			var half: Vector3 = (box.shape as BoxShape3D).size * 0.5
+			if absf(local_in_box.x) <= half.x + margin and absf(local_in_box.y) <= half.y + margin \
+					and absf(local_in_box.z) <= half.z + margin:
+				inside = true
+				break
+		if not inside:
+			uncovered += 1
+	assert_eq(uncovered, 0, "%d of %d PrismAlley curve samples fall outside every trigger box" % [uncovered, baked.size()])
 
 
 static func _segments_cross(p1: Vector2, p2: Vector2, p3: Vector2, p4: Vector2) -> bool:
