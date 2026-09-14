@@ -116,6 +116,7 @@ func _create_session() -> void:
 	GameState.net_session = _session
 	GameState.add_child(_session)
 	_session.lobby_changed.connect(_refresh)
+	_session.admitted.connect(_on_admitted)
 
 func _host_game() -> void:
 	_create_session()
@@ -220,6 +221,17 @@ func _handle_open(error: Error, verifying: bool = false) -> void:
 	else:
 		_status.text = "Connected — choose driver/kart, then READY. Host starts."
 	_refresh()
+
+## Server-side admission confirmation (net_session.gd `_admitted`): a peer
+## joining mid-race gets no roster row until the next lobby, so `_refresh`'s
+## `local_slot() >= 0` check alone would leave this stuck on "verifying
+## handshake" for the whole race.
+func _on_admitted(waiting: bool) -> void:
+	_awaiting_handshake = false
+	if waiting:
+		_status.text = "Admitted — waiting for the current race to finish."
+	else:
+		_status.text = "Connected — choose driver/kart, then READY. Host starts."
 
 func _refresh() -> void:
 	var connected: bool = is_instance_valid(_session)

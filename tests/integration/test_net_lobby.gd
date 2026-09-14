@@ -33,6 +33,22 @@ func test_join_shows_verifying_until_handshake_admits_us() -> void:
 	assert_eq(status.text, "Connected — choose driver/kart, then READY. Host starts.")
 	assert_false(bool(lobby.get("_awaiting_handshake")))
 
+## Joining a dedicated server mid-race admits the peer as a waiting spectator
+## with no roster row, so local_slot() never turns >= 0 during that race;
+## the server's `_admitted` RPC (net_session.gd) must clear "verifying" instead.
+func test_admitted_signal_clears_verifying_for_a_mid_race_waiting_join() -> void:
+	var lobby: OnlineLobby = (load("res://ui/menus/online_lobby.tscn") as PackedScene).instantiate() as OnlineLobby
+	add_child_autofree(lobby)
+	await wait_process_frames(2)
+	var session: NetSession = NetSession.new()
+	add_child_autofree(session)
+	lobby.set("_session", session)
+	lobby._handle_open(OK, true)
+	lobby._on_admitted(true)
+	var status: Label = lobby.get("_status") as Label
+	assert_eq(status.text, "Admitted — waiting for the current race to finish.")
+	assert_false(bool(lobby.get("_awaiting_handshake")))
+
 func test_main_menu_exposes_online_and_disconnection_message() -> void:
 	GameState.network_message = "Host disconnected."
 	var menu: MainMenu = (load("res://ui/menus/main_menu.tscn") as PackedScene).instantiate() as MainMenu
