@@ -108,9 +108,8 @@ func _build_status_row() -> void:
 	_upnp_status = Label.new()
 	row.add_child(_upnp_status)
 
-## Host-only race options (spec item 1): laps, AI bot count, track and
-## difficulty. Editable before hosting (to seed the session's defaults) and
-## while hosting; clients see the host's broadcast values read-only.
+## Host-only race options (spec item 1): laps, AI bot count, track and difficulty.
+## Editable before/while hosting; clients see the host's broadcast values read-only.
 func _build_race_options_row() -> void:
 	var row: HBoxContainer = HBoxContainer.new()
 	_rows.add_child(row)
@@ -143,8 +142,7 @@ func _row_label(parent: Control, text: String) -> void:
 	label.text = text
 	parent.add_child(label)
 
-## Host-only: pushes the current controls onto the (now server) session and
-## rebroadcasts the lobby; a no-op on a client or before a session exists.
+## Host-only: pushes the current controls onto the (now server) session and rebroadcasts the lobby; a no-op on a client or before a session exists.
 func _on_race_options_changed(_value: Variant = null) -> void:
 	if _session == null or not multiplayer.is_server():
 		return
@@ -310,9 +308,12 @@ func _refresh() -> void:
 		_status.text = "Connected — choose driver/kart, then READY. Host starts."
 	_host.disabled = connected
 	_join.disabled = connected
-	# Review finding 7: while `started`, `_selection` is dropped server-side.
+	# Review finding 7: while `started`, `_selection` is dropped server-side — READY and the dropdowns that also send it must disable together.
 	var mid_race: bool = connected and _session.started
-	_ready_button.disabled = not connected or _session.local_slot() < 0 or mid_race
+	var selection_disabled: bool = not connected or _session.local_slot() < 0 or mid_race
+	_ready_button.disabled = selection_disabled
+	_driver.disabled = selection_disabled
+	_kart.disabled = selection_disabled
 	if mid_race:
 		_status.text = "Waiting for the host to reopen the lobby."
 	_start.disabled = not connected or not multiplayer.is_server()

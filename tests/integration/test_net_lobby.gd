@@ -35,6 +35,8 @@ func test_refresh_race_options_does_not_clobber_non_default_session_settings() -
 ## lobby while the server's race is still genuinely in progress (the host
 ## hasn't also returned yet) — READY must not look pressable while `started`
 ## is true, since every `_selection` it would send is dropped server-side.
+## The driver/kart dropdowns send that same `_selection`, so they must
+## disable together with READY, not stay live looking interactive for nothing.
 func test_ready_is_disabled_and_explained_while_the_session_is_still_started() -> void:
 	var lobby: OnlineLobby = (load("res://ui/menus/online_lobby.tscn") as PackedScene).instantiate() as OnlineLobby
 	add_child_autofree(lobby)
@@ -46,10 +48,14 @@ func test_ready_is_disabled_and_explained_while_the_session_is_still_started() -
 	lobby.set("_session", session)
 	lobby._refresh()
 	assert_true((lobby.get("_ready_button") as Button).disabled, "READY must not be pressable while the server's race is still started")
+	assert_true((lobby.get("_driver") as OptionButton).disabled, "the driver dropdown must not be pressable while started")
+	assert_true((lobby.get("_kart") as OptionButton).disabled, "the kart dropdown must not be pressable while started")
 	assert_eq((lobby.get("_status") as Label).text, "Waiting for the host to reopen the lobby.")
 	session.started = false
 	lobby._refresh()
 	assert_false((lobby.get("_ready_button") as Button).disabled, "READY must re-enable once the session actually returns to the lobby")
+	assert_false((lobby.get("_driver") as OptionButton).disabled, "the driver dropdown must re-enable too")
+	assert_false((lobby.get("_kart") as OptionButton).disabled, "the kart dropdown must re-enable too")
 
 ## Real-UI acceptance testing caught a join showing "Connected" the instant
 ## the ENet socket opened, well before the server's handshake actually
