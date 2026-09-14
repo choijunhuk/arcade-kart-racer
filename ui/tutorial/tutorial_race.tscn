@@ -1,0 +1,10 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://race/race.tscn" id="1_race"]
+[ext_resource type="PackedScene" path="res://ui/tutorial/tutorial_overlay.tscn" id="2_overlay"]
+
+[node name="TutorialRace" type="Node"]
+
+[node name="Race" parent="." instance=ExtResource("1_race")]
+
+[node name="TutorialOverlay" parent="." instance=ExtResource("2_overlay")]
