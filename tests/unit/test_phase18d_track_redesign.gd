@@ -8,7 +8,9 @@ extends GutTest
 ## 2. track_02's authored curve (chicanes -> sweeper -> compound hairpin ->
 ##    closing straight) satisfies the redesign's own constraints: minimum
 ##    curvature radius, no self-intersection with adequate road clearance,
-##    and total length within +-25% of the old rounded-rectangle length.
+##    closes into a loop, total length within +-25% of the old
+##    rounded-rectangle length, and each chicane S-pair has a real (>=12m)
+##    lateral shift.
 ## 3. ContentTrack.shortcut()'s per-segment trigger volume: a 2-point route
 ##    still builds exactly one box (unchanged from the old single-chord
 ##    box), and PrismAlley's curved multi-point route stays covered by its
@@ -51,6 +53,33 @@ func test_track02_length_within_25_percent_of_old_rectangle() -> void:
 	var length: float = track.line.length()
 	assert_gt(length, OLD_TRACK02_LENGTH * 0.75, "track_02 length shrank more than 25%% vs the old rectangle")
 	assert_lt(length, OLD_TRACK02_LENGTH * 1.25, "track_02 length grew more than 25%% vs the old rectangle")
+
+
+func test_track02_racing_line_closes() -> void:
+	var track: ContentTrack = _track("track_02")
+	var first: Vector3 = track.line.curve.get_point_position(0)
+	var last: Vector3 = track.line.curve.get_point_position(track.line.curve.point_count - 1)
+	assert_almost_eq(first.distance_to(last), 0.0, 0.01, "track_02 racing line must close")
+
+
+## Constraint check (not a fitted number): derives the expected lateral
+## shift of the first chicane S-pair from the track's own CHICANE_RADIUS/
+## CHICANE_ANGLE/GRID_STRAIGHT/LINK_A constants and the real baked racing
+## line, then asserts it reads as a real corner (>=12m) rather than the old
+## ~4.4m wiggle.
+func test_track02_chicane_lateral_shift_is_at_least_12_metres() -> void:
+	var track: ContentTrack = _track("track_02")
+	var consts: Dictionary = track.get_script().get_script_constant_map()
+	var chicane_radius: float = consts["CHICANE_RADIUS"]
+	var chicane_angle: float = consts["CHICANE_ANGLE"]
+	assert_gte(chicane_radius, MIN_CURVE_RADIUS, "chicane radius must stay at/above the %.1fm minimum" % MIN_CURVE_RADIUS)
+	var before_offset: float = float(consts["GRID_STRAIGHT"]) + float(consts["LINK_A"])
+	var after_offset: float = before_offset + 2.0 * chicane_radius * deg_to_rad(chicane_angle)
+	var before_pos: Vector3 = track.line.sample(before_offset)
+	var after_pos: Vector3 = track.line.sample(after_offset)
+	var right: Vector3 = track.line.right_at(before_offset)
+	var lateral: float = absf((after_pos - before_pos).dot(right))
+	assert_gte(lateral, 12.0, "chicane S-pair lateral shift %.2fm is under the 12m minimum" % lateral)
 
 
 func test_track02_minimum_curvature_radius_is_at_least_22_metres() -> void:

@@ -15,8 +15,16 @@ const GRID_STRAIGHT: float = 85.0
 const LINK_A: float = 11.0
 const LINK_B: float = 18.0
 const LINK_C: float = 21.0
-const CHICANE_RADIUS: float = 40.0
-const CHICANE_ANGLE: float = 19.0
+## CHICANE_RADIUS/ANGLE were widened from the original 40.0/19.0 deg (a
+## ~4.4m lateral wiggle) to a real S-pair (~13.4m lateral shift) so the
+## chicanes read as a deliberate feature. SWEEPER_RADIUS is unaffected: each
+## S-pair is two equal-and-opposite arcs that always cancel their own net
+## heading AND lateral offset by symmetry, so the sweeper/hairpin geometry
+## that closes the loop never needs to change with the chicane. Only
+## CLOSING_STRAIGHT (re-solved offline, same method as before) absorbs the
+## chicanes' larger forward travel to keep the loop closed.
+const CHICANE_RADIUS: float = 26.0
+const CHICANE_ANGLE: float = 42.0
 const SWEEPER_RADIUS: float = 87.51342217980729
 const SWEEPER_ANGLE: float = 180.0
 const BACK_STRAIGHT: float = 378.0
@@ -24,19 +32,23 @@ const HAIRPIN_RADIUS_WIDE: float = 95.0
 const HAIRPIN_ANGLE_WIDE: float = 140.0
 const HAIRPIN_RADIUS_TIGHT: float = 31.0
 const HAIRPIN_ANGLE_TIGHT: float = 40.0
-const CLOSING_STRAIGHT: float = 232.04750230679346
+const CLOSING_STRAIGHT: float = 214.54882395861728
 
 ## Offsets (metres along the racing line) where the PrismAlley shortcut cuts
 ## the inner (left) apex of the compound hairpin: from 85% through the wide
 ## stage to 10% into the closing straight (a single checkpoint sits in this
 ## span - a wider span would move two checkpoints to the same rejoin offset
 ## and fail the "checkpoint offsets increase" contract). Solved alongside
-## the layout above. ALLEY_SPEED is lower than the original track_02
-## alleys' 30 m/s: this cut sits mid-hairpin, where cornering speed rarely
-## reaches 30, and 18 m/s is comfortably reachable while still meaning a
-## driver has to carry real speed through the wide stage to qualify.
-const ALLEY_ENTRY_OFFSET: float = 1038.292338
-const ALLEY_EXIT_OFFSET: float = 1117.957773
+## the layout above. The wider chicanes push everything downstream later by
+## a fixed +23.157576m (the chicanes' own arc-length growth; the sweeper and
+## hairpin arcs that follow are unchanged, so this shift is exact) - both
+## offsets carry that same shift forward so the alley still cuts the same
+## physical apex. ALLEY_SPEED is lower than the original track_02 alleys'
+## 30 m/s: this cut sits mid-hairpin, where cornering speed rarely reaches
+## 30, and 18 m/s is comfortably reachable while still meaning a driver has
+## to carry real speed through the wide stage to qualify.
+const ALLEY_ENTRY_OFFSET: float = 1061.449914
+const ALLEY_EXIT_OFFSET: float = 1141.115349
 const ALLEY_LATERAL: float = -10.0
 const ALLEY_SPEED: float = 18.0
 
