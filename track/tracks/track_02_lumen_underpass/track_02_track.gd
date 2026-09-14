@@ -28,11 +28,17 @@ const CLOSING_STRAIGHT: float = 232.04750230679346
 
 ## Offsets (metres along the racing line) where the PrismAlley shortcut cuts
 ## the inner (left) apex of the compound hairpin: from 85% through the wide
-## stage to 10% into the closing straight. Solved alongside the layout above.
+## stage to 10% into the closing straight (a single checkpoint sits in this
+## span - a wider span would move two checkpoints to the same rejoin offset
+## and fail the "checkpoint offsets increase" contract). Solved alongside
+## the layout above. ALLEY_SPEED is lower than the original track_02
+## alleys' 30 m/s: this cut sits mid-hairpin, where cornering speed rarely
+## reaches 30, and 18 m/s is comfortably reachable while still meaning a
+## driver has to carry real speed through the wide stage to qualify.
 const ALLEY_ENTRY_OFFSET: float = 1038.292338
 const ALLEY_EXIT_OFFSET: float = 1117.957773
 const ALLEY_LATERAL: float = -10.0
-const ALLEY_SPEED: float = 30.0
+const ALLEY_SPEED: float = 18.0
 
 const TUNNEL_START_FRACTION: float = 0.39
 const TUNNEL_END_FRACTION: float = 0.60
@@ -116,10 +122,28 @@ func _build_boost_pads() -> void:
 		place(BOOST_SCENE, "BoostPads", "NeonBoost%d" % index, base_offset + float(index) * BOOST_SPACING)
 
 
+## The alley spans ~80m of the hairpin, which the compound turn sweeps
+## through by over 60 degrees - a straight 2-point chord between entry and
+## exit strays up to ~15m from the actual curve there, leaving a real gap
+## between the opened main-road wall and the alley's own (8m-wide) surface
+## for a kart to fall through. Sampling several points along the true
+## offset locus keeps the chord within ~1m of it (comfortably inside the
+## alley's own half-width). The lateral offset is also tapered to 0 at both
+## ends (a sine bulge, max magnitude mid-span) rather than held at
+## ALLEY_LATERAL throughout: open_inner_wall's gap closes again exactly at
+## ALLEY_EXIT_OFFSET, so a kart still sitting ALLEY_LATERAL outside the
+## road there would be trapped on the wrong side of the resuming wall.
+const ALLEY_WAYPOINTS: int = 9
+
+
 func _add_alley() -> void:
-	var entry_point: Vector3 = line.sample(ALLEY_ENTRY_OFFSET) + line.right_at(ALLEY_ENTRY_OFFSET) * ALLEY_LATERAL
-	var exit_point: Vector3 = line.sample(ALLEY_EXIT_OFFSET) + line.right_at(ALLEY_EXIT_OFFSET) * ALLEY_LATERAL
-	shortcut("PrismAlley", ALLEY_ENTRY_OFFSET, ALLEY_EXIT_OFFSET, [entry_point, exit_point], ALLEY_SPEED)
+	var points: Array[Vector3] = []
+	for index: int in range(ALLEY_WAYPOINTS):
+		var t: float = float(index) / float(ALLEY_WAYPOINTS - 1)
+		var offset: float = lerpf(ALLEY_ENTRY_OFFSET, ALLEY_EXIT_OFFSET, t)
+		var lateral: float = ALLEY_LATERAL * sin(PI * t)
+		points.append(line.sample(offset) + line.right_at(offset) * lateral)
+	shortcut("PrismAlley", ALLEY_ENTRY_OFFSET, ALLEY_EXIT_OFFSET, points, ALLEY_SPEED)
 
 
 func _here() -> Vector3:
