@@ -95,9 +95,14 @@ func remove(id: int) -> void:
 			waiting.remove_at(waiting_index)
 
 
-## Replaces the whole roster from an authoritative broadcast.
+## Replaces the whole roster from an authoritative broadcast, truncating to
+## `RaceSnapshot.MAX_KARTS` rows: an oversized roster from a hostile/buggy
+## authority must not leave `apply_race_settings` a negative ai_count ceiling.
 func replace(source: Array) -> void:
-	_session.players.assign(source.duplicate(true))
+	var bounded: Array = source.duplicate(true)
+	if bounded.size() > RaceSnapshot.MAX_KARTS:
+		bounded.resize(RaceSnapshot.MAX_KARTS)
+	_session.players.assign(bounded)
 
 
 ## Applies one peer's driver/kart/ready choice; false when it has no row.
@@ -191,7 +196,7 @@ func set_race_options(new_laps: int, new_ai_count: int, new_track_id: String, ne
 ## `RaceSnapshot.MAX_KARTS` and desync that peer for the whole race.
 func apply_race_settings(new_laps: int, new_ai_count: int, new_track_id: String, new_difficulty_id: String) -> void:
 	_session.laps = clampi(new_laps, 1, 9)
-	_session.ai_count = clampi(new_ai_count, 0, RaceSnapshot.MAX_KARTS - _session.players.size())
+	_session.ai_count = clampi(new_ai_count, 0, maxi(0, RaceSnapshot.MAX_KARTS - _session.players.size()))
 	_session.track_id = new_track_id
 	_session.difficulty_id = new_difficulty_id
 

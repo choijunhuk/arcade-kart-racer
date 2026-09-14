@@ -164,6 +164,33 @@ func test_begin_prepare_clamps_ai_count_against_the_post_replace_roster() -> voi
 	assert_eq(session.players.size(), 3, "roster must have been replaced first")
 	assert_eq(session.ai_count, RaceSnapshot.MAX_KARTS - 3, "ai_count must clamp against the post-replace roster, not the stale pre-replace one")
 
+## Clamp hole: a roster already larger than MAX_KARTS (from a hostile/buggy
+## authority — `replace()` used to bound nothing) made `clampi`'s own min
+## (0) exceed its max (`MAX_KARTS - size`, negative), which returns that
+## negative max instead of clamping to 0. `apply_race_settings` must clamp
+## the upper bound itself with `maxi(0, ...)` so it never goes negative.
+func test_apply_race_settings_never_sends_ai_count_negative_for_an_oversized_roster() -> void:
+	var session: NetSession = NetSession.new()
+	add_child_autofree(session)
+	var oversized: Array[Dictionary] = []
+	for index: int in range(RaceSnapshot.MAX_KARTS + 3):
+		oversized.append({"peer": index + 1, "driver": NetContentCatalog.default_driver_id(), "kart": NetContentCatalog.default_kart_id(), "ready": true})
+	session.players = oversized
+	session._roster.apply_race_settings(1, 5, "track_01_ridgeline_circuit", "easy")
+	assert_eq(session.ai_count, 0, "ai_count must clamp to 0, never negative, once the roster already exceeds MAX_KARTS")
+
+## The other half of the same clamp hole: `replace()` itself must reject/
+## truncate an oversized roster instead of handing `apply_race_settings` (and
+## every other roster reader) more rows than `RaceSnapshot.MAX_KARTS` allows.
+func test_replace_truncates_a_roster_larger_than_max_karts() -> void:
+	var session: NetSession = NetSession.new()
+	add_child_autofree(session)
+	var oversized: Array = []
+	for index: int in range(RaceSnapshot.MAX_KARTS + 5):
+		oversized.append({"peer": index + 1, "driver": NetContentCatalog.default_driver_id(), "kart": NetContentCatalog.default_kart_id(), "ready": true})
+	session._roster.replace(oversized)
+	assert_eq(session.players.size(), RaceSnapshot.MAX_KARTS, "replace() must truncate an oversized roster to MAX_KARTS")
+
 ## `_prepare_race`'s roster/lobby half (NetSessionLobby.begin_prepare) and
 ## `NetRaceSetup.build` are what carry laps/bots/track/difficulty into the
 ## `RaceConfig` every peer builds identically (spec item 1); exercised
