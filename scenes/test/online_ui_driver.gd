@@ -47,6 +47,10 @@ func _ready() -> void:
 	GameState.automation_mode = true
 	_parse_args()
 	_started_at = NetSession.now()
+	# The engine is still finishing its own add_child of this node into
+	# `get_tree().root` while `_ready()` runs; adding main.tscn to root in
+	# the same call fails with "Parent node is busy setting up children".
+	await get_tree().process_frame
 	_drive()
 
 
