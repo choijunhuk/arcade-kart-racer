@@ -109,24 +109,32 @@ static func compute_avoid_bias(report: AISensors.SensorReport, avoid_strength: f
 
 ## Returns whether a valid overtake is currently denied by both lane-clearance
 ## checks. Static obstacles remain hard blockers during any later relaxation.
-static func overtake_is_boxed(report: AISensors.SensorReport, profile: AIDifficultyProfile, curvature_ahead: float) -> bool:
-	if not _can_attempt_overtake(report, profile, curvature_ahead):
+## `personality` (spec §18d) shifts only how bold the go/no-go call is (via
+## `_can_attempt_overtake`'s effective speed-delta threshold).
+static func overtake_is_boxed(report: AISensors.SensorReport, profile: AIDifficultyProfile, curvature_ahead: float, personality: AIPersonality = null) -> bool:
+	if not _can_attempt_overtake(report, profile, curvature_ahead, personality):
 		return false
 	return not report.side_clear(AISensors.Side.LEFT) and not report.side_clear(AISensors.Side.RIGHT)
 
 
 ## Pure overtake bias toward whichever forward lane is clear (spec §13.4).
 ## Sustained traffic may relax kart occupancy, but never wall/obstacle safety.
+## `personality` (spec §18d) scales three things, each a no-op at neutral:
+## `overtake_boldness` tightens/loosens the speed-delta gate and how soon a
+## boxed-in AI relaxes into forcing a lane; `line_discipline` narrows/widens
+## the resulting lane-offset amplitude (still hard-clamped by the caller to
+## `profile.lane_offset_min/max`, so this never exceeds the difficulty's cap).
 static func compute_overtake_bias(
 	report: AISensors.SensorReport, profile: AIDifficultyProfile, curvature_ahead: float,
-	boxed_elapsed: float = 0.0,
+	boxed_elapsed: float = 0.0, personality: AIPersonality = null,
 ) -> float:
-	if not _can_attempt_overtake(report, profile, curvature_ahead):
+	if not _can_attempt_overtake(report, profile, curvature_ahead, personality):
 		return 0.0
 	var left_distance: float = INF if report.side_clear(AISensors.Side.LEFT) else 0.0
 	var right_distance: float = INF if report.side_clear(AISensors.Side.RIGHT) else 0.0
 	var side: int = choose_overtake_side(left_distance, right_distance, 0.0)
-	if side == 0 and boxed_elapsed >= OVERTAKE_BLOCKED_RELAX_SECONDS:
+	var relax_seconds: float = OVERTAKE_BLOCKED_RELAX_SECONDS * AIPersonalityTuning.overtake_relax_multiplier(personality)
+	if side == 0 and boxed_elapsed >= relax_seconds:
 		left_distance = float(report.lane_distance.get(AISensors.Side.LEFT, INF))
 		right_distance = float(report.lane_distance.get(AISensors.Side.RIGHT, INF))
 		if report.obstacle_hit.get(AISensors.Side.LEFT, false) or report.kart_ahead_side == AISensors.Side.LEFT:
@@ -134,11 +142,12 @@ static func compute_overtake_bias(
 		if report.obstacle_hit.get(AISensors.Side.RIGHT, false) or report.kart_ahead_side == AISensors.Side.RIGHT:
 			right_distance = 0.0
 		side = choose_overtake_side(left_distance, right_distance, report.kart_ahead_distance)
-	return float(side) * profile.lane_offset_max
+	return float(side) * profile.lane_offset_max * AIPersonalityTuning.lane_width_multiplier(personality)
 
 
-static func _can_attempt_overtake(report: AISensors.SensorReport, profile: AIDifficultyProfile, curvature_ahead: float) -> bool:
-	if report.kart_ahead_distance > profile.overtake_range or report.kart_ahead_relative_speed < OVERTAKE_SPEED_DELTA:
+static func _can_attempt_overtake(report: AISensors.SensorReport, profile: AIDifficultyProfile, curvature_ahead: float, personality: AIPersonality = null) -> bool:
+	var speed_delta: float = OVERTAKE_SPEED_DELTA * AIPersonalityTuning.overtake_speed_delta_multiplier(personality)
+	if report.kart_ahead_distance > profile.overtake_range or report.kart_ahead_relative_speed < speed_delta:
 		return false
 	if absf(curvature_ahead) > CORNER_APEX_CURVATURE:
 		return false
@@ -155,9 +164,11 @@ static func evaluate_stuck(stuck_elapsed: float) -> StuckAction:
 
 
 ## Builds one InputFrame from sensor/navigation state (spec §13.4).
+## `personality` (spec §18d) is forwarded only to the drift planner's
+## tier/release-timing judgment; a null personality changes nothing here.
 func compute_frame(
 	kart: KartController, profile: AIDifficultyProfile, nav: AINavigator.NavResult,
-	sensors: AISensors.SensorReport, context: AIRaceContext, dt: float,
+	sensors: AISensors.SensorReport, context: AIRaceContext, dt: float, personality: AIPersonality = null,
 ) -> InputFrame:
 	var frame: InputFrame = InputFrame.zero()
 	match kart.get_state():
@@ -199,7 +210,7 @@ func compute_frame(
 		_drive_throttle_brake(frame, kart, target_speed, dt, profile)
 	# Emergency recovery keeps the navigator steering and releases drift.
 	if not _apply_head_on_brake(frame, kart, sensors):
-		_drift_planner.update(frame, kart, profile, nav, dt)
+		_drift_planner.update(frame, kart, profile, nav, dt, personality)
 	_apply_trick(frame, kart, profile)
 	return frame
 

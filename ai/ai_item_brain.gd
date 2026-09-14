@@ -34,21 +34,28 @@ func _init(rng: RandomNumberGenerator) -> void:
 ## Evaluates one AI tick's item-use decision; returns true when `item` should
 ## fire. `difficulty.item_decision_delay` throttles how often a fresh
 ## eligibility check happens; `item_use_accuracy` is the chance a genuinely
-## eligible situation is actually recognized and acted on.
+## eligible situation is actually recognized and acted on. `personality`
+## (spec §18d) scales both per-category: aggression speeds up/sharpens
+## attack-item decisions, defense slows down/sharpens defensive-item ones —
+## a null personality (or one with all-neutral 0.5 traits) leaves both
+## exactly as `difficulty` alone would produce.
 func should_use(
 	view: ItemSlotView, use_profile: AIItemUseProfile, difficulty: AIDifficultyProfile,
-	context: ItemDecisionContext, dt: float,
+	context: ItemDecisionContext, dt: float, personality: AIPersonality = null,
 ) -> bool:
 	if not view.has_item():
 		_decision_timer = 0.0
 		return false
 	_decision_timer += dt
-	if _decision_timer < difficulty.item_decision_delay:
+	var category: ItemData.ItemCategory = view.get_category()
+	var effective_delay: float = difficulty.item_decision_delay * AIPersonalityTuning.item_delay_multiplier(category, personality)
+	if _decision_timer < effective_delay:
 		return false
 	_decision_timer = 0.0
-	if not _rule_eligible(view.get_category(), use_profile, context):
+	if not _rule_eligible(category, use_profile, context):
 		return false
-	return _rng.randf() < difficulty.item_use_accuracy
+	var effective_accuracy: float = clampf(difficulty.item_use_accuracy * AIPersonalityTuning.item_accuracy_multiplier(category, personality), 0.0, 1.0)
+	return _rng.randf() < effective_accuracy
 
 
 ## Pure per-category eligibility rule table (spec §13.5), exposed statically

@@ -12,6 +12,7 @@ var _kart: KartController
 var _track: TrackRoot
 var _context: AIRaceContext
 var _profile: AIDifficultyProfile
+var _personality: AIPersonality
 var _rng: RandomNumberGenerator
 var _sensors: AISensors
 var _navigator: AINavigator
@@ -34,13 +35,19 @@ var _frame_tick: int = 0
 ## Wires every dependency and rolls this kart's fixed random seed. Call once
 ## right after `add_child()`. `phase_offset` (seconds, spec §26) staggers AI
 ## ticks across karts so they do not all re-shapecast on the same frame.
-func setup(kart: KartController, track: TrackRoot, context: AIRaceContext, profile: AIDifficultyProfile, rng: RandomNumberGenerator, phase_offset: float = 0.0) -> void:
+## `personality` (spec §18d) is this driver's `DriverData.ai_personality`;
+## null (the default) means neutral judgment, i.e. today's behavior.
+func setup(
+	kart: KartController, track: TrackRoot, context: AIRaceContext, profile: AIDifficultyProfile,
+	rng: RandomNumberGenerator, phase_offset: float = 0.0, personality: AIPersonality = null,
+) -> void:
 	if not AIDifficulty.validate(profile):
 		return
 	_kart = kart
 	_track = track
 	_context = context
 	_profile = profile
+	_personality = personality
 	_rng = rng
 	_tick_interval = AIDifficulty.tick_interval(profile)
 	_tick_accumulator = phase_offset
@@ -98,17 +105,17 @@ func _run_tick(dt: float) -> void:
 	var sensor_report: AISensors.SensorReport = _sensors.tick()
 	var avoid_bias: float = AIDriver.compute_avoid_bias(sensor_report, AIDriver.AVOID_STRENGTH)
 	var curvature_ahead: float = _navigator.get_last_curvature_ahead()
-	if _kart.get_state() in [KartState.GROUNDED, KartState.DRIFTING] and AIDriver.overtake_is_boxed(sensor_report, _profile, curvature_ahead):
+	if _kart.get_state() in [KartState.GROUNDED, KartState.DRIFTING] and AIDriver.overtake_is_boxed(sensor_report, _profile, curvature_ahead, _personality):
 		_boxed_overtake_elapsed += dt
 	else:
 		_boxed_overtake_elapsed = 0.0
-	var overtake_bias: float = AIDriver.compute_overtake_bias(sensor_report, _profile, curvature_ahead, _boxed_overtake_elapsed)
+	var overtake_bias: float = AIDriver.compute_overtake_bias(sensor_report, _profile, curvature_ahead, _boxed_overtake_elapsed, _personality)
 	var bias: float = clampf(avoid_bias + overtake_bias, _profile.lane_offset_min, _profile.lane_offset_max)
 	if sensor_report.incoming_projectile and _rng.randf() < _profile.projectile_dodge_prob:
 		var dodge_side: float = -1.0 if _last_lane_offset >= 0.0 else 1.0
 		bias = clampf(bias + dodge_side * AIDriver.AVOID_STRENGTH, _profile.lane_offset_min, _profile.lane_offset_max)
 	var nav: AINavigator.NavResult = _navigator.compute(_kart.global_position, _kart.get_speed(), _profile, bias, dt, _rng)
-	var frame: InputFrame = _driver.compute_frame(_kart, _profile, nav, sensor_report, _context, dt)
+	var frame: InputFrame = _driver.compute_frame(_kart, _profile, nav, sensor_report, _context, dt, _personality)
 	_frame_tick += 1
 	frame.tick = _frame_tick
 	_evaluate_item_use(frame, sensor_report, nav, dt)
@@ -134,7 +141,7 @@ func _evaluate_item_use(frame: InputFrame, sensor_report: AISensors.SensorReport
 	decision_context.nearby_kart_count = int(sensor_report.kart_ahead_distance < INF) + int(sensor_report.rear_kart_distance < INF)
 	decision_context.being_overtaken = sensor_report.rear_kart_distance < INF and sensor_report.rear_kart_relative_speed > 0.0
 	decision_context.at_corner_apex = nav.curvature_ahead >= _profile.drift_curvature_threshold
-	frame.item = _item_brain.should_use(_item_slot_view, use_profile, _profile, decision_context, dt)
+	frame.item = _item_brain.should_use(_item_slot_view, use_profile, _profile, decision_context, dt, _personality)
 
 
 func _item_box_anchors() -> Array[Node3D]:
