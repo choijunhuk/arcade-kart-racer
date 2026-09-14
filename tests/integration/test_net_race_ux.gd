@@ -122,6 +122,28 @@ func test_leave_race_closes_the_session_and_requests_the_main_menu() -> void:
 	assert_null(session_ref.get_ref(), "LEAVE RACE must close/free the session")
 
 
+## Review finding 6: a listen host with other players still connected must
+## not end everyone's session from a single keypress that reads as "only I
+## leave". The button reads "END SESSION" and the first press only asks for
+## confirmation; the session must survive until a second press.
+func test_end_session_on_a_multiplayer_host_requires_confirmation() -> void:
+	var manager: RaceManager = _hosted_manager()
+	await wait_process_frames(2)
+	var session: NetSession = GameState.net_session
+	session.players.append({"peer": 2, "driver": NetContentCatalog.default_driver_id(), "kart": NetContentCatalog.default_kart_id(), "ready": true})
+	var pause_menu: PauseMenu = manager.get_node("PauseMenu") as PauseMenu
+	var menu_button: Button = pause_menu.get_node("Panel/VBox/MenuButton") as Button
+	pause_menu._toggle_network_pause(PlayerSlot.KEYBOARD_DEVICE_ID)
+	assert_eq(menu_button.text, "END SESSION")
+	pause_menu._on_menu_pressed() # First press: confirmation only.
+	assert_not_null(GameState.net_session, "the first press must not end the session")
+	assert_ne(menu_button.text, "END SESSION", "the button must show a confirmation prompt")
+	pause_menu._on_menu_pressed() # Second press: actually ends it.
+	assert_null(GameState.net_session, "the second press must end the session")
+	manager.free()
+	await wait_process_frames(1)
+
+
 func test_results_back_to_lobby_keeps_the_session_alive_and_reopens_it() -> void:
 	var session: NetSession = NetSession.new()
 	add_child_autofree(session)

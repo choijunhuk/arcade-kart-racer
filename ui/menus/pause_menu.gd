@@ -19,6 +19,10 @@ var _pause_owner_device_id: int = PlayerSlot.KEYBOARD_DEVICE_ID
 ## the server-authoritative race (this peer's own RaceManager, if host) and
 ## `get_tree().paused` are both left untouched — only the overlay is local.
 var _network_paused: bool = false
+## True once the networked overlay's menu button has been pressed once as a
+## listen host with other players present (review finding 6): the next press
+## actually ends the session. Reset whenever the overlay is reconfigured.
+var _pending_end_session_confirm: bool = false
 
 
 func _ready() -> void:
@@ -94,12 +98,27 @@ func _hide_network_pause() -> void:
 
 
 ## RESTART/SETTINGS make no sense mid-race for a server-authoritative
-## session, so the networked overlay offers only RESUME and LEAVE RACE.
+## session, so the networked overlay offers only RESUME and LEAVE/END.
 func _configure_network_buttons(active: bool) -> void:
 	_restart_button.visible = not active
 	_settings_button.visible = not active
 	_continue_button.text = "RESUME" if active else "Continue"
-	_menu_button.text = "LEAVE RACE" if active else "Quit to Menu"
+	_pending_end_session_confirm = false
+	if not active:
+		_menu_button.text = "Quit to Menu"
+	elif _ends_session_for_everyone():
+		_menu_button.text = "END SESSION"
+	else:
+		_menu_button.text = "LEAVE RACE"
+
+
+## True when this button would end the whole session for every connected
+## peer, not just remove this one peer (review finding 6): a listen host
+## with other players still in the session. A dedicated/headless server has
+## no local player and never shows this overlay, so it never reaches here.
+func _ends_session_for_everyone() -> bool:
+	var session: NetSession = GameState.net_session
+	return is_instance_valid(session) and session.multiplayer.is_server() and session.players.size() > 1
 
 
 func _input(event: InputEvent) -> void:
@@ -188,9 +207,17 @@ func _wire_focus() -> void:
 		buttons[index].focus_neighbor_bottom = buttons[index].get_path_to(next)
 
 
+## Ending a shared session from a single keypress reads as "only I leave"
+## when it actually ends the race for every other player (review finding
+## 6), so the first press on that overlay only asks for confirmation.
 func _on_menu_pressed() -> void:
-	if _manager != null:
-		_manager.back_to_menu()
+	if _manager == null:
+		return
+	if _network_paused and _ends_session_for_everyone() and not _pending_end_session_confirm:
+		_pending_end_session_confirm = true
+		_menu_button.text = "CONFIRM END SESSION?"
+		return
+	_manager.back_to_menu()
 
 
 func _event_device_id(event: InputEvent) -> int:
