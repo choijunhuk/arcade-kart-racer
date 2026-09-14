@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://data/schemas/track_data.gd" id="1"]
 [ext_resource type="PackedScene" path="res://track/tracks/track_03_glacier_crown/track_03_glacier_crown.tscn" id="2"]
-[ext_resource type="AudioStream" path="res://assets/audio/placeholder/race.wav" id="3"]
+[ext_resource type="AudioStream" path="res://assets/audio/placeholder/glacier_crown.wav" id="3"]
 
 [sub_resource type="Gradient" id="Color"]
 colors = PackedColorArray(0.4, 0.65, 0.8, 1, 0.65, 0.86, 1, 1)

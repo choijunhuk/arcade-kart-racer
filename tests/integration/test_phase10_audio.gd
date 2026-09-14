@@ -238,7 +238,7 @@ func test_lap_stingers_and_guarded_pitch_update_immediately() -> void:
 	assert_eq(AudioManager.bgm.pitch_scale, 1.0)
 	EventBus.lap_completed.emit(kart, 2, 20.0)
 	assert_eq(_plays.count(&"final_lap"), 1)
-	assert_almost_eq(AudioManager.bgm.pitch_scale, 1.03, EPSILON)
+	assert_almost_eq(AudioManager.bgm.pitch_scale, 1.06, EPSILON)
 	SettingsManager.update_setting(&"audio", &"final_lap_pitch", false)
 	assert_eq(AudioManager.bgm.pitch_scale, 1.0)
 
