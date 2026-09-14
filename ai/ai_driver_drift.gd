@@ -26,13 +26,15 @@ func _init(rng: RandomNumberGenerator) -> void:
 
 
 ## Mutates `frame.steer`/`frame.drift`/`frame.drift_pressed` in place.
-func update(frame: InputFrame, kart: KartController, profile: AIDifficultyProfile, nav: AINavigator.NavResult, dt: float) -> void:
+## `personality` (spec §18d) only reaches the HOLD-phase target-tier/release
+## judgment; drift entry (`_try_enter`) stays `drift_skill`-only.
+func update(frame: InputFrame, kart: KartController, profile: AIDifficultyProfile, nav: AINavigator.NavResult, dt: float, personality: AIPersonality = null) -> void:
 	match kart.get_drift_state():
 		DriftController.DriftState.HOP:
 			frame.steer = float(_locked_direction) * maxf(absf(frame.steer), MIN_STEER_TO_START_DRIFT)
 			frame.drift = true
 		DriftController.DriftState.HOLD:
-			_update_hold(frame, kart, profile, nav.signed_curvature_ahead, dt)
+			_update_hold(frame, kart, profile, nav.signed_curvature_ahead, dt, personality)
 		_:
 			_try_enter(frame, kart, profile, nav.signed_curvature_ahead)
 
@@ -50,7 +52,7 @@ func _try_enter(frame: InputFrame, kart: KartController, profile: AIDifficultyPr
 	frame.drift_pressed = true
 
 
-func _update_hold(frame: InputFrame, kart: KartController, profile: AIDifficultyProfile, curvature: float, dt: float) -> void:
+func _update_hold(frame: InputFrame, kart: KartController, profile: AIDifficultyProfile, curvature: float, dt: float, personality: AIPersonality = null) -> void:
 	# KartPhysics already locks drift direction. Preserve countersteer so the
 	# navigator can widen the turn instead of forcing the kart into the inner wall.
 	# Strong opposition cancels DriftController HOLD, so keep a strict margin.
@@ -58,7 +60,8 @@ func _update_hold(frame: InputFrame, kart: KartController, profile: AIDifficulty
 		var limit: float = kart.tuning.drift_min_steer * COUNTERSTEER_CANCEL_MARGIN
 		frame.steer = clampf(frame.steer, -limit, limit)
 	var release_threshold: float = profile.drift_curvature_threshold * DRIFT_RELEASE_CURVATURE_RATIO
-	var tier_reached: bool = kart.get_drift_tier() >= profile.target_tier
-	var cancel_prob: float = (1.0 - profile.drift_skill) * DRIFT_CANCEL_PROB_PER_SECOND * dt
+	var target_tier: int = AIPersonalityTuning.drift_target_tier(profile.target_tier, personality)
+	var tier_reached: bool = kart.get_drift_tier() >= target_tier
+	var cancel_prob: float = (1.0 - profile.drift_skill) * DRIFT_CANCEL_PROB_PER_SECOND * dt * AIPersonalityTuning.drift_cancel_prob_multiplier(personality)
 	var mistake: bool = _rng.randf() < cancel_prob
 	frame.drift = absf(curvature) >= release_threshold and not tier_reached and not mistake

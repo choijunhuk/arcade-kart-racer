@@ -242,7 +242,9 @@ func _spawn_ai_kart(kart: KartController, race_rng: RandomNumberGenerator, ai_in
 	kart_rng.seed = race_rng.randi()
 	var tick_interval: float = AIDifficulty.tick_interval(_config.ai_difficulty)
 	var phase_offset: float = tick_interval * (float(ai_index) / maxf(float(ai_count), 1.0))
-	controller.setup(kart, _track, _ai_context, _config.ai_difficulty, kart_rng, phase_offset)
+	var driver: DriverData = kart.get_driver_data()
+	var personality: AIPersonality = driver.ai_personality if driver != null else null
+	controller.setup(kart, _track, _ai_context, _config.ai_difficulty, kart_rng, phase_offset, personality)
 	_ai_controllers[kart.get_instance_id()] = controller
 func _make_player_provider(kart: KartController, player: PlayerSlot) -> InputProvider:
 	if _player_provider_factory.is_valid():
