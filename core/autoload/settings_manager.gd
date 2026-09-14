@@ -57,6 +57,7 @@ func default_settings() -> Dictionary:
 			"vsync": true,
 			"render_scale": 1.0,
 			"particle_quality": 2,
+			"art_style": "kenney",
 		},
 		"controls": {
 			"deadzone": 0.2,
