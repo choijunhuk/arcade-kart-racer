@@ -127,7 +127,7 @@ func start_race(force: bool) -> bool:
 	_session.started = true
 	_session.peer.refuse_new_connections = not _session.dedicated
 	_session.send(&"_prepare_race", 0, _prepare_args(), true)
-	_session._prepare_race(_session.players, _session.ai_count, _session.laps, _session.seed, _session.track_id)
+	_session._prepare_race(_session.players, _session.ai_count, _session.laps, _session.seed, _session.track_id, _session.difficulty_id)
 	return true
 
 
@@ -141,10 +141,11 @@ func retry_start() -> void:
 			_session.send(&"_prepare_race", id, _prepare_args(), true)
 
 
-## Dedicated-server-only: reopens the lobby after RESULTS, keeping already-
-## connected peers on the same ENet session (spec item 3).
+## Reopens the lobby after RESULTS for any server (listen or dedicated),
+## keeping already-connected peers on the same ENet session and promoting
+## mid-race "waiting" joiners into the roster (spec item 3).
 func restart_to_lobby() -> void:
-	if not _session.multiplayer.is_server() or not _session.dedicated:
+	if not _session.multiplayer.is_server():
 		return
 	clear_race_state()
 	_session.peer.refuse_new_connections = false
@@ -164,5 +165,41 @@ func clear_race_state() -> void:
 	loaded.clear()
 
 
+## Host-only: updates laps/bots/track/difficulty and rebroadcasts the lobby
+## so every client's UI reflects the host's choice (spec item 1). Ignored
+## once the race has started, since `_prepare_race` owns those fields then.
+func set_race_options(new_laps: int, new_ai_count: int, new_track_id: String, new_difficulty_id: String) -> void:
+	if not _session.multiplayer.is_server() or _session.started:
+		return
+	apply_race_settings(
+		clampi(new_laps, 1, 9), clampi(new_ai_count, 0, RaceSnapshot.MAX_KARTS - _session.players.size()),
+		new_track_id, new_difficulty_id,
+	)
+	_session._broadcast_lobby()
+
+
+## Raw setter shared by `_lobby` and `_prepare_race` (spec item 1): both
+## receive the same four host-chosen fields over their own RPC already.
+func apply_race_settings(new_laps: int, new_ai_count: int, new_track_id: String, new_difficulty_id: String) -> void:
+	_session.laps = new_laps
+	_session.ai_count = new_ai_count
+	_session.track_id = new_track_id
+	_session.difficulty_id = new_difficulty_id
+
+
+## `_lobby`'s full body: replaces the roster and applies the host's fields.
+func apply_lobby(roster: Array, new_laps: int, new_ai_count: int, new_track_id: String, new_difficulty_id: String) -> void:
+	replace(roster)
+	apply_race_settings(new_laps, new_ai_count, new_track_id, new_difficulty_id)
+
+
+## `_prepare_race`'s roster/lobby half: marks preparation started, replaces
+## the roster and applies the host's fields together (spec item 1).
+func begin_prepare(roster: Array, new_laps: int, new_ai_count: int, new_track_id: String, new_difficulty_id: String) -> void:
+	preparing = true
+	replace(roster)
+	apply_race_settings(new_laps, new_ai_count, new_track_id, new_difficulty_id)
+
+
 func _prepare_args() -> Array:
-	return [_session.players, _session.ai_count, _session.laps, _session.seed, _session.track_id]
+	return [_session.players, _session.ai_count, _session.laps, _session.seed, _session.track_id, _session.difficulty_id]

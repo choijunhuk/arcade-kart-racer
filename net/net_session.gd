@@ -26,8 +26,9 @@ var seed: int = 15
 ## Independent of `automated` ("this is a scripted test harness").
 var dedicated: bool = false
 var max_players: int = NetTuning.MAX_PLAYERS
-## "" keeps the default track; only the dedicated server CLI sets this.
+## "" keeps the default track/AI difficulty; only the dedicated server CLI sets track_id.
 var track_id: String = ""
+var difficulty_id: String = ""
 ## SHA-256 of the session password ("" = none); plaintext is never stored
 ## or logged (spec item 6).
 var password_hash: String = ""
@@ -105,11 +106,14 @@ func select(driver: String, kart: String, ready: bool) -> void:
 func start_race(force: bool = false) -> bool:
 	return _roster.start_race(force)
 
+func set_race_options(new_laps: int, new_ai_count: int, new_track_id: String, new_difficulty_id: String) -> void: # Host-only (spec item 1).
+	_roster.set_race_options(new_laps, new_ai_count, new_track_id, new_difficulty_id)
+
 ## Repeats preparation only for peers whose scene-load acknowledgement is missing.
 func retry_start() -> void:
 	_roster.retry_start()
 
-## Dedicated-server-only: reopens the lobby after RESULTS (spec item 3).
+## Host-only: reopens the lobby after RESULTS (NetSessionLobby, spec item 3).
 func restart_to_lobby() -> void:
 	_roster.restart_to_lobby()
 
@@ -198,7 +202,7 @@ func _update_player(id: int, driver: String, kart: String, ready: bool) -> void:
 		_broadcast_lobby()
 
 func _broadcast_lobby() -> void:
-	send(&"_lobby", 0, [players], true)
+	send(&"_lobby", 0, [players, laps, ai_count, track_id, difficulty_id], true)
 	lobby_changed.emit()
 
 ## Sender id of the `any_peer` RPC being handled, or -1 when this process is
@@ -217,8 +221,8 @@ func _selection(driver: String, kart: String, ready: bool) -> void:
 		_update_player(id, driver, kart, ready)
 
 @rpc("authority", "call_remote", "reliable")
-func _lobby(roster: Array) -> void:
-	_roster.replace(roster)
+func _lobby(roster: Array, lobby_laps: int = 1, lobby_ai_count: int = 6, lobby_track_id: String = "", lobby_difficulty_id: String = "") -> void:
+	_roster.apply_lobby(roster, lobby_laps, lobby_ai_count, lobby_track_id, lobby_difficulty_id)
 	lobby_changed.emit()
 
 @rpc("authority", "call_remote", "reliable")
@@ -228,19 +232,15 @@ func _return_to_lobby(roster: Array) -> void:
 	lobby_changed.emit()
 
 @rpc("authority", "call_remote", "reliable")
-func _prepare_race(roster: Array, bots: int, lap_count: int, race_seed: int, race_track_id: String = "") -> void:
+func _prepare_race(roster: Array, bots: int, lap_count: int, race_seed: int, race_track_id: String = "", race_difficulty_id: String = "") -> void:
 	if _roster.preparing or race != null:
 		if not multiplayer.is_server() and race != null:
 			send(&"_race_loaded", SERVER_ID, [], true)
 		return
-	_roster.preparing = true
-	_roster.replace(roster)
-	ai_count = clampi(bots, 0, RaceSnapshot.MAX_KARTS - players.size())
-	laps = clampi(lap_count, 1, 9)
+	_roster.begin_prepare(roster, clampi(lap_count, 1, 9), clampi(bots, 0, RaceSnapshot.MAX_KARTS - players.size()), race_track_id, race_difficulty_id)
 	seed = race_seed
-	track_id = race_track_id
 	started = true
-	GameState.pending_race_config = NetRaceSetup.build(players, ai_count, laps, seed, track_id)
+	GameState.pending_race_config = NetRaceSetup.build(players, ai_count, laps, seed, track_id, difficulty_id)
 	GameState.current_mode = GameState.Mode.RACE
 	get_tree().change_scene_to_file.call_deferred(RACE_PATH)
 
