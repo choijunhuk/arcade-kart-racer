@@ -99,6 +99,31 @@ func test_write_and_rotate_appends_a_suffix_on_filename_collision() -> void:
 	assert_eq(int(third_data["index"]), 2)
 
 
+## 18d-4 review fix #4: one race can write one file per recorded local human
+## kart (split-screen), so rotation must evict whole races, not raw files —
+## otherwise a race with more players evicts an older race's files one
+## player at a time and can leave an older race's p2 file orphaned once its
+## p1 file is gone.
+func test_write_and_rotate_keeps_the_newest_20_races_worth_of_two_player_files() -> void:
+	for race_index: int in range(22):
+		var stamp: String = "%03d" % race_index
+		var p1_error: Error = RaceTelemetryService.write_and_rotate(_directory, "%s-track-p1.json" % stamp, {"race": race_index, "player": 1}, 20)
+		var p2_error: Error = RaceTelemetryService.write_and_rotate(_directory, "%s-track-p2.json" % stamp, {"race": race_index, "player": 2}, 20)
+		assert_eq(p1_error, OK)
+		assert_eq(p2_error, OK)
+
+	var remaining: PackedStringArray = _list_json_files(_directory)
+	assert_eq(remaining.size(), 40, "rotation must keep exactly 20 races worth of files (2 players each)")
+	assert_false(FileAccess.file_exists(_directory.path_join("000-track-p1.json")), "the oldest race's p1 file must be evicted")
+	assert_false(FileAccess.file_exists(_directory.path_join("000-track-p2.json")), "the oldest race's p2 file must be evicted with it, not orphaned")
+	assert_false(FileAccess.file_exists(_directory.path_join("001-track-p1.json")))
+	assert_false(FileAccess.file_exists(_directory.path_join("001-track-p2.json")))
+	assert_true(FileAccess.file_exists(_directory.path_join("002-track-p1.json")), "the 20 newest races (002-021) must both survive")
+	assert_true(FileAccess.file_exists(_directory.path_join("002-track-p2.json")))
+	assert_true(FileAccess.file_exists(_directory.path_join("021-track-p1.json")))
+	assert_true(FileAccess.file_exists(_directory.path_join("021-track-p2.json")))
+
+
 ## 18d-4 review fix #3: once every `<stem>-N.<ext>` suffix up to
 ## MAX_COLLISION_SUFFIX is taken, the write must be skipped (not clobber the
 ## last candidate tried) and every pre-existing file's contents must be

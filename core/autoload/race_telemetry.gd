@@ -14,6 +14,13 @@ extends Node
 ## not signal-arrival order (18d-4 review fix #1).
 
 const DEFAULT_DIRECTORY: String = "user://telemetry"
+## Number of RACES (not raw files) kept per telemetry directory (18d-4
+## review fix #4). One race now writes one file per recorded local human
+## kart (split-screen), so counting raw files would let a single newer race
+## evict an older race's files one player at a time instead of rotating
+## whole races out together. `_rotate()` groups files by their shared
+## "<stamp>-<track_id>" prefix (everything before the trailing
+## "-p<N>[-<suffix>].json") and keeps the newest `MAX_FILES` such groups.
 const MAX_FILES: int = 20
 ## Sane upper bound on `<stem>-N.<ext>` collision-suffix attempts before
 ## `_resolve_collision_free_filename()` gives up (18d-4 review fix #3).
@@ -334,19 +341,20 @@ static func is_local_human_kart(kart: Node) -> bool:
 
 
 ## Writes `data` as JSON to `directory/filename` (atomic tmp+rename, mirrors
-## GhostRecording.save_best) then deletes the oldest `*.json` files beyond
-## `keep`. 18d-3 review fix #4: if `filename` already exists (two files
-## written within the same second, e.g. two local players), the write is
-## retried under `<stem>-2.<ext>`, `<stem>-3.<ext>`, ... until a free name is
-## found, so no writer ever clobbers another's file. 18d-4 review fix #3: if
-## every suffix up to `MAX_COLLISION_SUFFIX` is already taken, the write is
-## skipped entirely (with a single `push_warning`) rather than clobbering
+## GhostRecording.save_best) then rotates out the oldest races beyond `keep`
+## (see `TelemetryFileRotation`, split out to stay under this file's
+## 400-line budget). 18d-3 review fix #4: if `filename` already exists (two
+## files written within the same second, e.g. two local players), the write
+## is retried under `<stem>-2.<ext>`, `<stem>-3.<ext>`, ... until a free name
+## is found, so no writer ever clobbers another's file. 18d-4 review fix #3:
+## if every suffix up to `MAX_COLLISION_SUFFIX` is already taken, the write
+## is skipped entirely (with a single `push_warning`) rather than clobbering
 ## the last candidate tried.
 static func write_and_rotate(directory: String, filename: String, data: Dictionary, keep: int = MAX_FILES) -> Error:
 	var make_error: Error = DirAccess.make_dir_recursive_absolute(directory)
 	if make_error != OK:
 		return make_error
-	var resolved_filename: String = _resolve_collision_free_filename(directory, filename)
+	var resolved_filename: String = TelemetryFileRotation.resolve_collision_free_filename(directory, filename, MAX_COLLISION_SUFFIX)
 	if resolved_filename.is_empty():
 		push_warning("RaceTelemetryService: skipping write for '%s' — no free filename found after %d collision suffixes" % [filename, MAX_COLLISION_SUFFIX])
 		return ERR_ALREADY_EXISTS
@@ -359,40 +367,5 @@ static func write_and_rotate(directory: String, filename: String, data: Dictiona
 	var rename_error: Error = DirAccess.rename_absolute(path + ".tmp", path)
 	if rename_error != OK:
 		return rename_error
-	_rotate(directory, keep)
+	TelemetryFileRotation.rotate(directory, keep)
 	return OK
-
-
-## Returns `filename` unchanged if free, otherwise the first `<stem>-N.<ext>`
-## (N starting at 2) that does not already exist in `directory`. Returns an
-## empty string if every suffix up to `MAX_COLLISION_SUFFIX` is taken, so the
-## caller skips the write instead of clobbering the last candidate checked
-## (18d-4 review fix #3).
-static func _resolve_collision_free_filename(directory: String, filename: String) -> String:
-	if not FileAccess.file_exists(directory.path_join(filename)):
-		return filename
-	var stem: String = filename.get_basename()
-	var extension: String = filename.get_extension()
-	for suffix: int in range(2, MAX_COLLISION_SUFFIX + 2):
-		var candidate: String = "%s-%d.%s" % [stem, suffix, extension]
-		if not FileAccess.file_exists(directory.path_join(candidate)):
-			return candidate
-	return ""
-
-
-static func _rotate(directory: String, keep: int) -> void:
-	var dir: DirAccess = DirAccess.open(directory)
-	if dir == null:
-		return
-	var files: PackedStringArray = PackedStringArray()
-	dir.list_dir_begin()
-	var entry: String = dir.get_next()
-	while entry != "":
-		if not dir.current_is_dir() and entry.ends_with(".json"):
-			files.append(entry)
-		entry = dir.get_next()
-	dir.list_dir_end()
-	files.sort()
-	while files.size() > keep:
-		dir.remove(files[0])
-		files.remove_at(0)
