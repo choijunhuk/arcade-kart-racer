@@ -67,7 +67,7 @@ func _physics_process(delta: float) -> void:
 func _on_race_started() -> void:
 	_reset_state(_should_record())
 	if _recording:
-		_assign_roster_player_indices(_resolve_roster())
+		_prime_roster(_resolve_roster())
 
 
 func _on_race_state_changed(_old_state: int, new_state: int) -> void:
@@ -162,39 +162,44 @@ func _resolve_roster() -> Array:
 	return manager.get_human_karts()
 
 
-## Pre-assigns each roster kart's stable 0-based player_index in race/grid
-## join order (18d-4 review fix #1), so `_track()` never has to hand one out
-## based on whichever kart's tracked EventBus signal happens to arrive
-## first — which previously let a split-screen p2 become player_index 0 if
-## their kart acted first.
-func _assign_roster_player_indices(roster: Array) -> void:
+## Eagerly opens a log (and reserves its stable player_index) for every
+## recorded local human kart in `roster`, in race/grid join order (18d-4
+## review fix #2), so a kart that fires zero tracked signals all race still
+## gets a file with empty totals instead of being silently absent from
+## `_write_logs()`. This is also what makes player_index follow roster order
+## rather than whichever kart's tracked EventBus signal arrives first
+## (18d-4 review fix #1).
+func _prime_roster(roster: Array) -> void:
 	for entry: Variant in roster:
 		var kart: Node = entry as Node
-		if kart == null or not is_local_human_kart(kart):
-			continue
-		var id: int = kart.get_instance_id()
-		if not _player_index.has(id):
-			_player_index[id] = _player_index.size()
+		if kart != null and is_local_human_kart(kart):
+			_register_kart(kart)
+
+
+## Opens `kart`'s log and reserves its stable 0-based player_index the first
+## time it is seen, whether from `_prime_roster()`'s eager pass or lazily
+## from its first tracked signal (fallback when no roster was available).
+## Split-screen karts never share a bucket either way (18d-3 review fix #1).
+func _register_kart(kart: Node) -> void:
+	var id: int = kart.get_instance_id()
+	if _logs.has(id):
+		return
+	_known_karts[id] = kart
+	_last_speed[id] = (kart as KartController).get_speed()
+	if not _player_index.has(id):
+		_player_index[id] = _player_index.size()
+	_logs[id] = RaceTelemetryLog.new()
 
 
 ## Returns whether `kart` is a local human kart currently being recorded and,
-## the first time each kart is seen, opens its own `RaceTelemetryLog`. Its
-## player index was already assigned by `_assign_roster_player_indices()`
-## when a roster was available; otherwise it is handed out here in first-
-## signal order (fallback), still keyed off `_player_index`'s own size so it
-## never collides with a pre-assigned roster index. Split-screen karts never
-## share a bucket either way (18d-3 review fix #1).
+## the first time each kart is seen, opens its own `RaceTelemetryLog` via
+## `_register_kart()` (fallback path for karts not covered by
+## `_prime_roster()`, e.g. no RaceManager reachable).
 func _track(kart: Node) -> RaceTelemetryLog:
 	if not _recording or not is_local_human_kart(kart):
 		return null
-	var id: int = kart.get_instance_id()
-	if not _logs.has(id):
-		_known_karts[id] = kart
-		_last_speed[id] = (kart as KartController).get_speed()
-		if not _player_index.has(id):
-			_player_index[id] = _player_index.size()
-		_logs[id] = RaceTelemetryLog.new()
-	return _logs[id]
+	_register_kart(kart)
+	return _logs[kart.get_instance_id()]
 
 
 func _update_pending_recoveries() -> void:

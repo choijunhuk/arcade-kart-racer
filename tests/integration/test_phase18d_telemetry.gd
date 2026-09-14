@@ -322,6 +322,41 @@ func test_player_index_follows_roster_order_even_when_player_two_fires_first() -
 	assert_eq(int(p2_lap1["wall_impacts"]), 2, "roster slot 1 (-p2.json) must be _second_player_kart even though it fired first")
 
 
+## 18d-4 review fix #2: a recorded local human kart that fires zero tracked
+## EventBus signals all race must still get its own file (with empty
+## totals), because logs are now opened eagerly from the stable roster on
+## race_started instead of lazily on a kart's first tracked signal.
+func test_a_silent_roster_kart_still_gets_a_file_with_empty_totals() -> void:
+	_service.roster_override = [_player_kart, _second_player_kart]
+	EventBus.race_started.emit()
+
+	# Only _player_kart does anything all race; _second_player_kart fires
+	# no tracked signal whatsoever.
+	EventBus.lap_completed.emit(_player_kart, 1, 20.0)
+
+	EventBus.race_state_changed.emit(RaceState.FINISHING, RaceState.RESULTS)
+
+	var files: PackedStringArray = _list_json_files(_directory)
+	assert_eq(files.size(), 2, "the silent roster kart must still get its own file")
+	if files.size() != 2:
+		return
+
+	var p2_file: String = ""
+	for file_name: String in files:
+		if file_name.ends_with("-p2.json"):
+			p2_file = file_name
+	assert_false(p2_file.is_empty(), "a -p2.json file must exist for the silent kart")
+	if p2_file.is_empty():
+		return
+
+	var p2: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(_directory.path_join(p2_file)))
+	assert_eq(int(p2["player_index"]), 1)
+	assert_true((p2["laps"] as Array).is_empty(), "the silent kart must have no lap entries")
+	var totals: Dictionary = p2["totals"]
+	assert_eq(int(totals["laps_completed"]), 0)
+	assert_eq(int(totals["hits"]), 0)
+
+
 func _list_json_files(directory: String) -> PackedStringArray:
 	var dir: DirAccess = DirAccess.open(directory)
 	if dir == null:
