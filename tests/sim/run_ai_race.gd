@@ -90,6 +90,7 @@ func _run() -> void:
 		var race_output: Dictionary = await _run_one_race(
 			int(options["laps"]), int(options["karts"]), int(options["seed"]) + race_index,
 			difficulty, track_scene, bool(options["items"]), bool(options["mixed_karts"]),
+			options["speed_class"] as RaceConfig.SpeedClass,
 		)
 		race_outputs.append(race_output)
 		failed = _race_failed(race_output, int(options["laps"])) or failed
@@ -97,6 +98,7 @@ func _run() -> void:
 			var control: Dictionary = await _run_one_race(
 				int(options["laps"]), int(options["karts"]), int(options["seed"]) + race_index,
 				difficulty, track_scene, false, bool(options["mixed_karts"]),
+				options["speed_class"] as RaceConfig.SpeedClass,
 			)
 			control_outputs.append(control)
 			failed = _race_failed(control, int(options["laps"])) or failed
@@ -117,7 +119,7 @@ func _run() -> void:
 		"difficulty": String(options["difficulty"]),
 		"track": String(options["track"]),
 		"laps": int(options["laps"]),
-		"karts": int(options["karts"]),
+		"karts": int(options["karts"]), "speed_class": SimSpeedClass.name_for(options["speed_class"] as RaceConfig.SpeedClass),
 		"items": bool(options["items"]),
 		"balance_gate_evaluated": balance_evaluated,
 		"balance_gate_pass": balance_pass if balance_evaluated else true,
@@ -144,6 +146,7 @@ static func parse_options(args: PackedStringArray) -> Dictionary:
 		"difficulty": DEFAULT_DIFFICULTY,
 		"track": DEFAULT_TRACK,
 		"items": DEFAULT_ITEMS_ENABLED,
+		"speed_class": RaceConfig.SpeedClass.STANDARD,
 		"strict_balance": false,
 		"mixed_karts": false,
 	}
@@ -174,6 +177,7 @@ static func parse_options(args: PackedStringArray) -> Dictionary:
 					options["items"] = true
 				elif raw_value == "off":
 					options["items"] = false
+			"--class": options["speed_class"] = SimSpeedClass.parse(raw_value)
 			"--mixed-karts":
 				options["mixed_karts"] = raw_value == "on"
 			"--strict-balance":
@@ -221,6 +225,7 @@ static func should_evaluate_item_balance(options: Dictionary) -> bool:
 func _run_one_race(
 	laps: int, kart_count: int, race_number: int, difficulty: AIDifficultyProfile,
 	track_scene: PackedScene, items_enabled: bool, mixed_karts: bool = false,
+	speed_class: RaceConfig.SpeedClass = RaceConfig.SpeedClass.STANDARD,
 ) -> Dictionary:
 	_reset_metrics()
 	_current_kart_count = kart_count
@@ -234,7 +239,7 @@ func _run_one_race(
 	config.player_kart = MEDIUM_KART
 	config.player_slot = -1
 	config.ai_difficulty = difficulty
-	config.items_enabled = items_enabled
+	config.items_enabled = items_enabled; config.speed_class = speed_class
 	config.seed = race_number # vary each race's AI rolls instead of repeating race 1
 	if mixed_karts:
 		for slot: int in range(kart_count):
@@ -346,10 +351,8 @@ func _on_wall_head_on(kart: KartController) -> void:
 	_wall_head_on_counts[kart_name] = int(_wall_head_on_counts.get(kart_name, 0)) + 1
 	_wall_head_on_count += 1
 
-
 func _on_kart_contacted(_kart: Node) -> void:
 	_kart_contact_events += 1
-
 
 func _on_item_used(_kart: Node, item_id: StringName) -> void:
 	var key: String = String(item_id)

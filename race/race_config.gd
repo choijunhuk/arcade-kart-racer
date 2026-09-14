@@ -3,9 +3,12 @@ extends Resource
 
 ## Per-race parameters consumed by RaceManager (spec §14.2).
 enum RaceMode { SINGLE_RACE, GRAND_PRIX, TIME_TRIAL, LOCAL_MULTIPLAYER }
+## Phase 18e-1: uniform kart speed tier for the whole roster (spec §18e).
+enum SpeedClass { CRUISE, STANDARD, TURBO }
 
 @export var race_mode: RaceMode = RaceMode.SINGLE_RACE
 @export var gp_round: int = 0
+@export var speed_class: SpeedClass = SpeedClass.STANDARD
 
 @export var track: TrackData
 @export var laps: int = 3

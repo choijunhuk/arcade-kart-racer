@@ -61,7 +61,10 @@ static func build_local(
 	return config
 
 
-## Returns a deep duplicate with allowlisted driver percentage modifiers applied.
+## Returns a deep duplicate with allowlisted driver percentage modifiers
+## applied. Speed class is applied once, upstream, in
+## `RaceRoster.kart_for_slot()` via `SpeedClassStats.apply()`; this function
+## must not re-apply it or the class multiplier would be double-counted.
 static func apply_driver_mods(kart: KartData, driver: DriverData) -> KartData:
 	var modified: KartData = kart.duplicate(true) as KartData
 	if driver == null:
@@ -95,6 +98,7 @@ static func normalize(config: RaceConfig) -> void:
 		config.kart_count = 1
 		config.player_slot = 0
 		config.items_enabled = false
+		config.speed_class = RaceConfig.SpeedClass.STANDARD
 	_normalize_players(config)
 
 

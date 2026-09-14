@@ -20,6 +20,7 @@ var selected_track_id: StringName = &""
 var pending_race_config: RaceConfig
 var selected_race_mode: RaceConfig.RaceMode = RaceConfig.RaceMode.SINGLE_RACE
 var selected_items_enabled: bool = true
+var selected_speed_class: RaceConfig.SpeedClass = RaceConfig.SpeedClass.STANDARD
 var grand_prix_state: GrandPrix
 ## Set by automated tools (snapshot/perf probes): disables focus-loss pause and
 ## other human-only conveniences so unattended windows keep running.
@@ -50,6 +51,7 @@ func reset_session() -> void:
 	pending_race_config = null
 	selected_race_mode = RaceConfig.RaceMode.SINGLE_RACE
 	selected_items_enabled = true
+	selected_speed_class = RaceConfig.SpeedClass.STANDARD
 	grand_prix_state = null
 	is_networked = false
 	tutorial_active = false

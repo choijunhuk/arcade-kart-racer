@@ -20,6 +20,7 @@ const SECONDS_PER_MINUTE: int = 60
 
 var _manager: RaceManager
 var _gp_label: Label
+var _class_label: Label
 var _is_grand_prix: bool = false
 
 
@@ -49,6 +50,7 @@ func show_results(entries: Array[RaceResults.Entry], manager: RaceManager) -> vo
 		_animate_row(row, index)
 		_record_badge.visible = _record_badge.visible or entry.is_new_record
 	_show_grand_prix()
+	_show_speed_class()
 	visible = true
 	_restart_button.call_deferred("grab_focus")
 
@@ -109,6 +111,21 @@ func _animate_row(row: Control, row_index: int) -> void:
 	tween.set_parallel(true)
 	tween.tween_property(row, "position:x", 0.0, tuning.results_row_duration).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	tween.tween_property(row, "modulate:a", 1.0, tuning.results_row_duration)
+
+
+## Shows the race's speed class (spec §18e step 7); hidden outside a race
+## session (e.g. a headless sim that never populates GameState).
+func _show_speed_class() -> void:
+	var config: RaceConfig = GameState.pending_race_config
+	if _class_label == null:
+		_class_label = Label.new()
+		_class_label.name = "SpeedClassLabel"
+		_class_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		$Panel/VBox.add_child(_class_label)
+		$Panel/VBox.move_child(_class_label, 1)
+	_class_label.visible = config != null
+	if config != null:
+		_class_label.text = "CLASS: %s" % SpeedClassStats.display_name(config.speed_class)
 
 
 func _wire_action_focus() -> void:

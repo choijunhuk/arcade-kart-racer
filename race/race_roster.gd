@@ -34,10 +34,15 @@ func driver_for_slot(config: RaceConfig, grid_slot: int, player: PlayerSlot) -> 
 	return _drivers[grid_slot % _drivers.size()]
 
 
-## Resolves a slot's kart from human selection, fixed roster, or legacy default.
+## Resolves a slot's kart from human selection, fixed roster, or legacy
+## default, class-scaled for the whole roster (spec §18e); the resolved
+## resource is never mutated since SpeedClassStats.apply() always duplicates.
 func kart_for_slot(config: RaceConfig, grid_slot: int, player: PlayerSlot) -> KartData:
+	var base: KartData
 	if player != null:
-		return _karts_by_id.get(player.kart_id, config.player_kart) as KartData
-	if grid_slot < config.kart_roster.size():
-		return config.kart_roster[grid_slot]
-	return config.player_kart
+		base = _karts_by_id.get(player.kart_id, config.player_kart) as KartData
+	elif grid_slot < config.kart_roster.size():
+		base = config.kart_roster[grid_slot]
+	else:
+		base = config.player_kart
+	return SpeedClassStats.apply(base, config.speed_class)
