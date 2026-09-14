@@ -92,6 +92,37 @@ func test_lobby_broadcast_applies_the_hosts_race_options_on_the_client() -> void
 	assert_eq(session.track_id, "track_04_ochre_rift")
 	assert_eq(session.difficulty_id, "easy")
 
+## Review finding 3: `apply_race_settings` must clamp, not the call sites, so
+## a hostile `_lobby` broadcast (a compromised or buggy host) cannot hand a
+## client an unbounded lap count or a negative bot count.
+func test_lobby_broadcast_clamps_a_hostile_payload() -> void:
+	var session: NetSession = NetSession.new()
+	add_child_autofree(session)
+	session._lobby([{"peer": 1, "ready": true}], 2147483647, -50, "track_01_ridgeline_circuit", "easy")
+	assert_eq(session.laps, 9, "laps must clamp to the max of 9")
+	assert_eq(session.ai_count, 0, "negative ai_count must clamp to 0")
+
+## Review finding 3: the old call-site clamp in `_prepare_race` bounded
+## `ai_count` against the roster BEFORE the roster replace, so a mid-race
+## promoted joiner's stale/empty pre-replace roster could widen the cap and
+## let `slots + ai_count` exceed `RaceSnapshot.MAX_KARTS` (rejected by
+## `RaceSnapshot.unpack`, desyncing that peer for the whole race).
+## `apply_race_settings` now clamps after `begin_prepare` has already
+## replaced the roster, so it always reads the roster this call just saw.
+func test_begin_prepare_clamps_ai_count_against_the_post_replace_roster() -> void:
+	var session: NetSession = NetSession.new()
+	add_child_autofree(session)
+	session.players = [{"peer": 1, "ready": true}] # stale 1-player roster
+	var roster: Array = [
+		{"peer": 1, "driver": NetContentCatalog.default_driver_id(), "kart": NetContentCatalog.default_kart_id(), "ready": true},
+		{"peer": 2, "driver": NetContentCatalog.default_driver_id(), "kart": NetContentCatalog.default_kart_id(), "ready": true},
+		{"peer": 3, "driver": NetContentCatalog.default_driver_id(), "kart": NetContentCatalog.default_kart_id(), "ready": true},
+	]
+	# 11 fits the stale 1-player roster (12 - 1) but not the real 3-player one.
+	session._roster.begin_prepare(roster, 4, 11, "track_01_ridgeline_circuit", "easy")
+	assert_eq(session.players.size(), 3, "roster must have been replaced first")
+	assert_eq(session.ai_count, RaceSnapshot.MAX_KARTS - 3, "ai_count must clamp against the post-replace roster, not the stale pre-replace one")
+
 ## `_prepare_race`'s roster/lobby half (NetSessionLobby.begin_prepare) and
 ## `NetRaceSetup.build` are what carry laps/bots/track/difficulty into the
 ## `RaceConfig` every peer builds identically (spec item 1); exercised

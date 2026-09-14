@@ -237,7 +237,7 @@ func _prepare_race(roster: Array, bots: int, lap_count: int, race_seed: int, rac
 		if not multiplayer.is_server() and race != null:
 			send(&"_race_loaded", SERVER_ID, [], true)
 		return
-	_roster.begin_prepare(roster, clampi(lap_count, 1, 9), clampi(bots, 0, RaceSnapshot.MAX_KARTS - players.size()), race_track_id, race_difficulty_id)
+	_roster.begin_prepare(roster, lap_count, bots, race_track_id, race_difficulty_id) # apply_race_settings clamps (spec item 3).
 	seed = race_seed
 	started = true
 	GameState.pending_race_config = NetRaceSetup.build(players, ai_count, laps, seed, track_id, difficulty_id)

@@ -171,18 +171,22 @@ func clear_race_state() -> void:
 func set_race_options(new_laps: int, new_ai_count: int, new_track_id: String, new_difficulty_id: String) -> void:
 	if not _session.multiplayer.is_server() or _session.started:
 		return
-	apply_race_settings(
-		clampi(new_laps, 1, 9), clampi(new_ai_count, 0, RaceSnapshot.MAX_KARTS - _session.players.size()),
-		new_track_id, new_difficulty_id,
-	)
+	apply_race_settings(new_laps, new_ai_count, new_track_id, new_difficulty_id)
 	_session._broadcast_lobby()
 
 
 ## Raw setter shared by `_lobby` and `_prepare_race` (spec item 1): both
 ## receive the same four host-chosen fields over their own RPC already.
+## Clamps laps/bots itself (review finding 3) so every caller — including a
+## hostile `_lobby`/`_prepare_race` payload — is bounded the same way, and
+## the bot cap always reads the roster this call just saw: callers that
+## replace the roster do so before reaching here, so a mid-race-promoted
+## joiner's post-replace roster is what gets evaluated, never a stale
+## pre-replace count that could let `slots + ai_count` exceed
+## `RaceSnapshot.MAX_KARTS` and desync that peer for the whole race.
 func apply_race_settings(new_laps: int, new_ai_count: int, new_track_id: String, new_difficulty_id: String) -> void:
-	_session.laps = new_laps
-	_session.ai_count = new_ai_count
+	_session.laps = clampi(new_laps, 1, 9)
+	_session.ai_count = clampi(new_ai_count, 0, RaceSnapshot.MAX_KARTS - _session.players.size())
 	_session.track_id = new_track_id
 	_session.difficulty_id = new_difficulty_id
 
