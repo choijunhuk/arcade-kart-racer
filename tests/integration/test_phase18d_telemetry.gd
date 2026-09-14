@@ -275,6 +275,53 @@ func test_boost_started_through_the_real_boost_controller_path_records_the_real_
 	assert_eq(int(sources.get("boost_pad", 0)), 1)
 
 
+## 18d-4 review fix #1: player_index must follow the race's stable
+## roster (join order), not "whichever local kart fires the first tracked
+## EventBus signal first" — the second roster kart firing first must still
+## land in roster slot 0 (-p1.json), not steal it from the first roster kart.
+func test_player_index_follows_roster_order_even_when_player_two_fires_first() -> void:
+	_service.roster_override = [_player_kart, _second_player_kart]
+	EventBus.race_started.emit()
+
+	# _second_player_kart (roster slot 1) fires first, and with more
+	# activity than _player_kart (roster slot 0), so the bug under test
+	# (index-by-arrival-order) would put the busier kart in p1.json.
+	EventBus.wall_impacted.emit(_second_player_kart)
+	EventBus.wall_impacted.emit(_second_player_kart)
+	EventBus.wall_impacted.emit(_player_kart)
+	EventBus.lap_completed.emit(_second_player_kart, 1, 25.0)
+	EventBus.lap_completed.emit(_player_kart, 1, 20.0)
+
+	EventBus.race_state_changed.emit(RaceState.FINISHING, RaceState.RESULTS)
+
+	var files: PackedStringArray = _list_json_files(_directory)
+	assert_eq(files.size(), 2)
+	if files.size() != 2:
+		return
+
+	var p1_file: String = ""
+	var p2_file: String = ""
+	for file_name: String in files:
+		if file_name.ends_with("-p1.json"):
+			p1_file = file_name
+		elif file_name.ends_with("-p2.json"):
+			p2_file = file_name
+	assert_false(p1_file.is_empty())
+	assert_false(p2_file.is_empty())
+	if p1_file.is_empty() or p2_file.is_empty():
+		return
+
+	var p1: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(_directory.path_join(p1_file)))
+	var p2: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(_directory.path_join(p2_file)))
+	assert_eq(int(p1["player_index"]), 0)
+	assert_eq(int(p2["player_index"]), 1)
+
+	var p1_lap1: Dictionary = (p1["laps"] as Array)[0]
+	var p2_lap1: Dictionary = (p2["laps"] as Array)[0]
+	assert_eq(int(p1_lap1["wall_impacts"]), 1, "roster slot 0 (-p1.json) must be _player_kart, not whichever kart fired first")
+	assert_eq(int(p2_lap1["wall_impacts"]), 2, "roster slot 1 (-p2.json) must be _second_player_kart even though it fired first")
+
+
 func _list_json_files(directory: String) -> PackedStringArray:
 	var dir: DirAccess = DirAccess.open(directory)
 	if dir == null:

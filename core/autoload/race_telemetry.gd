@@ -9,7 +9,9 @@ extends Node
 ## they are testable without a scene tree; only signal wiring and file I/O
 ## are stateful here. `enabled_override`/`telemetry_directory`/
 ## `track_id_override` let tests drive a real instance without touching
-## `user://`.
+## `user://`. `player_index` follows the active race's stable local-human
+## roster (`RaceManager.get_human_karts()`, or `roster_override` in tests),
+## not signal-arrival order (18d-4 review fix #1).
 
 const DEFAULT_DIRECTORY: String = "user://telemetry"
 const MAX_FILES: int = 20
@@ -21,6 +23,10 @@ var telemetry_directory: String = DEFAULT_DIRECTORY
 var enabled_override: Variant = null
 ## Test-only escape hatch: non-null replaces GameState.selected_track_id in the filename.
 var track_id_override: Variant = null
+## Test-only escape hatch: non-null Array replaces the stable local-human
+## roster normally read from `RaceManager.get_human_karts()` on race_started
+## (18d-4 review fix #1).
+var roster_override: Variant = null
 
 var _recording: bool = false
 var _elapsed_seconds: float = 0.0
@@ -60,6 +66,8 @@ func _physics_process(delta: float) -> void:
 
 func _on_race_started() -> void:
 	_reset_state(_should_record())
+	if _recording:
+		_assign_roster_player_indices(_resolve_roster())
 
 
 func _on_race_state_changed(_old_state: int, new_state: int) -> void:
@@ -137,10 +145,45 @@ func _on_lap_completed(kart: Node, lap: int, lap_time_seconds: float) -> void:
 		log.lap_completed(lap, lap_time_seconds)
 
 
+## Returns the local human karts in stable race/grid join order for the
+## active race (18d-4 review fix #1): the current scene's `RaceManager`
+## (production always sets this via `GameState.change_scene` ->
+## `change_scene_to_packed`, matching `race/race_manager.gd`'s own
+## `get_human_karts()` join-order roster) or `roster_override` in tests.
+## Returns an empty roster when no RaceManager is reachable (e.g. isolated
+## unit tests that drive EventBus directly), which leaves `_track()`'s
+## lazy first-signal registration as the fallback.
+func _resolve_roster() -> Array:
+	if roster_override != null:
+		return roster_override as Array
+	var manager: RaceManager = get_tree().current_scene as RaceManager
+	if manager == null:
+		return []
+	return manager.get_human_karts()
+
+
+## Pre-assigns each roster kart's stable 0-based player_index in race/grid
+## join order (18d-4 review fix #1), so `_track()` never has to hand one out
+## based on whichever kart's tracked EventBus signal happens to arrive
+## first — which previously let a split-screen p2 become player_index 0 if
+## their kart acted first.
+func _assign_roster_player_indices(roster: Array) -> void:
+	for entry: Variant in roster:
+		var kart: Node = entry as Node
+		if kart == null or not is_local_human_kart(kart):
+			continue
+		var id: int = kart.get_instance_id()
+		if not _player_index.has(id):
+			_player_index[id] = _player_index.size()
+
+
 ## Returns whether `kart` is a local human kart currently being recorded and,
-## the first time each kart is seen, opens its own `RaceTelemetryLog` and
-## assigns it a stable 0-based player index (join order for this race) so
-## split-screen karts never share a bucket (18d-3 review fix #1).
+## the first time each kart is seen, opens its own `RaceTelemetryLog`. Its
+## player index was already assigned by `_assign_roster_player_indices()`
+## when a roster was available; otherwise it is handed out here in first-
+## signal order (fallback), still keyed off `_player_index`'s own size so it
+## never collides with a pre-assigned roster index. Split-screen karts never
+## share a bucket either way (18d-3 review fix #1).
 func _track(kart: Node) -> RaceTelemetryLog:
 	if not _recording or not is_local_human_kart(kart):
 		return null
@@ -148,7 +191,8 @@ func _track(kart: Node) -> RaceTelemetryLog:
 	if not _logs.has(id):
 		_known_karts[id] = kart
 		_last_speed[id] = (kart as KartController).get_speed()
-		_player_index[id] = _logs.size()
+		if not _player_index.has(id):
+			_player_index[id] = _player_index.size()
 		_logs[id] = RaceTelemetryLog.new()
 	return _logs[id]
 
