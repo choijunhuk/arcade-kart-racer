@@ -2696,5 +2696,7 @@ PR #30이 track_02(Lumen Underpass)를 완전히 새 레이아웃으로 교체�
 해당 트랙 키만 제거하고(다른 트랙·필드는 그대로 유지), 같은 마이그레이션이 새
 `race/ghost_track_reset.gd`(`GhostTrackReset`)를 호출해 `user://ghosts`의 해당 고스트
 파일(및 남아 있을 수 있는 `.tmp`)을 삭제한다 — 디렉터리/파일 부재는 정상 상태로 처리.
-검증: GUT `test_save_manager.gd`/`test_ghost_track_reset.gd` 통과, `--quit` 스크립트·파스
-에러 0, `race/race.tscn` 240틱 헤드리스 런 ERROR 0(RID 경고 제외).
+검증: GUT `test_save_manager.gd`(10/10)·`test_ghost_track_reset.gd`(4/4) 및
+`test_ghost_recording.gd`/`test_race_results.gd`/`test_phase14_local_multiplayer.gd`/
+통합 스위트(time_trial·grand_prix·phase11·vertical_slice) 회귀 포함 73/73 통과,
+`--quit` 스크립트·파스 에러 0, `race/race.tscn` 240틱 헤드리스 런 ERROR 0(RID 경고 제외).
