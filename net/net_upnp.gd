@@ -91,7 +91,82 @@ func _attempt_mapping(port: int) -> Dictionary:
 	var external_ip: String = upnp.query_external_address()
 	if external_ip.is_empty():
 		return {"status": "mapped_no_ip", "port": port}
+	if not is_internet_reachable_address(external_ip):
+		# CGNAT or a double-NAT router: the IGD mapped the port on its own
+		# WAN-facing address, but that address is itself private, so nothing
+		# on the internet can actually reach it (spec/audit finding 2).
+		return {"status": "mapped_unreachable", "external_ip": external_ip, "port": port}
 	return {"status": "mapped", "external_ip": external_ip, "port": port}
+
+
+## Human-readable status line for anything other than a successful reachable
+## mapping (`OnlineLobby._on_upnp_finished`'s "mapped" branch handles that one
+## itself, since it also needs the join code). Distinguishes "mapped but not
+## internet-reachable" (CGNAT/double-NAT, finding 2) from a genuine mapping
+## failure so a guest is never handed a code that could never work.
+## Untrusted IGD text (finding 4): `external_ip` on the "mapped_unreachable"
+## branch comes straight from `query_external_address()`, i.e. whatever
+## answered SSDP on the LAN — never echoed into the UI unless it actually
+## parses as a dotted-quad IPv4 address.
+static func status_message(result: Dictionary, port: int) -> String:
+	if String(result.get("status", "")) == "mapped_unreachable":
+		var external_ip: String = String(result.get("external_ip", ""))
+		var reported: String = external_ip if not _parse_ipv4_octets(external_ip).is_empty() else "the address your router reported"
+		return (
+			"UPnP mapped, but %s is not internet-reachable (likely CGNAT/double-NAT) — use the relay above or forward UDP port %d on your router manually."
+			% [reported, port]
+		)
+	return "UPnP unavailable — forward UDP port %d manually." % port
+
+
+## Parses `ip` as four 0-255 octets, or an empty array if it is not a
+## well-formed dotted-quad — malformed/untrusted input fails closed for
+## every caller (`is_internet_reachable_address` and `status_message`).
+static func _parse_ipv4_octets(ip: String) -> Array[int]:
+	var parts: PackedStringArray = ip.split(".")
+	if parts.size() != 4:
+		return []
+	var octets: Array[int] = []
+	for part: String in parts:
+		if not part.is_valid_int():
+			return []
+		var value: int = int(part)
+		if value < 0 or value > 255:
+			return []
+		octets.append(value)
+	return octets
+
+
+## True when `ip` is a routable, internet-reachable IPv4 address. False for
+## every private/CGNAT/link-local/loopback/reserved range an IGD can
+## legitimately (or a false-WAN-down router can spuriously) hand back as its
+## own "external" address: 0.0.0.0/8 ("no address", a down/misconfigured WAN
+## — the exact false success this feature exists to catch), 10.0.0.0/8,
+## 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10 (CGNAT, RFC 6598),
+## 169.254.0.0/16 (link-local), 127.0.0.0/8 (loopback), and 224.0.0.0/4 +
+## 240.0.0.0/4 (multicast/reserved, includes 255.255.255.255). Malformed
+## input fails closed (not reachable).
+static func is_internet_reachable_address(ip: String) -> bool:
+	var octets: Array[int] = _parse_ipv4_octets(ip)
+	if octets.is_empty():
+		return false
+	if octets[0] == 0:
+		return false
+	if octets[0] == 10:
+		return false
+	if octets[0] == 172 and octets[1] >= 16 and octets[1] <= 31:
+		return false
+	if octets[0] == 192 and octets[1] == 168:
+		return false
+	if octets[0] == 100 and octets[1] >= 64 and octets[1] <= 127:
+		return false
+	if octets[0] == 169 and octets[1] == 254:
+		return false
+	if octets[0] == 127:
+		return false
+	if octets[0] >= 224:
+		return false
+	return true
 
 
 func _finish(result: Dictionary) -> void:

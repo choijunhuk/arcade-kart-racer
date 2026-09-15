@@ -268,7 +268,7 @@ func _on_upnp_finished(result: Dictionary, port: int) -> void:
 		_upnp_status.text = "UPnP mapped — share the code above."
 		_copy_button.disabled = code.is_empty()
 	else:
-		_upnp_status.text = "UPnP unavailable — forward UDP port %d manually." % port
+		_upnp_status.text = NetUpnp.status_message(result, port)
 
 func _copy_host_code() -> void:
 	var code: String = _host_code_label.text.replace("HOST CODE: ", "")

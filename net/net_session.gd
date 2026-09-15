@@ -179,11 +179,11 @@ func _admit_peer(id: int) -> void:
 	var ok: bool = _roster.add_waiting(id) if started else _roster.add(id, automated)
 	if not ok:
 		return
+	NetTuning.widen_peer_timeout(peer, id) # Finding 1: only once admitted — see NetTuning; an unauthenticated peer keeps ENet's default ~5s timeout so it can't squat a connection slot on the widened one.
 	print("SERVER_ADMIT peer=%d" % id)
 	send(&"_admitted", id, [started], true)
 	if not started:
 		_broadcast_lobby()
-
 ## Tells a just-admitted client whether it joined mid-race as a `waiting`
 ## spectator (no row until the next lobby, so `local_slot()` stays -1).
 @rpc("authority", "call_remote", "reliable")
@@ -191,6 +191,7 @@ func _admitted(waiting: bool) -> void:
 	admitted.emit(waiting)
 
 func _connected() -> void:
+	NetTuning.widen_peer_timeout(peer, SERVER_ID)
 	send(&"_ping", SERVER_ID, [now()], true)
 	send(&"_handshake", SERVER_ID, [String(ProjectSettings.get_setting("application/config/version", "")), _password_attempt_hash], true)
 	if automated:

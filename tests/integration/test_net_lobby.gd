@@ -312,3 +312,17 @@ func test_delayed_load_ack_and_clock_reach_countdown_then_racing() -> void:
 	GameState.net_session = null
 	GameState.is_networked = false
 	GameState.automation_mode = false
+
+## Finding 6: `test_delayed_load_ack_and_clock_reach_countdown_then_racing`
+## above sets `GameState.is_networked` / `GameState.net_session` directly and
+## only clears them at its own tail end — an early failure there (it is a
+## known pre-existing wall-clock flake) would otherwise leak networked state
+## into later suites sharing this gate process. The real-connection tests
+## that used to live here (server/client peer-timeout widening, force-kick)
+## now live in tests/integration/test_net_session_admission.gd, split out for
+## the 400-line rule the same way test_net_upnp_reachability.gd was split out
+## of test_net_internet.gd; that file owns the `multiplayer_peer` reset those
+## tests need.
+func after_each() -> void:
+	GameState.is_networked = false
+	GameState.net_session = null
