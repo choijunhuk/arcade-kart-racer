@@ -3,16 +3,6 @@ extends RefCounted
 
 const REMAP_SUFFIX: String = ".remap"
 
-## Per-directory memo of a whole-directory scan (backlog item 6: content is
-## read-only at runtime, so re-opening the directory and re-loading every
-## `.tres` on every catalog lookup — e.g. NetSession._update_player checking
-## driver/kart validity twice per accepted `_selection` RPC — was pure
-## repeated disk churn for an identical result). Only whole-directory scans
-## (empty `listed_files`) are memoized; an explicit `listed_files` call (the
-## exported `.tres.remap` listing path) always re-scans since that argument
-## varies per caller and must keep working unmemoized.
-static var _cache: Dictionary[String, Array] = {}
-
 
 ## Loads `.tres`/`.res` resources, including exported `.tres.remap` listings,
 ## from one directory in deterministic logical-path order.
@@ -20,19 +10,34 @@ static func scan_tres(
 	directory_path: String,
 	listed_files: PackedStringArray = PackedStringArray(),
 ) -> Array[Resource]:
-	if listed_files.is_empty() and _cache.has(directory_path):
-		var cached: Array[Resource] = []
-		cached.assign(_cache[directory_path])
-		return cached
+	var resources: Array[Resource] = []
+	resources.assign((_scan(directory_path, listed_files)["resources"] as Array))
+	return resources
+
+
+## Same scan as `scan_tres`, plus whether every matched file actually loaded
+## (review finding 7): the only caller that memoizes a whole-directory scan —
+## `NetContentCatalog._scan()` — must never cache a result that skipped a
+## `ResourceLoader.load()` failure (or an unopenable directory) as if it were
+## the complete picture.
+static func scan_tres_complete(
+	directory_path: String,
+	listed_files: PackedStringArray = PackedStringArray(),
+) -> Dictionary:
+	return _scan(directory_path, listed_files)
+
+
+static func _scan(directory_path: String, listed_files: PackedStringArray) -> Dictionary:
 	var resources: Array[Resource] = []
 	var file_names: PackedStringArray = listed_files.duplicate()
 	if file_names.is_empty():
 		var directory: DirAccess = DirAccess.open(directory_path)
 		if directory == null:
 			push_warning("Resource directory could not be opened: %s" % directory_path)
-			return resources
+			return {"resources": resources, "complete": false}
 		file_names = directory.get_files()
 	file_names.sort()
+	var complete: bool = true
 	for file_name: String in file_names:
 		if not _is_resource_file(file_name):
 			continue
@@ -45,11 +50,10 @@ static func scan_tres(
 		var resource: Resource = ResourceLoader.load(resource_path)
 		if resource == null:
 			push_warning("Resource could not be loaded: %s" % resource_path)
+			complete = false
 			continue
 		resources.append(resource)
-	if listed_files.is_empty():
-		_cache[directory_path] = resources.duplicate()
-	return resources
+	return {"resources": resources, "complete": complete}
 
 
 static func _is_resource_file(file_name: String) -> bool:
