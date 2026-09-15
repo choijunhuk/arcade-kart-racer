@@ -42,6 +42,11 @@ var _mapped_port: int = -1
 ## `NetUpnp._now()` timestamp the current mapping's lease expires at, or
 ## -1.0 while no mapping is held. Drives `is_renewal_due()`.
 var _lease_expires_at: float = -1.0
+## Renewal retry back-off (review finding 1), independent of
+## `_lease_expires_at` — see `NetUpnpRenewalBackoff`'s own doc comment for
+## why re-arming the lease's own expiry on failure (the previous approach)
+## was a no-op.
+var _renewal_backoff: NetUpnpRenewalBackoff = NetUpnpRenewalBackoff.new()
 ## Set when release_and_free() arrives while a worker thread is still running:
 ## the poller frees the node once that worker's result lands instead of
 ## touching state out from under it.
@@ -319,6 +324,8 @@ func _maybe_start_renewal(now: float) -> void:
 		return
 	if not is_renewal_due(_lease_expires_at, now):
 		return
+	if not _renewal_backoff.is_due(now):
+		return
 	_start_worker(_worker_callable("_run_renewal"), _mapped_port)
 
 
@@ -348,12 +355,13 @@ func _finish(result: Dictionary) -> void:
 func _finish_renewal(result: Dictionary) -> void:
 	if String(result.get("status", "")).begins_with("mapped"):
 		_lease_expires_at = _now() + float(LEASE_DURATION_SECONDS)
+		_renewal_backoff.on_success()
 	else:
-		# Throttle retries to RENEW_MARGIN_SECONDS instead of re-attempting
-		# every _process tick: a router that just rejected one renewal is
-		# likely to reject the next one immediately too.
-		push_warning("UPnP lease renewal failed for port %d (status=%s); retrying later" % [_mapped_port, String(result.get("status", ""))])
-		_lease_expires_at = _now() + RENEW_MARGIN_SECONDS
+		# Back off instead of re-attempting every _process tick (review
+		# finding 1): a router that just rejected one renewal is likely to
+		# reject an immediate retry too.
+		push_warning("UPnP lease renewal failed for port %d (status=%s); backing off" % [_mapped_port, String(result.get("status", ""))])
+		_renewal_backoff.on_failure(_now())
 	if _release_pending:
 		_release_pending = false
 		release_and_free()
