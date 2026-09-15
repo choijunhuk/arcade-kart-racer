@@ -6,7 +6,8 @@ const DEFAULT_SAVE_PATH: String = "user://save.json"
 const BACKUP_SUFFIX: String = ".bak"
 const PLAYER_PROFILE_COUNT: int = 4
 ## PR #30 replaced this track's geometry outright; version 3 drops its stale records.
-const RESET_TRACK_ID: String = "track_02_lumen_underpass"
+## Sourced from GhostTrackReset so the id can never drift between the two files.
+const RESET_TRACK_ID: String = GhostTrackReset.TRACK_02_ID
 
 var save_path: String = DEFAULT_SAVE_PATH
 var ghost_directory: String = GhostRecording.DEFAULT_DIRECTORY
