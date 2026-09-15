@@ -60,15 +60,15 @@ func _ready() -> void:
 	_password.secret = true
 	_password.custom_minimum_size.x = 160.0
 	controls.add_child(_password)
-	_host = _button(controls, "HOST", _host_game)
-	_join = _button(controls, "JOIN", _join_game)
+	_host = OnlineLobbyWidgets.button(controls, "HOST", _host_game)
+	_join = OnlineLobbyWidgets.button(controls, "JOIN", _join_game)
 	_drivers = ResourceScanner.scan_tres(LocalLobby.DRIVER_DIRECTORY)
 	_karts = ResourceScanner.scan_tres(LocalLobby.KART_DIRECTORY)
-	_driver = _options(controls, _drivers)
-	_kart = _options(controls, _karts)
-	_ready_button = _button(controls, "READY", _toggle_ready)
-	_start = _button(controls, "START", _start_race)
-	_button(controls, "BACK", go_back)
+	_driver = OnlineLobbyWidgets.options(controls, _drivers)
+	_kart = OnlineLobbyWidgets.options(controls, _karts)
+	_ready_button = OnlineLobbyWidgets.button(controls, "READY", _toggle_ready)
+	_start = OnlineLobbyWidgets.button(controls, "START", _start_race)
+	OnlineLobbyWidgets.button(controls, "BACK", go_back)
 	_driver.item_selected.connect(_selection_changed)
 	_kart.item_selected.connect(_selection_changed)
 	_build_relay_row()
@@ -103,7 +103,7 @@ func _build_status_row() -> void:
 	_rows.move_child(row, 4)
 	_host_code_label = Label.new()
 	row.add_child(_host_code_label)
-	_copy_button = _button(row, "COPY CODE", _copy_host_code)
+	_copy_button = OnlineLobbyWidgets.button(row, "COPY CODE", _copy_host_code)
 	_copy_button.disabled = true
 	_upnp_status = Label.new()
 	row.add_child(_upnp_status)
@@ -114,33 +114,28 @@ func _build_race_options_row() -> void:
 	var row: HBoxContainer = HBoxContainer.new()
 	_rows.add_child(row)
 	_rows.move_child(row, 5)
-	_row_label(row, "LAPS")
+	OnlineLobbyWidgets.row_label(row, "LAPS")
 	_laps = SpinBox.new()
 	_laps.min_value = 1
 	_laps.max_value = 9
 	_laps.value = 1
 	_laps.value_changed.connect(_on_race_options_changed)
 	row.add_child(_laps)
-	_row_label(row, "BOTS")
+	OnlineLobbyWidgets.row_label(row, "BOTS")
 	_ai_count_box = SpinBox.new()
 	_ai_count_box.min_value = 0
 	_ai_count_box.max_value = RaceSnapshot.MAX_KARTS - 1
 	_ai_count_box.value = 6
 	_ai_count_box.value_changed.connect(_on_race_options_changed)
 	row.add_child(_ai_count_box)
-	_row_label(row, "TRACK")
+	OnlineLobbyWidgets.row_label(row, "TRACK")
 	_tracks = ResourceScanner.scan_tres(NetContentCatalog.TRACK_DIRECTORY)
-	_track = _options(row, _tracks)
+	_track = OnlineLobbyWidgets.options(row, _tracks)
 	_track.item_selected.connect(_on_race_options_changed)
-	_row_label(row, "DIFFICULTY")
+	OnlineLobbyWidgets.row_label(row, "DIFFICULTY")
 	_difficulties = ResourceScanner.scan_tres(NetContentCatalog.AI_DIRECTORY)
-	_difficulty = _options(row, _difficulties)
+	_difficulty = OnlineLobbyWidgets.options(row, _difficulties)
 	_difficulty.item_selected.connect(_on_race_options_changed)
-
-func _row_label(parent: Control, text: String) -> void:
-	var label: Label = Label.new()
-	label.text = text
-	parent.add_child(label)
 
 ## Host-only: pushes the current controls onto the (now server) session and rebroadcasts the lobby; a no-op on a client or before a session exists.
 func _on_race_options_changed(_value: Variant = null) -> void:
@@ -173,12 +168,18 @@ func _create_session() -> void:
 ## Re-enters an already-open session, e.g. `ResultsScreen`'s "BACK TO LOBBY"
 ## (spec item 3): reuses the still-alive NetSession instead of creating a
 ## new one, so the roster/settings the server already broadcast still apply.
+## This is also the first point at which the lobby scene is genuinely active
+## again after `GameState.change_scene()`'s fade, so it — not
+## `NetSession.restart_to_lobby()` — is what reopens the ENet listener to new
+## connections (closes the lobby-reopen connection window; see
+## NetSession.reopen_connections()).
 func _rebind_session(session: NetSession) -> void:
 	_session = session
 	if not _session.lobby_changed.is_connected(_refresh):
 		_session.lobby_changed.connect(_refresh)
 	if not _session.admitted.is_connected(_on_admitted):
 		_session.admitted.connect(_on_admitted)
+	_session.reopen_connections()
 	_awaiting_handshake = false
 	_status.text = "Connected — choose driver/kart, then READY. Host starts."
 	_refresh()
@@ -331,8 +332,8 @@ func _refresh() -> void:
 		if joined:
 			var row: Dictionary = roster[index]
 			view.device.text = "HOST" if int(row["peer"]) == NetSession.SERVER_ID else "PLAYER"
-			view.driver.text = "DRIVER  " + _display(_drivers, row["driver"])
-			view.kart.text = "KART  " + _display(_karts, row["kart"])
+			view.driver.text = "DRIVER  " + OnlineLobbyWidgets.display_name(_drivers, row["driver"])
+			view.kart.text = "KART  " + OnlineLobbyWidgets.display_name(_karts, row["kart"])
 			view.status.text = "READY" if bool(row["ready"]) else "CHOOSING"
 
 ## Reflects the session's current laps/bots/track/difficulty into the
@@ -347,21 +348,14 @@ func _refresh_race_options(connected: bool) -> void:
 		# — e.g. the host's rebind after BACK TO LOBBY — while the dropdowns
 		# still read index 0, broadcasting track_01 + easy + the stale bot
 		# count over the host's real choice.
-		_select_option(_track, _tracks, _session.track_id, String(LocalLobby.DEFAULT_TRACK.id))
-		_select_option(_difficulty, _difficulties, _session.difficulty_id, String(LocalLobby.DEFAULT_DIFFICULTY.id))
+		OnlineLobbyWidgets.select_option(_track, _tracks, _session.track_id, String(LocalLobby.DEFAULT_TRACK.id))
+		OnlineLobbyWidgets.select_option(_difficulty, _difficulties, _session.difficulty_id, String(LocalLobby.DEFAULT_DIFFICULTY.id))
 		_laps.set_value_no_signal(_session.laps)
 		_ai_count_box.set_value_no_signal(_session.ai_count)
 	_laps.editable = editable
 	_ai_count_box.editable = editable
 	_track.disabled = not editable
 	_difficulty.disabled = not editable
-
-func _select_option(option: OptionButton, resources: Array[Resource], id: String, default_id: String) -> void:
-	var target: String = id if not id.is_empty() else default_id
-	for index: int in range(resources.size()):
-		if String(resources[index].get("id")) == target:
-			option.selected = index
-			return
 
 func _selection_changed(_index: int) -> void:
 	_send_selection(false)
@@ -378,23 +372,3 @@ func _send_selection(ready: bool) -> void:
 func _start_race() -> void:
 	if not _session.start_race():
 		_status.text = "At least 2 players must be READY."
-
-func _button(parent: Control, text: String, action: Callable) -> Button:
-	var button: Button = Button.new()
-	button.text = text
-	button.pressed.connect(action)
-	parent.add_child(button)
-	return button
-
-func _options(parent: Control, resources: Array[Resource]) -> OptionButton:
-	var options: OptionButton = OptionButton.new()
-	for resource: Resource in resources:
-		options.add_item(String(resource.get("display_name")))
-	parent.add_child(options)
-	return options
-
-func _display(resources: Array[Resource], id: String) -> String:
-	for resource: Resource in resources:
-		if String(resource.get("id")) == id:
-			return String(resource.get("display_name"))
-	return id

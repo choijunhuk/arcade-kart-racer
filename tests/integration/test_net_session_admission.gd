@@ -103,6 +103,48 @@ func test_peer_timeout_widening_runs_on_the_client_side_of_a_real_connection() -
 ## net/net_session_transport.gd) is covered by review; the kick-grace timing
 ## it depends on is covered by tests/unit/test_net_internet.gd.
 
+## Lobby-reopen connection window (backlog item 2): `NetSessionLobby.restart_to_lobby()`
+## clears `started` and promotes waiting joiners, but must NOT itself flip
+## `refuse_new_connections` back open — only `NetSession.reopen_connections()`
+## does that, called from the lobby scene's own rebind once it is genuinely
+## active again (`GameState.change_scene()` fades first). Proves a peer
+## dialing in during that gap is refused at the real ENet socket, and can
+## only connect once `reopen_connections()` runs.
+func test_restart_to_lobby_keeps_refusing_connections_until_reopen_connections() -> void:
+	var port: int = _free_test_port()
+	var server: NetSession = NetSession.new()
+	add_child_autofree(server)
+	assert_eq(server.host(port), OK)
+	server.started = true
+	server.peer.refuse_new_connections = true # mirrors start_race()'s listen-host effect
+	server.restart_to_lobby()
+	assert_true(server.peer.refuse_new_connections, "restart_to_lobby() must leave the listener closed to new connections until the lobby scene rebinds")
+	var refused_client: ENetMultiplayerPeer = ENetMultiplayerPeer.new()
+	assert_eq(refused_client.create_client("127.0.0.1", port, NetTuning.CHANNEL_COUNT), OK)
+	var refused_id: int = await _connect_raw_client(refused_client, server)
+	assert_eq(refused_id, -1, "a peer connecting during the reopen window must never reach the server, so it can never be admitted as a full roster member")
+	refused_client.close()
+	server.reopen_connections()
+	assert_false(server.peer.refuse_new_connections, "the lobby's rebind must reopen the listener")
+	var admitted_client: ENetMultiplayerPeer = ENetMultiplayerPeer.new()
+	assert_eq(admitted_client.create_client("127.0.0.1", port, NetTuning.CHANNEL_COUNT), OK)
+	var admitted_id: int = await _connect_raw_client(admitted_client, server)
+	assert_true(admitted_id > 0, "after reopen_connections() a peer must be able to connect again")
+	admitted_client.close()
+
+## reopen_connections() is guarded to the server (see its doc comment); on a
+## client it must be a harmless no-op rather than erroring.
+func test_reopen_connections_is_a_no_op_off_the_server() -> void:
+	var port: int = _free_test_port()
+	var raw_server: ENetMultiplayerPeer = ENetMultiplayerPeer.new()
+	assert_eq(raw_server.create_server(port, 32, NetTuning.CHANNEL_COUNT), OK)
+	var client: NetSession = NetSession.new()
+	add_child_autofree(client)
+	assert_eq(client.join("127.0.0.1", port), OK)
+	assert_false(client.multiplayer.is_server(), "sanity: this session must be the client side for the guard to be exercised")
+	client.reopen_connections() # must not error
+	raw_server.close()
+
 
 func after_each() -> void:
 	# The real-connection tests above leave a real ENetMultiplayerPeer

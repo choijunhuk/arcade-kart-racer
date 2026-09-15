@@ -199,12 +199,16 @@ func retry_start() -> void:
 
 ## Reopens the lobby after RESULTS for any server (listen or dedicated),
 ## keeping already-connected peers on the same ENet session and promoting
-## mid-race "waiting" joiners into the roster (spec item 3).
+## mid-race "waiting" joiners into the roster (spec item 3). Does NOT itself
+## reopen the ENet listener to new connections — see NetSession.reopen_connections():
+## for a listen host, GameState.change_scene() runs a transition fade before
+## the lobby scene's own _ready()/rebind actually runs, and a peer connecting
+## in that gap must never slip into the full roster while the previous race
+## scene is technically still alive (finding: lobby-reopen connection window).
 func restart_to_lobby() -> void:
 	if not _session.multiplayer.is_server():
 		return
 	clear_race_state()
-	_session.peer.refuse_new_connections = false
 	promote_waiting()
 	for row: Dictionary in _session.players:
 		row["ready"] = false
