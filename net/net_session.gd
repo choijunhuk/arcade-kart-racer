@@ -175,6 +175,7 @@ func _physics_process(_delta: float) -> void:
 	_clock_ticks += 1
 	if multiplayer.is_server():
 		_service_peers()
+		_roster.flush_pending_lobby_broadcast() # Finding 1: at most one send per tick, never zero after a mutation.
 	if not multiplayer.is_server() and _clock_ticks % NetTuning.CLOCK_INTERVAL == 0:
 		send(&"_ping", SERVER_ID, [now()], true)
 	if automated and not started and multiplayer.is_server() and players.size() >= 2:

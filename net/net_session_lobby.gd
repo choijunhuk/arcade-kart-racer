@@ -138,6 +138,7 @@ func reject_peer(id: int, message: String) -> void:
 	remove(id)
 	_session._input_limiter.remove(id)
 	_session._selection_limiter.remove(id)
+	_session._ping_limiter.remove(id)
 	_session._loss.remove(id)
 	_session._gate.remove(id)
 	_session._gate.queue_kick(id, NetSession.now())

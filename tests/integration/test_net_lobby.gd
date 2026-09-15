@@ -262,26 +262,10 @@ func test_restart_to_lobby_also_broadcasts_the_lobby() -> void:
 	session.conditions.advance(NetSession.now() + 1.0)
 	assert_eq(session.conditions.delivered - before, 2, "restart_to_lobby must queue both _return_to_lobby and the _lobby broadcast")
 
-## Backlog item 6: a burst of triggers landing on the same physics tick (e.g.
-## a peer looping `_selection`) must coalesce to a single reliable `_lobby`
-## send, not one per accepted call — `_clock_ticks` only advances inside
-## `_physics_process`, so the three direct `_update_player` calls below all
-## land on the same tick, exactly like several RPCs delivered in one frame.
-func test_broadcast_lobby_coalesces_multiple_triggers_within_one_physics_tick() -> void:
-	var session: NetSession = NetSession.new()
-	add_child_autofree(session)
-	session.peer = ENetMultiplayerPeer.new()
-	var driver_id: String = NetContentCatalog.default_driver_id()
-	var kart_id: String = NetContentCatalog.default_kart_id()
-	session.players = [{"peer": 1, "driver": driver_id, "kart": kart_id, "ready": false}]
-	var before: int = session.conditions.delivered
-	session._update_player(1, driver_id, kart_id, true)
-	session._update_player(1, driver_id, kart_id, false)
-	session._update_player(1, driver_id, kart_id, true)
-	session.conditions.advance(NetSession.now() + 1.0)
-	assert_eq(session.conditions.delivered - before, 1, "three updates within one physics tick must coalesce into a single _lobby broadcast")
-	assert_true(bool(session.players[0]["ready"]), "the roster itself must still reflect every update, only the broadcast is coalesced")
-
+## Lobby-broadcast coalescing/deferral coverage (backlog item 6, review
+## finding 1) now lives in tests/integration/test_net_lobby_broadcast.gd,
+## split out for the 400-line rule the same way
+## test_net_session_admission.gd was split out of this file.
 func test_delayed_load_ack_and_clock_reach_countdown_then_racing() -> void:
 	var session: NetSession = NetSession.new()
 	session.automated = true
