@@ -113,24 +113,39 @@ static func status_message(result: Dictionary, port: int) -> String:
 	return "UPnP unavailable — forward UDP port %d manually." % port
 
 
-## True when `ip` is a routable, internet-reachable IPv4 address. False for
-## every private/CGNAT/link-local/loopback range an IGD can legitimately hand
-## back as its own "external" address behind CGNAT or a double-NAT router:
-## 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10 (CGNAT,
-## RFC 6598), 169.254.0.0/16 (link-local), 127.0.0.0/8 (loopback). Malformed
-## input fails closed (not reachable).
-static func is_internet_reachable_address(ip: String) -> bool:
+## Parses `ip` as four 0-255 octets, or an empty array if it is not a
+## well-formed dotted-quad — malformed/untrusted input fails closed for
+## every caller (`is_internet_reachable_address` and `status_message`).
+static func _parse_ipv4_octets(ip: String) -> Array[int]:
 	var parts: PackedStringArray = ip.split(".")
 	if parts.size() != 4:
-		return false
+		return []
 	var octets: Array[int] = []
 	for part: String in parts:
 		if not part.is_valid_int():
-			return false
+			return []
 		var value: int = int(part)
 		if value < 0 or value > 255:
-			return false
+			return []
 		octets.append(value)
+	return octets
+
+
+## True when `ip` is a routable, internet-reachable IPv4 address. False for
+## every private/CGNAT/link-local/loopback/reserved range an IGD can
+## legitimately (or a false-WAN-down router can spuriously) hand back as its
+## own "external" address: 0.0.0.0/8 ("no address", a down/misconfigured WAN
+## — the exact false success this feature exists to catch), 10.0.0.0/8,
+## 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10 (CGNAT, RFC 6598),
+## 169.254.0.0/16 (link-local), 127.0.0.0/8 (loopback), and 224.0.0.0/4 +
+## 240.0.0.0/4 (multicast/reserved, includes 255.255.255.255). Malformed
+## input fails closed (not reachable).
+static func is_internet_reachable_address(ip: String) -> bool:
+	var octets: Array[int] = _parse_ipv4_octets(ip)
+	if octets.is_empty():
+		return false
+	if octets[0] == 0:
+		return false
 	if octets[0] == 10:
 		return false
 	if octets[0] == 172 and octets[1] >= 16 and octets[1] <= 31:
@@ -142,6 +157,8 @@ static func is_internet_reachable_address(ip: String) -> bool:
 	if octets[0] == 169 and octets[1] == 254:
 		return false
 	if octets[0] == 127:
+		return false
+	if octets[0] >= 224:
 		return false
 	return true
 
