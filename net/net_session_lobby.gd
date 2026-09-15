@@ -157,7 +157,15 @@ func reject_peer(id: int, message: String) -> void:
 ## discarded (review finding 1): `flush_pending_lobby_broadcast()` sends it
 ## once the tick counter moves on, so a burst of mutations within one tick
 ## never leaves the last one unbroadcast.
+##
+## No-op once `started` (review finding: `reject_peer()` used to be the only
+## caller without its own started guard — a version/password rejection mid-race
+## reached every RACING client's `_lobby` handler, whose `apply_lobby()` ->
+## `replace()` on `players` desyncs roster/kart indices for a peer still in the
+## load fade). Centralized here so every future caller inherits the guard.
 func broadcast_lobby() -> void:
+	if _session.started:
+		return
 	if _broadcast_tick == _session._clock_ticks:
 		_lobby_pending = true
 		return
@@ -173,8 +181,12 @@ func _send_lobby() -> void:
 
 ## Server-only; called once per tick from `NetSession._physics_process` once
 ## `_clock_ticks` has advanced past the tick a `broadcast_lobby()` call was
-## coalesced on, flushing the deferred send at most once per tick.
+## coalesced on, flushing the deferred send at most once per tick. Same
+## `started` guard as `broadcast_lobby()`: a broadcast coalesced in the lobby
+## must never flush once the race has started.
 func flush_pending_lobby_broadcast() -> void:
+	if _session.started:
+		return
 	if _lobby_pending and _broadcast_tick != _session._clock_ticks:
 		_send_lobby()
 
@@ -204,6 +216,10 @@ func start_race(force: bool) -> bool:
 			if not bool(row["ready"]):
 				return false
 	_session.started = true
+	# Same reset as `clear_race_state()`: a broadcast deferred in the lobby
+	# (backlog item 6 coalescing) must never flush after `_prepare_race`.
+	_broadcast_tick = -1
+	_lobby_pending = false
 	_session.peer.refuse_new_connections = not _session.dedicated
 	_session.send(&"_prepare_race", 0, _prepare_args(), true)
 	_session._prepare_race(_session.players, _session.ai_count, _session.laps, _session.seed, _session.track_id, _session.difficulty_id)
@@ -251,6 +267,11 @@ func clear_race_state() -> void:
 	_session.race = null
 	preparing = false
 	loaded.clear()
+	# A `broadcast_lobby()` coalesced/deferred during the lobby must never
+	# flush post-`_prepare_race`; reset both so `flush_pending_lobby_broadcast()`
+	# finds nothing pending once the next lobby phase begins.
+	_broadcast_tick = -1
+	_lobby_pending = false
 
 
 ## Host-only: updates laps/bots/track/difficulty and rebroadcasts the lobby
