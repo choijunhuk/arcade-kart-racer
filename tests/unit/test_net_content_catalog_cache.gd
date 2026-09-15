@@ -88,7 +88,14 @@ func test_a_load_failure_is_never_cached_as_a_complete_scan() -> void:
 	assert_not_null(broken)
 	broken.store_string("not a valid resource")
 	broken.close()
-	assert_push_warning("broken.tres")
 	assert_false(NetContentCatalog.has(_DIR, "alpha"), "the broken scan must not see an id that does not exist yet")
+	assert_push_warning("broken.tres")
 	_save_driver("cache_test_a.tres", "alpha")
 	assert_true(NetContentCatalog.has(_DIR, "alpha"), "a failed scan must not have been cached, so this lookup must see the file written afterward")
+	assert_push_warning("broken.tres")
+	# broken.tres fails to parse via Godot's own text-resource loader on each
+	# of the two scans above (it is never cached, by design); that loader
+	# reports the malformed content as raw engine errors of its own,
+	# alongside this script's push_warning — same pattern as
+	# test_phase11_robustness.gd's corrupt-settings-file case.
+	assert_engine_error_count(6)
