@@ -1,16 +1,20 @@
 class_name SaveManagerService
 extends Node
 
-const CURRENT_VERSION: int = 2
+const CURRENT_VERSION: int = 3
 const DEFAULT_SAVE_PATH: String = "user://save.json"
 const BACKUP_SUFFIX: String = ".bak"
 const PLAYER_PROFILE_COUNT: int = 4
+## PR #30 replaced this track's geometry outright; version 3 drops its stale records.
+const RESET_TRACK_ID: String = "track_02_lumen_underpass"
 
 var save_path: String = DEFAULT_SAVE_PATH
+var ghost_directory: String = GhostRecording.DEFAULT_DIRECTORY
 
 
-func _init(custom_save_path: String = DEFAULT_SAVE_PATH) -> void:
+func _init(custom_save_path: String = DEFAULT_SAVE_PATH, custom_ghost_directory: String = GhostRecording.DEFAULT_DIRECTORY) -> void:
 	save_path = custom_save_path
+	ghost_directory = custom_ghost_directory
 
 
 ## Returns a fresh save payload with every key required by the current version.
@@ -204,6 +208,8 @@ func _migrate(data: Dictionary) -> Dictionary:
 				migrated = _migrate_v0_to_v1(migrated)
 			1:
 				migrated = _migrate_v1_to_v2(migrated)
+			2:
+				migrated = _migrate_v2_to_v3(migrated)
 			_:
 				push_error("No save migration registered for version %d" % version)
 				return default_data()
@@ -230,6 +236,26 @@ func _migrate_v1_to_v2(data: Dictionary) -> Dictionary:
 		legacy.merge(records, true)
 	profiles["P1"] = primary
 	migrated["version"] = 2
+	return migrated
+
+
+## Drops RESET_TRACK_ID from every records section (top-level and per-profile) and
+## clears its now-invalid ghost. Other tracks and every other field are untouched.
+func _migrate_v2_to_v3(data: Dictionary) -> Dictionary:
+	var migrated: Dictionary = _merge_with_defaults(data)
+	for section: String in ["best_laps", "best_positions"]:
+		(migrated[section] as Dictionary).erase(RESET_TRACK_ID)
+	var profiles: Dictionary = migrated["player_profiles"]
+	for profile_key: String in profiles:
+		var profile: Dictionary = profiles[profile_key]
+		for section: String in ["best_laps", "best_positions"]:
+			var records: Dictionary = profile.get(section, {})
+			records.erase(RESET_TRACK_ID)
+			profile[section] = records
+		profiles[profile_key] = profile
+	migrated["player_profiles"] = profiles
+	GhostTrackReset.remove_track_02_ghost(ghost_directory)
+	migrated["version"] = 3
 	return migrated
 
 
