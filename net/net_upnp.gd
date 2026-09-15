@@ -10,13 +10,11 @@ signal mapping_finished(result: Dictionary)
 
 const DESCRIPTION: String = "TurboCircuit"
 const TIMEOUT_MS: int = 3000
-## Requested router lease duration in seconds (backlog item 2). Most IGDs
-## treat duration 0 (the UPNP default) as PERMANENT — the previous
-## `add_port_mapping(port, port, DESCRIPTION, "UDP")` call (no duration
-## argument) left a genuinely permanent static forward on the router that a
-## crash, kill, or force-quit never cleared; only a router reboot did. A
-## finite lease bounds that worst case to this many seconds even when the
-## process never gets to run `release_and_free()` at all.
+## Requested router lease duration in seconds (backlog item 2): duration 0
+## (the previous, argument-less `add_port_mapping` call) left a genuinely
+## permanent forward that only a router reboot cleared, surviving a crash or
+## force-quit. A finite lease bounds that worst case even if the process
+## never runs `release_and_free()` at all.
 const LEASE_DURATION_SECONDS: int = 3600
 ## Renew this long before the lease's own expiry (backlog item 2) so a slow
 ## renewal discovery round trip never lets the real router mapping lapse
@@ -24,14 +22,13 @@ const LEASE_DURATION_SECONDS: int = 3600
 const RENEW_MARGIN_SECONDS: float = 300.0
 
 ## Mutable box a worker thread's bound Callable writes its result into,
-## instead of calling back into this node directly. Review finding 1: the
+## instead of calling back into this node directly (review finding 1: the
 ## previous `call_deferred("_finish"/"_finish_removal", ...)` targeted
-## `self`, and `_exit_tree()` detaching a still-running thread lets the node
-## be freed before that deferred call lands — on a freed instance. A
-## `RefCounted` box has no lifecycle tied to this node: a freed node simply
-## drops its `_box` reference, and the worker thread, which never touches
-## `self`, harmlessly finishes writing into a box nobody reads any more. The
-## node polls `box.done` from `_process` instead of being called into.
+## `self`, and `_exit_tree()` detaching a still-running thread let the node
+## free before that deferred call landed — on a freed instance). A
+## `RefCounted` box has no lifecycle tied to this node: a freed node just
+## drops its `_box` reference, and the worker harmlessly finishes writing
+## into a box nobody reads. The node polls `box.done` from `_process`.
 class ResultBox extends RefCounted:
 	var done: bool = false
 	var result: Dictionary = {}
@@ -39,26 +36,23 @@ class ResultBox extends RefCounted:
 var _thread: Thread
 var _box: ResultBox
 var _mapped_port: int = -1
-## `NetUpnp._now()` timestamp the current mapping's lease expires at, or
-## -1.0 while no mapping is held. Drives `is_renewal_due()`.
+## `NetUpnp._now()` timestamp the current mapping's lease expires at; -1.0
+## while no mapping is held, or (review finding 2) it is a permanent lease
+## that never expires and so is never renewed — `is_renewal_due()` already
+## treats any negative value as "nothing to renew".
 var _lease_expires_at: float = -1.0
 ## Renewal retry back-off (review finding 1), independent of
-## `_lease_expires_at` — see `NetUpnpRenewalBackoff`'s own doc comment for
-## why re-arming the lease's own expiry on failure (the previous approach)
-## was a no-op.
+## `_lease_expires_at` — see `NetUpnpRenewalBackoff`'s own doc comment.
 var _renewal_backoff: NetUpnpRenewalBackoff = NetUpnpRenewalBackoff.new()
-## Set when release_and_free() arrives while a worker thread is still running:
-## the poller frees the node once that worker's result lands instead of
+## Set when release_and_free() arrives while a worker thread is still
+## running: the poller frees the node once its result lands instead of
 ## touching state out from under it.
 var _release_pending: bool = false
-## Set once the OS sends a close request (window close button, Alt+F4,
-## Cmd+Q, ...): the app itself is shutting down, not a normal in-session
-## exit (BACK/LEAVE RACE/END SESSION). Explicit and asserted via this node's
-## own `_notification()` (review finding 3) instead of inferred from
-## `GameState.is_inside_tree()`, which depends on Godot's `tree_exiting`
-## cascade order and was never asserted anywhere — it could read either way
-## depending on where in that cascade this node's own `tree_exiting` fires.
-## Tests set it directly rather than driving a real close request.
+## Set once the OS sends a close request (window close, Alt+F4, Cmd+Q): the
+## app is shutting down, not a normal in-session exit. Explicit and
+## asserted via this node's own `_notification()` (review finding 3)
+## instead of inferred from tree-exiting order, which was never asserted
+## anywhere and could read either way. Tests set it directly.
 var _quitting: bool = false
 
 
@@ -75,32 +69,39 @@ func _notification(what: int) -> void:
 		_quitting = true
 
 
-## Starts discovery + port mapping for `port` on a worker thread.
+## Starts discovery + port mapping for `port` on a worker thread. Gated on
+## `_box != null` (review finding 3), not `_thread.is_alive()`, which reads
+## false the instant a worker *returns* — before `_process()` has consumed
+## its result — and so would let a second worker start over an unconsumed
+## one.
 func map_port(port: int) -> void:
-	if _thread != null and _thread.is_alive():
+	if _box != null:
 		return
 	_start_worker(_worker_callable("_run"), port)
 
 
 ## Releases the mapping created by `map_port` and frees this node once the
 ## router has answered. Discovery costs up to TIMEOUT_MS, so it runs on the
-## same worker-thread pattern `map_port` uses rather than on the UI thread
-## (spec item 1: never block the UI on router discovery); the caller is
-## typically a lobby that is about to change scene, so the node reparents
-## itself onto the persistent GameState owner first and the removal is
+## same worker-thread pattern `map_port` uses rather than on the UI thread;
+## the caller is typically a lobby about to change scene, so the node
+## reparents onto the persistent GameState owner first, and the removal is
 ## fire-and-forget, reporting only a log line.
 ##
 ## `NetSession.tree_exiting` (this method's caller) also fires during full
 ## app teardown, not just BACK/LEAVE RACE/END SESSION — at that point
 ## `_quitting` is set (review finding 3), so starting the removal worker
-## here would only get detached rather than joined by `_exit_tree()` (see
-## below), the exact up-to-seconds main-thread freeze this node exists to
-## avoid. App teardown skips the network round trip and just frees, leaving
-## the lease (backlog item 2: now finite, LEASE_DURATION_SECONDS, never
-## permanent) to expire on the router on its own; `_warn_abandoned_mapping()`
-## still names the port so a headless server operator sees it in the log.
+## here would only get detached rather than joined by `_exit_tree()`, the
+## exact main-thread freeze this node exists to avoid. App teardown skips
+## the round trip and just frees, leaving the (now finite,
+## LEASE_DURATION_SECONDS) lease to expire on its own;
+## `_warn_abandoned_mapping()` still names the port for a headless operator.
 func release_and_free() -> void:
-	if _thread != null and _thread.is_alive():
+	# `_box != null`, not `_thread.is_alive()` (review finding 3, see
+	# `map_port()`'s own doc comment): a worker that already returned but
+	# whose result isn't consumed yet must still defer here, or a mapping
+	# the router just created could be abandoned before `_mapped_port`
+	# reflects it.
+	if _box != null:
 		_release_pending = true
 		return
 	if _quitting:
@@ -120,11 +121,10 @@ func release_and_free() -> void:
 	_start_worker(_worker_callable("_run_removal"), port)
 
 
-## A script-bound Callable (never object-bound — see the `ResultBox` doc
-## comment above) for the named static worker, resolved against this
-## instance's actual script so a test double's override (e.g.
-## `test_net_upnp_release.gd`'s `FakeRemovalUpnp`) still runs instead of the
-## real network call, exactly like overriding an instance method would.
+## A script-bound Callable (never object-bound — see `ResultBox` above) for
+## the named static worker, resolved against this instance's actual script
+## so a test double's override (e.g. `FakeRemovalUpnp`) still runs instead
+## of the real network call.
 func _worker_callable(method: StringName) -> Callable:
 	return Callable(get_script() as GDScript, method)
 
@@ -161,10 +161,9 @@ func _free_thread_and_self() -> void:
 	queue_free()
 
 
-## Logs that a live mapping is being left on the router instead of released
-## (review finding 3): the lease is finite (backlog item 2) and expires
-## there on its own within LEASE_DURATION_SECONDS regardless, but a headless
-## server operator should still see which port was abandoned.
+## Logs that a live mapping is left on the router instead of released
+## (review finding 3): it still expires there on its own (finite lease), but
+## a headless server operator should see which port was abandoned.
 func _warn_abandoned_mapping() -> void:
 	if _mapped_port >= 0:
 		push_warning("UPnP mapping for port %d abandoned on quit" % _mapped_port)
@@ -198,28 +197,33 @@ static func _attempt_mapping(port: int, lease_seconds: int) -> Dictionary:
 	if gateway == null or not gateway.is_valid_gateway():
 		return {"status": "no_igd"}
 	var add_result: int = upnp.add_port_mapping(port, port, DESCRIPTION, "UDP", lease_seconds)
+	var permanent: bool = false
+	if add_result == UPNP.UPNP_RESULT_ONLY_PERMANENT_LEASE_SUPPORTED and lease_seconds != 0:
+		# Some IGDs only support a permanent lease and reject any finite
+		# duration outright (review finding 2). Retry once with duration 0
+		# so it still works there; release_and_free()'s removal is what
+		# clears it, since it never expires or renews (see `_finish()`).
+		add_result = upnp.add_port_mapping(port, port, DESCRIPTION, "UDP", 0)
+		permanent = add_result == UPNP.UPNP_RESULT_SUCCESS
 	if add_result != UPNP.UPNP_RESULT_SUCCESS:
 		return {"status": "failed", "code": add_result}
 	var external_ip: String = upnp.query_external_address()
 	if external_ip.is_empty():
-		return {"status": "mapped_no_ip", "port": port}
+		return {"status": "mapped_no_ip", "port": port, "permanent": permanent}
 	if not is_internet_reachable_address(external_ip):
 		# CGNAT or a double-NAT router: the IGD mapped the port on its own
 		# WAN-facing address, but that address is itself private, so nothing
 		# on the internet can actually reach it (spec/audit finding 2).
-		return {"status": "mapped_unreachable", "external_ip": external_ip, "port": port}
-	return {"status": "mapped", "external_ip": external_ip, "port": port}
+		return {"status": "mapped_unreachable", "external_ip": external_ip, "port": port, "permanent": permanent}
+	return {"status": "mapped", "external_ip": external_ip, "port": port, "permanent": permanent}
 
 
 ## Human-readable status line for anything other than a successful reachable
-## mapping (`OnlineLobby._on_upnp_finished`'s "mapped" branch handles that one
-## itself, since it also needs the join code). Distinguishes "mapped but not
-## internet-reachable" (CGNAT/double-NAT, finding 2) from a genuine mapping
-## failure so a guest is never handed a code that could never work.
-## Untrusted IGD text (finding 4): `external_ip` on the "mapped_unreachable"
-## branch comes straight from `query_external_address()`, i.e. whatever
-## answered SSDP on the LAN — never echoed into the UI unless it actually
-## parses as a dotted-quad IPv4 address.
+## mapping (`OnlineLobby`'s "mapped" branch handles that one itself).
+## Distinguishes "mapped but not internet-reachable" (CGNAT/double-NAT,
+## finding 2) from a genuine failure. Untrusted IGD text (finding 4):
+## `external_ip` on "mapped_unreachable" is raw SSDP LAN text — never echoed
+## into the UI unless it actually parses as a dotted-quad IPv4 address.
 static func status_message(result: Dictionary, port: int) -> String:
 	if String(result.get("status", "")) == "mapped_unreachable":
 		var external_ip: String = String(result.get("external_ip", ""))
@@ -281,11 +285,9 @@ static func is_internet_reachable_address(ip: String) -> bool:
 	return true
 
 
-## True once `now` has reached the renewal window before `expires_at`
-## (backlog item 2's pure helper): renewing this early absorbs a slow
-## discovery round trip on the renewal itself so the real router lease never
-## actually lapses mid-session. `expires_at < 0.0` means no lease is
-## currently held, so there is nothing to renew.
+## True once `now` has reached the renewal window before `expires_at`: this
+## early margin absorbs a slow renewal discovery round trip so the real
+## lease never lapses mid-session. `expires_at < 0.0` means nothing to renew.
 static func is_renewal_due(expires_at: float, now: float) -> bool:
 	if expires_at < 0.0:
 		return false
@@ -342,7 +344,14 @@ func _handle_result(result: Dictionary) -> void:
 func _finish(result: Dictionary) -> void:
 	if String(result.get("status", "")).begins_with("mapped"):
 		_mapped_port = int(result.get("port", -1))
-		_lease_expires_at = _now() + float(LEASE_DURATION_SECONDS)
+		if bool(result.get("permanent", false)):
+			# A permanent lease (review finding 2) never expires on its own,
+			# so it is never due for renewal either — `is_renewal_due()`
+			# already treats a negative `_lease_expires_at` as "nothing to
+			# renew," the same sentinel used for "no mapping held."
+			_lease_expires_at = -1.0
+		else:
+			_lease_expires_at = _now() + float(LEASE_DURATION_SECONDS)
 	if _release_pending:
 		# Caller left the lobby while discovery was running: drop the mapping
 		# we just created (if any) and free, instead of emitting into a dead UI.

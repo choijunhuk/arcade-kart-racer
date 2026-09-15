@@ -70,6 +70,31 @@ func test_release_starts_the_removal_worker_on_a_normal_session_end() -> void:
 	assert_true(freed_in_time, "release_and_free() must free the node once the removal worker reports back, within the timeout")
 
 
+## Review finding 3: `release_and_free()`/`map_port()` used to gate on
+## `_thread.is_alive()`, which reads false the instant a worker *returns* —
+## even before `_process()` has consumed its result and applied
+## `_mapped_port`. A release arriving in that exact window used to see
+## `_thread.is_alive() == false` and `_mapped_port` still -1, and take the
+## fast synchronous free path, abandoning a mapping the router had just
+## created. Gating on `_box != null` instead covers "worker running OR its
+## result is not yet consumed" — proven here without any real threading: a
+## finished-but-unconsumed box with `_thread` left null (already
+## demonstrating the old gate would have read "not alive") must still defer.
+func test_release_while_a_finished_but_unconsumed_mapping_result_waits_for_it() -> void:
+	_upnp = FakeRemovalUpnp.new()
+	GameState.add_child(_upnp)
+	var box: NetUpnp.ResultBox = NetUpnp.ResultBox.new()
+	box.result = {"kind": "mapping", "status": "mapped", "port": 40003, "external_ip": "8.8.8.8"}
+	box.done = true
+	_upnp._box = box
+	_upnp.release_and_free()
+	assert_true(_upnp._release_pending, "release while the box is unconsumed must defer instead of abandoning the just-created mapping")
+	assert_true(is_instance_valid(_upnp), "must not free synchronously while a mapping result is still unconsumed")
+	_upnp._process(0.0) # Consumes the box, applies _mapped_port, then acts on the deferred release.
+	var freed_in_time: bool = await wait_for_signal(_upnp.tree_exited, 1.0)
+	assert_true(freed_in_time, "the deferred release must still free the node once the mapping result is consumed and the removal worker reports back")
+
+
 ## Quitting: the network round trip must be skipped outright (no worker
 ## thread started) and the abandoned port logged, instead of a normal
 ## session end's removal worker.
