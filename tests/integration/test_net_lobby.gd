@@ -308,8 +308,24 @@ func test_delayed_load_ack_and_clock_reach_countdown_then_racing() -> void:
 	client_wire.latency_seconds = 0.1
 	client_wire.loss = 0.02
 	var client_clock: NetClock = NetClock.new()
-	# Inject transport time; no sockets or wall-clock waits are needed at fixed FPS.
-	var sent: float = NetSession.now()
+	# Backlog item 5: `sent` used to be a real `NetSession.now()` wall-clock
+	# read, which made this test flaky (~4 failures in 5) even though every
+	# delay below is purely logical/injected. Root cause: `NetDebugConditions
+	# .enqueue()` computes its due time as `now + latency_seconds` — a SECOND
+	# float addition on top of the `sent + 0.1` already computed at this
+	# call's own site below — while `advance(sent + 0.2)` compares against a
+	# ONE-addition value computed independently. For a real (large, run-
+	# dependent) `sent`, `(sent + 0.1) + 0.1` and `sent + 0.2` are not always
+	# the same double (off by one ULP), and `advance()`'s `due <= now` check
+	# is strict: a single ULP miss silently drops the delayed delivery,
+	# leaving `client_clock` uninitialized. Freezing `sent` at 0.0 makes
+	# every delay below purely relative and reproducible — `0.1 + 0.1 == 0.2`
+	# exactly in IEEE 754 double precision, so the two computation paths
+	# always agree, deterministically, without widening the assertions below
+	# or weakening what they still prove (delayed load ack + clock reach
+	# COUNTDOWN then RACING). No sockets or wall-clock waits are needed at
+	# fixed FPS regardless.
+	var sent: float = 0.0
 	client_wire.enqueue(sent, true, func() -> void:
 		session.conditions.enqueue(sent + 0.1, true, client_clock.observe.bind(sent, sent + 0.1, sent + 0.2)))
 	# The production RPC derives peer 2 from the sender before marking it loaded.
