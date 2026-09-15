@@ -373,14 +373,14 @@ func _finish(result: Dictionary) -> void:
 
 func _finish_renewal(result: Dictionary) -> void:
 	if String(result.get("status", "")).begins_with("mapped"):
-		_lease_expires_at = _now() + float(LEASE_DURATION_SECONDS)
+		if bool(result.get("permanent", false)):
+			# Fell back to a permanent lease (item 3): never renews again.
+			_lease_expires_at = -1.0
+		else:
+			_lease_expires_at = _now() + float(LEASE_DURATION_SECONDS)
 		_renewal_backoff.on_success()
-	else:
-		# Back off instead of re-attempting every _process tick (review
-		# finding 1): a router that just rejected one renewal is likely to
-		# reject an immediate retry too.
-		push_warning("UPnP lease renewal failed for port %d (status=%s); backing off" % [_mapped_port, String(result.get("status", ""))])
-		_renewal_backoff.on_failure(_now())
+	else: # Back off instead of retrying every tick (finding 1); warns once (item 6).
+		_renewal_backoff.on_failure_warn_once(_now(), "UPnP lease renewal failed for port %d (status=%s); backing off" % [_mapped_port, String(result.get("status", ""))])
 	if _release_pending:
 		_release_pending = false
 		release_and_free()

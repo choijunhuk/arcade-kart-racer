@@ -40,3 +40,13 @@ func on_success() -> void:
 func on_failure(now: float) -> void:
 	next_attempt_at = now + _retry_seconds
 	_retry_seconds = minf(_retry_seconds * 2.0, MAX_SECONDS)
+
+
+## Same as `on_failure()`, but also `push_warning(message)` — only the first
+## time in a back-off run (review item 6): a router that keeps rejecting
+## renewal should not spam a warning on every retry, only when the failing
+## state is first entered.
+func on_failure_warn_once(now: float, message: String) -> void:
+	if next_attempt_at < 0.0:
+		push_warning(message)
+	on_failure(now)

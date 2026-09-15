@@ -141,6 +141,20 @@ func test_successful_renewal_extends_the_lease_and_clears_backoff() -> void:
 	assert_eq(_upnp._renewal_backoff.next_attempt_at, -1.0, "a successful renewal must clear any prior back-off")
 
 
+## Review item 3: a renewal that itself only succeeded by falling back to a
+## permanent (725) lease must record no expiry (mirrors `_finish()`'s own
+## permanent handling) — otherwise it would keep re-entering the renewal
+## cycle every ~55 minutes forever, even though the mapping never expires.
+func test_renewal_falling_back_to_permanent_never_renews_again() -> void:
+	_upnp = NetUpnp.new()
+	GameState.add_child(_upnp)
+	_upnp._mapped_port = 40015
+	_upnp._finish_renewal({"kind": "renewal", "status": "mapped", "port": 40015, "external_ip": "8.8.8.8", "permanent": true})
+	assert_eq(_upnp._lease_expires_at, -1.0, "a renewal that fell back to a permanent lease must record no expiry")
+	_upnp._maybe_start_renewal(_upnp._now() + 999999.0) # arbitrarily far in the future.
+	assert_null(_upnp._thread, "a permanent renewal result must never start another renewal worker")
+
+
 ## Review item 5: `release_and_free()` arriving while a renewal is still
 ## genuinely in flight must defer (same `_box != null` gate `map_port()`
 ## uses), then actually remove the mapping once that renewal's result is
