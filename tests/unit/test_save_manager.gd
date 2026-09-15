@@ -273,21 +273,44 @@ func _remove_test_files() -> void:
 		var absolute_path: String = ProjectSettings.globalize_path(path)
 		if FileAccess.file_exists(path):
 			DirAccess.remove_absolute(absolute_path)
+	_remove_preserved_future_saves()
+
+
+## Cleans up any "save.json.v<n>" files a future-version test preserved aside,
+## so they never leak into a later test run.
+func _remove_preserved_future_saves() -> void:
+	var directory: String = SAVE_PATH.get_base_dir()
+	var prefix: String = SAVE_PATH.get_file() + ".v"
+	if not DirAccess.dir_exists_absolute(directory):
+		return
+	var dir: DirAccess = DirAccess.open(directory)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	var entry: String = dir.get_next()
+	while entry != "":
+		if not dir.current_is_dir() and entry.begins_with(prefix):
+			DirAccess.remove_absolute(directory.path_join(entry))
+		entry = dir.get_next()
+	dir.list_dir_end()
 
 
 ## Review finding: a save written by a NEWER build than this one must be
 ## treated as unreadable rather than migrated or partially trusted — the
-## player's real profile stays on disk while this build falls back to the
-## backup (or to defaults when there is none).
+## player's real profile must never be overwritten with defaults. It is moved
+## aside untouched (save.json.v<version>) and this build falls back to a
+## readable backup or in-memory-only defaults for the session.
 func test_a_future_version_save_falls_back_instead_of_migrating() -> void:
+	var future_version: int = SaveManagerService.CURRENT_VERSION + 96
 	var future_data: Dictionary = {
-		"version": SaveManagerService.CURRENT_VERSION + 96,
+		"version": future_version,
 		"best_laps": {"track_01_ridgeline_circuit": 61_000, RESET_TRACK_ID: 59_000},
 		"best_positions": {},
 		"last_selection": {"driver": "", "kart": "medium", "track": "test_loop"},
 		"unlocks": [],
 	}
-	_write_text(SAVE_PATH, JSON.stringify(future_data))
+	var original_text: String = JSON.stringify(future_data)
+	_write_text(SAVE_PATH, original_text)
 	var manager: SaveManagerService = SaveManagerService.new(SAVE_PATH, GHOST_DIRECTORY)
 	autofree(manager)
 
@@ -296,6 +319,14 @@ func test_a_future_version_save_falls_back_instead_of_migrating() -> void:
 	assert_eq(int(loaded["version"]), SaveManagerService.CURRENT_VERSION)
 	assert_false((loaded["best_laps"] as Dictionary).has("track_01_ridgeline_circuit"),
 		"a future-version save must not be read as if this build understood it")
+
+	var preserved_path: String = "%s.v%d" % [SAVE_PATH, future_version]
+	assert_true(FileAccess.file_exists(preserved_path),
+		"the original future-version save must be preserved aside, not lost")
+	assert_eq(FileAccess.get_file_as_string(preserved_path), original_text,
+		"the preserved copy must hold the player's real profile byte-for-byte")
+	assert_false(FileAccess.file_exists(SAVE_PATH) and FileAccess.get_file_as_string(SAVE_PATH) == original_text,
+		"the future-version bytes must not remain readable at the primary save path")
 
 
 func test_a_future_version_primary_recovers_the_backup_it_can_read() -> void:
