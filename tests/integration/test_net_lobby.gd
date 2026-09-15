@@ -1,5 +1,11 @@
 extends GutTest
 
+## Attached to the GameState autoload directly (not via add_child_autofree)
+## by test_upnp_mapping_releases_itself_once_the_session_closes below;
+## defensively freed in after_each (review finding 6) so an assertion
+## failure mid-test never leaks a node parented onto GameState.
+var _test_upnp: NetUpnp
+
 func test_online_lobby_has_shared_panels_and_enabled_connection_controls() -> void:
 	var lobby: OnlineLobby = (load("res://ui/menus/online_lobby.tscn") as PackedScene).instantiate() as OnlineLobby
 	add_child_autofree(lobby)
@@ -256,6 +262,10 @@ func test_restart_to_lobby_also_broadcasts_the_lobby() -> void:
 	session.conditions.advance(NetSession.now() + 1.0)
 	assert_eq(session.conditions.delivered - before, 2, "restart_to_lobby must queue both _return_to_lobby and the _lobby broadcast")
 
+## Lobby-broadcast coalescing/deferral coverage (backlog item 6, review
+## finding 1) now lives in tests/integration/test_net_lobby_broadcast.gd,
+## split out for the 400-line rule the same way
+## test_net_session_admission.gd was split out of this file.
 func test_delayed_load_ack_and_clock_reach_countdown_then_racing() -> void:
 	var session: NetSession = NetSession.new()
 	session.automated = true
@@ -288,8 +298,24 @@ func test_delayed_load_ack_and_clock_reach_countdown_then_racing() -> void:
 	client_wire.latency_seconds = 0.1
 	client_wire.loss = 0.02
 	var client_clock: NetClock = NetClock.new()
-	# Inject transport time; no sockets or wall-clock waits are needed at fixed FPS.
-	var sent: float = NetSession.now()
+	# Backlog item 5: `sent` used to be a real `NetSession.now()` wall-clock
+	# read, which made this test flaky (~4 failures in 5) even though every
+	# delay below is purely logical/injected. Root cause: `NetDebugConditions
+	# .enqueue()` computes its due time as `now + latency_seconds` — a SECOND
+	# float addition on top of the `sent + 0.1` already computed at this
+	# call's own site below — while `advance(sent + 0.2)` compares against a
+	# ONE-addition value computed independently. For a real (large, run-
+	# dependent) `sent`, `(sent + 0.1) + 0.1` and `sent + 0.2` are not always
+	# the same double (off by one ULP), and `advance()`'s `due <= now` check
+	# is strict: a single ULP miss silently drops the delayed delivery,
+	# leaving `client_clock` uninitialized. Freezing `sent` at 0.0 makes
+	# every delay below purely relative and reproducible — `0.1 + 0.1 == 0.2`
+	# exactly in IEEE 754 double precision, so the two computation paths
+	# always agree, deterministically, without widening the assertions below
+	# or weakening what they still prove (delayed load ack + clock reach
+	# COUNTDOWN then RACING). No sockets or wall-clock waits are needed at
+	# fixed FPS regardless.
+	var sent: float = 0.0
 	client_wire.enqueue(sent, true, func() -> void:
 		session.conditions.enqueue(sent + 0.1, true, client_clock.observe.bind(sent, sent + 0.1, sent + 0.2)))
 	# The production RPC derives peer 2 from the sender before marking it loaded.
@@ -313,6 +339,29 @@ func test_delayed_load_ack_and_clock_reach_countdown_then_racing() -> void:
 	GameState.is_networked = false
 	GameState.automation_mode = false
 
+## Backlog item 3: the UPnP mapping must not outlive the session — only be
+## releasable from pressing BACK on the lobby (`go_back`). `_start_upnp` ties
+## release to `NetSession.close()` via `tree_exiting` (through the
+## `_bind_upnp_release` helper, split out so this test avoids running real
+## UPnP network discovery), so LEAVE RACE/END SESSION/app teardown release
+## the mapping too, instead of leaking one NetUpnp node + UDP mapping per
+## HOST press.
+func test_upnp_mapping_releases_itself_once_the_session_closes() -> void:
+	var lobby: OnlineLobby = (load("res://ui/menus/online_lobby.tscn") as PackedScene).instantiate() as OnlineLobby
+	add_child_autofree(lobby)
+	await wait_process_frames(2)
+	var session: NetSession = NetSession.new()
+	add_child_autofree(session)
+	lobby.set("_session", session)
+	_test_upnp = NetUpnp.new() # Freed defensively in after_each (finding 6) in case an assertion below fails first.
+	GameState.add_child(_test_upnp)
+	lobby.call("_bind_upnp_release", _test_upnp)
+	assert_true(session.tree_exiting.is_connected(_test_upnp.release_and_free), "_start_upnp's binding must tie the mapping's release to the session closing")
+	assert_true(is_instance_valid(_test_upnp), "sanity: the mapping node must still be alive before the session closes")
+	session.close()
+	await wait_process_frames(1)
+	assert_false(is_instance_valid(_test_upnp), "closing the session must release the still-unmapped NetUpnp node too (no mapping ever attempted, so this is the fast synchronous path)")
+
 ## Finding 6: `test_delayed_load_ack_and_clock_reach_countdown_then_racing`
 ## above sets `GameState.is_networked` / `GameState.net_session` directly and
 ## only clears them at its own tail end — an early failure there (it is a
@@ -324,5 +373,13 @@ func test_delayed_load_ack_and_clock_reach_countdown_then_racing() -> void:
 ## of test_net_internet.gd; that file owns the `multiplayer_peer` reset those
 ## tests need.
 func after_each() -> void:
+	if is_instance_valid(_test_upnp):
+		_test_upnp.queue_free()
+	_test_upnp = null
 	GameState.is_networked = false
 	GameState.net_session = null
+	# session.close() (used above) assigns a fresh OfflineMultiplayerPeer to
+	# the tree-wide multiplayer peer; restore it explicitly regardless of
+	# pass/fail (review finding 6), mirroring
+	# test_net_session_admission.gd's after_each.
+	get_tree().get_multiplayer().multiplayer_peer = OfflineMultiplayerPeer.new()

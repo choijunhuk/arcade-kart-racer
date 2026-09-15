@@ -4,16 +4,19 @@
 
 | Platform | Artifact | Notes |
 |---|---|---|
-| Windows | `build/windows/TurboCircuit.exe` (+ `TurboCircuit.pck` alongside it) | Never executed on real hardware. |
+| Windows | `build/windows/TurboCircuit.exe` (+ `TurboCircuit.pck` alongside it) | `--selftest` passed on a real Windows 11 VM (2026-09-15). Never run windowed — no graphics/input/audio check. |
 | macOS | `build/macos/TurboCircuit.zip` (unzips to `Turbo Circuit.app`) | Gatekeeper-blocked; unsigned. Smoke-tested via `--selftest` on this dev machine only (see below) — never run as a normal windowed app on another Mac. |
-| Linux | `build/linux/TurboCircuit-linux.tar.gz` (also `TurboCircuit.x86_64` + `TurboCircuit.pck` loose in the same directory) | Never executed on real hardware. |
+| Linux | `build/linux/TurboCircuit-linux.tar.gz` (also `TurboCircuit.x86_64` + `TurboCircuit.pck` loose in the same directory) | `--selftest` passed in an x86_64 Debian container (2026-09-15). Never run windowed — no graphics/input/audio check. |
 
 None of these have been run as an actual windowed game on the target OS. The macOS
 build has only been smoke-tested headless (`--selftest`, see
 `scenes/export_selftest.gd`) on the machine that built it — it verifies data
 scanning and track instancing after export, not rendering, input, or audio.
-**Windows and Linux builds have never been executed at all.** Treat all three as
-needing a manual smoke run on real hardware before anyone relies on them.
+All three builds have now run `--selftest` on their own platform (macOS packaged
+`.app`, Windows 11 VM, x86_64 Linux container), so the data, resource and track
+instancing paths are verified there. None has been run as a normal windowed game
+outside this dev machine: graphics, input, audio, and anything GPU-dependent are
+still unverified on Windows and Linux, and the macOS build is still unsigned.
 
 ## Save data
 

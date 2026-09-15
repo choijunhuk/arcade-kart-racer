@@ -20,6 +20,14 @@ var waiting: Array[Dictionary] = []
 ## True between `_prepare_race` and the race scene binding itself.
 var preparing: bool = false
 var _session: NetSession
+## Last `_session._clock_ticks` value a `broadcast_lobby()` call actually
+## sent on, so a burst of triggers within one physics tick (backlog item 6:
+## a looping `_selection` RPC) coalesces to a single reliable broadcast.
+var _broadcast_tick: int = -1
+## True when a trigger landed after this tick's own send already went out
+## (review finding 1); `flush_pending_lobby_broadcast()` sends it once the
+## tick counter has moved on, so it is deferred rather than dropped.
+var _lobby_pending: bool = false
 
 
 func attach(session: NetSession) -> void:
@@ -105,6 +113,84 @@ func replace(source: Array) -> void:
 	_session.players.assign(bounded)
 
 
+## Admits or queues a freshly handshaked peer. Moved from
+## `NetSession._admit_peer` (kept there as a 1-line wrapper) to pay for the
+## 400-line rule when the rate-limit/cache fixes below landed in the same
+## commit. A connected peer is not a joined player yet: no roster row/kart
+## until its handshake passes, and it is kicked if it never sends one.
+func admit_peer(id: int) -> void:
+	var ok: bool = add_waiting(id) if _session.started else add(id, _session.automated)
+	if not ok:
+		return
+	NetTuning.widen_peer_timeout(_session.peer, id) # Finding 1: only once admitted — an unauthenticated peer keeps ENet's default ~5s timeout so it can't squat a connection slot on the widened one.
+	print("SERVER_ADMIT peer=%d" % id)
+	_session.send(&"_admitted", id, [_session.started], true)
+	if not _session.started:
+		broadcast_lobby()
+
+
+## Sends the reason first, then defers the disconnect via KICK_GRACE_SECONDS
+## (spec item 1); a no-op once queued so a resend can't delay it. Moved from
+## `NetSession._reject_peer` for the same 400-line-budget reason as
+## `admit_peer`. `_session._deliver_reject` stays virtual-dispatched here
+## (test_net_internet.gd's GateSession overrides it).
+func reject_peer(id: int, message: String) -> void:
+	if _session._gate.is_kicking(id):
+		return
+	print("SERVER_REJECT peer=%d reason=%s" % [id, message])
+	_session._deliver_reject(id, message)
+	remove(id)
+	_session._input_limiter.remove(id)
+	_session._selection_limiter.remove(id)
+	_session._ping_limiter.remove(id)
+	_session._loss.remove(id)
+	_session._gate.remove(id)
+	_session._gate.queue_kick(id, NetSession.now())
+	broadcast_lobby()
+
+
+## Coalesces repeated triggers (a looping `_selection` RPC, several peers
+## admitted/rejected in the same tick, ...) to at most one reliable `_lobby`
+## send per physics tick (backlog item 6), keyed off the session's own
+## `_clock_ticks` counter, which only `_physics_process` advances. A trigger
+## landing after this tick's own send already went out is DEFERRED, not
+## discarded (review finding 1): `flush_pending_lobby_broadcast()` sends it
+## once the tick counter moves on, so a burst of mutations within one tick
+## never leaves the last one unbroadcast.
+##
+## No-op once `started` (review finding: `reject_peer()` used to be the only
+## caller without its own started guard — a version/password rejection mid-race
+## reached every RACING client's `_lobby` handler, whose `apply_lobby()` ->
+## `replace()` on `players` desyncs roster/kart indices for a peer still in the
+## load fade). Centralized here so every future caller inherits the guard.
+func broadcast_lobby() -> void:
+	if _session.started:
+		return
+	if _broadcast_tick == _session._clock_ticks:
+		_lobby_pending = true
+		return
+	_send_lobby()
+
+
+func _send_lobby() -> void:
+	_broadcast_tick = _session._clock_ticks
+	_lobby_pending = false
+	_session.send(&"_lobby", 0, [_session.players, _session.laps, _session.ai_count, _session.track_id, _session.difficulty_id], true)
+	_session.lobby_changed.emit()
+
+
+## Server-only; called once per tick from `NetSession._physics_process` once
+## `_clock_ticks` has advanced past the tick a `broadcast_lobby()` call was
+## coalesced on, flushing the deferred send at most once per tick. Same
+## `started` guard as `broadcast_lobby()`: a broadcast coalesced in the lobby
+## must never flush once the race has started.
+func flush_pending_lobby_broadcast() -> void:
+	if _session.started:
+		return
+	if _lobby_pending and _broadcast_tick != _session._clock_ticks:
+		_send_lobby()
+
+
 ## Applies one peer's driver/kart/ready choice; false when it has no row.
 func update(id: int, driver: String, kart: String, ready: bool) -> bool:
 	var index: int = index_of(id)
@@ -130,6 +216,10 @@ func start_race(force: bool) -> bool:
 			if not bool(row["ready"]):
 				return false
 	_session.started = true
+	# Same reset as `clear_race_state()`: a broadcast deferred in the lobby
+	# (backlog item 6 coalescing) must never flush after `_prepare_race`.
+	_broadcast_tick = -1
+	_lobby_pending = false
 	_session.peer.refuse_new_connections = not _session.dedicated
 	_session.send(&"_prepare_race", 0, _prepare_args(), true)
 	_session._prepare_race(_session.players, _session.ai_count, _session.laps, _session.seed, _session.track_id, _session.difficulty_id)
@@ -148,12 +238,16 @@ func retry_start() -> void:
 
 ## Reopens the lobby after RESULTS for any server (listen or dedicated),
 ## keeping already-connected peers on the same ENet session and promoting
-## mid-race "waiting" joiners into the roster (spec item 3).
+## mid-race "waiting" joiners into the roster (spec item 3). Does NOT itself
+## reopen the ENet listener to new connections — see NetSession.reopen_connections():
+## for a listen host, GameState.change_scene() runs a transition fade before
+## the lobby scene's own _ready()/rebind actually runs, and a peer connecting
+## in that gap must never slip into the full roster while the previous race
+## scene is technically still alive (finding: lobby-reopen connection window).
 func restart_to_lobby() -> void:
 	if not _session.multiplayer.is_server():
 		return
 	clear_race_state()
-	_session.peer.refuse_new_connections = false
 	promote_waiting()
 	for row: Dictionary in _session.players:
 		row["ready"] = false
@@ -163,7 +257,7 @@ func restart_to_lobby() -> void:
 	# its controls stick on NetSession's constructor defaults instead of the
 	# real settings until the host happens to change one. Also covers the
 	# `lobby_changed` emit this used to do directly.
-	_session._broadcast_lobby()
+	broadcast_lobby()
 
 
 ## Clears every per-race flag while preserving the connected peer roster.
@@ -173,6 +267,11 @@ func clear_race_state() -> void:
 	_session.race = null
 	preparing = false
 	loaded.clear()
+	# A `broadcast_lobby()` coalesced/deferred during the lobby must never
+	# flush post-`_prepare_race`; reset both so `flush_pending_lobby_broadcast()`
+	# finds nothing pending once the next lobby phase begins.
+	_broadcast_tick = -1
+	_lobby_pending = false
 
 
 ## Host-only: updates laps/bots/track/difficulty and rebroadcasts the lobby
@@ -182,7 +281,7 @@ func set_race_options(new_laps: int, new_ai_count: int, new_track_id: String, ne
 	if not _session.multiplayer.is_server() or _session.started:
 		return
 	apply_race_settings(new_laps, new_ai_count, new_track_id, new_difficulty_id)
-	_session._broadcast_lobby()
+	broadcast_lobby()
 
 
 ## Raw setter shared by `_lobby` and `_prepare_race` (spec item 1): both

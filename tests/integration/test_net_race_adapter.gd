@@ -44,6 +44,12 @@ func after_each() -> void:
 	GameState.is_networked = false
 	GameState.automation_mode = false
 
+## `NetRace._build_automated_source`'s driver-personality coverage (backlog
+## item 4) lives in test_net_race_adapter_ai_personality.gd, split out (the
+## 400-line rule, backlog item 8) with its own isolated single-kart
+## session/manager rather than this file's shared `_session`/`_manager` —
+## see that file for why.
+
 func test_loading_barrier_freezes_countdown_until_begin() -> void:
 	await wait_physics_frames(5)
 	assert_eq(_manager.get_state(), RaceState.COUNTDOWN)
