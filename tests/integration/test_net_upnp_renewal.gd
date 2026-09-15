@@ -171,5 +171,12 @@ func test_release_pending_during_an_in_flight_renewal_still_removes_once_consume
 	assert_true(_upnp._release_pending, "release while a renewal is in flight must defer instead of touching state out from under the worker")
 	assert_true(is_instance_valid(_upnp), "must not free synchronously while the renewal result is still unconsumed")
 	FakeBlockingRenewalUpnp.release_semaphore.post()
-	var freed_in_time: bool = await wait_for_signal(_upnp.tree_exited, 1.0)
+	# Wall-clock bounded (see _UpnpTestWait.wait_for_freed's own doc comment
+	# in test_net_upnp_release.gd), not wait_for_signal's simulated-time
+	# timeout: this test chains TWO real worker Thread round trips (the
+	# renewal, then the follow-up removal `_finish_renewal` starts once
+	# `_release_pending` is consumed), so it lost the race against GUT's
+	# `--fixed-fps`-driven simulated clock most easily — reproduced flaking
+	# intermittently even standalone, see git history for this line.
+	var freed_in_time: bool = await _ReleaseTest._UpnpTestWait.wait_for_freed(_upnp)
 	assert_true(freed_in_time, "the deferred release must still free the node once the renewal result lands and the follow-up removal worker reports back")

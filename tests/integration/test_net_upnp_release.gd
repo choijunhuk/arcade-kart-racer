@@ -75,6 +75,28 @@ class _UpnpTestWait extends RefCounted:
 				return
 			OS.delay_msec(5)
 
+	## Bounded, wall-clock poll for a `queue_free()`'d node actually leaving
+	## the tree. `wait_for_signal(node.tree_exited, 1.0)` (the previous
+	## approach here and in test_net_upnp_renewal.gd) times out against
+	## SIMULATED time instead: GUT's awaiter accumulates the `--fixed-fps 240`
+	## delta each `_physics_process` tick (addons/gut/awaiter.gd), and headless
+	## `--fixed-fps` runs frames as fast as the CPU allows rather than
+	## throttling to real time — so its "1.0s" can elapse in a small fraction
+	## of a real second while a genuine background `Thread` this test itself
+	## unblocked is still being scheduled and joined by the OS, intermittently
+	## timing out a release that in fact completed correctly (reproduces most
+	## easily for a test chaining two such worker round trips back to back,
+	## but the same race applies to a single one under load). Polling
+	## `Time.get_ticks_msec()` instead waits for the real condition with a
+	## generous deadline, paced by actual process frames rather than a busy
+	## loop.
+	static func wait_for_freed(node: Object, timeout_ms: int = 5000) -> bool:
+		var deadline_ms: int = Time.get_ticks_msec() + timeout_ms
+		var tree: SceneTree = Engine.get_main_loop() as SceneTree
+		while is_instance_valid(node) and Time.get_ticks_msec() < deadline_ms:
+			await tree.process_frame
+		return not is_instance_valid(node)
+
 
 func after_each() -> void:
 	if is_instance_valid(_upnp):
@@ -107,10 +129,12 @@ func test_release_starts_the_removal_worker_on_a_normal_session_end() -> void:
 	_upnp._mapped_port = 40000
 	_upnp.release_and_free()
 	assert_eq(_upnp._mapped_port, -1, "a live mapping must be cleared synchronously before the removal worker starts")
-	# GUT's wait_for_signal returns false (without failing the test) on its
-	# own timeout, so the removal never actually completing would otherwise
-	# pass silently — assert the result explicitly.
-	var freed_in_time: bool = await wait_for_signal(_upnp.tree_exited, 1.0)
+	# _UpnpTestWait.wait_for_freed returns false (without failing the test) on
+	# its own timeout, so the removal never actually completing would
+	# otherwise pass silently — assert the result explicitly. Wall-clock
+	# bounded (its own doc comment), not wait_for_signal's simulated-time
+	# timeout, which races a real background Thread this test starts.
+	var freed_in_time: bool = await _UpnpTestWait.wait_for_freed(_upnp)
 	assert_true(freed_in_time, "release_and_free() must free the node once the removal worker reports back, within the timeout")
 
 
@@ -135,7 +159,10 @@ func test_release_while_a_finished_but_unconsumed_mapping_result_waits_for_it() 
 	assert_true(_upnp._release_pending, "release while the box is unconsumed must defer instead of abandoning the just-created mapping")
 	assert_true(is_instance_valid(_upnp), "must not free synchronously while a mapping result is still unconsumed")
 	_upnp._process(0.0) # Consumes the box, applies _mapped_port, then acts on the deferred release.
-	var freed_in_time: bool = await wait_for_signal(_upnp.tree_exited, 1.0)
+	# Wall-clock bounded (see _UpnpTestWait.wait_for_freed's own doc comment),
+	# not wait_for_signal's simulated-time timeout, which races the real
+	# removal Thread this drives.
+	var freed_in_time: bool = await _UpnpTestWait.wait_for_freed(_upnp)
 	assert_true(freed_in_time, "the deferred release must still free the node once the mapping result is consumed and the removal worker reports back")
 
 
