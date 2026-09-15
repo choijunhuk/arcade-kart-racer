@@ -36,6 +36,10 @@ func load_data() -> Dictionary:
 	if not primary.is_empty():
 		return _migrate(primary)
 
+	var future_version: int = _read_future_version(save_path)
+	if future_version > 0:
+		return _recover_future_version_primary(future_version)
+
 	var backup_path: String = save_path + BACKUP_SUFFIX
 	var backup: Dictionary = _read_valid_data(backup_path)
 	if not backup.is_empty():
@@ -46,6 +50,52 @@ func load_data() -> Dictionary:
 	var defaults: Dictionary = default_data()
 	_write_json(save_path, defaults)
 	return defaults
+
+
+## A primary save that parses fine but reports a version newer than this build
+## understands (e.g. a rollback to an older build after a newer one ran). It
+## must never be treated as readable: the original is moved aside so no later
+## write can lose the player's real (newer) profile, and a readable backup —
+## or in-memory defaults when none exists — stands in for this session only.
+func _recover_future_version_primary(version: int) -> Dictionary:
+	_preserve_future_version_save(save_path, version)
+	var backup: Dictionary = _read_valid_data(save_path + BACKUP_SUFFIX)
+	if not backup.is_empty():
+		var recovered: Dictionary = _migrate(backup)
+		_write_json(save_path, recovered)
+		return recovered
+	return default_data()
+
+
+## Best-effort: renames a too-new primary out of save_path's way so a later
+## write can never overwrite it. A no-op if a preserved copy for this exact
+## version already exists (e.g. this load already ran once).
+func _preserve_future_version_save(path: String, version: int) -> void:
+	var preserved_path: String = "%s.v%d" % [path, version]
+	if not FileAccess.file_exists(preserved_path):
+		DirAccess.rename_absolute(path, preserved_path)
+
+
+## Returns the declared version of `path` when it parses as a JSON Dictionary
+## with a numeric version newer than CURRENT_VERSION, or -1 otherwise (missing,
+## corrupt, or a version this build can already read) — so callers can tell
+## "too new" apart from "corrupt" instead of treating both as unreadable.
+func _read_future_version(path: String) -> int:
+	if not FileAccess.file_exists(path):
+		return -1
+	var parser: JSON = JSON.new()
+	if parser.parse(FileAccess.get_file_as_string(path)) != OK:
+		return -1
+	var parsed: Variant = parser.data
+	if not parsed is Dictionary:
+		return -1
+	var version_value: Variant = (parsed as Dictionary).get("version", -1)
+	if not version_value is int and not version_value is float:
+		return -1
+	var version: int = int(version_value)
+	if not is_equal_approx(float(version), float(version_value)) or version <= CURRENT_VERSION:
+		return -1
+	return version
 
 
 ## Writes versioned data and preserves the last valid primary as a backup.
