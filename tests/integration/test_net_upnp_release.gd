@@ -48,10 +48,25 @@ class FakeBlockingUpnp extends NetUpnp:
 		box.done = true
 
 
+## Same semaphore-block trick as `FakeBlockingUpnp`, but for the discovery
+## (`map_port()`) worker instead of the removal one — the WM_CLOSE_REQUEST
+## tests below need "a live worker still inside discover()", not a removal.
+class FakeBlockingMapUpnp extends NetUpnp:
+	static var release_semaphore: Semaphore
+	static func _run(port: int, box: NetUpnp.ResultBox) -> void:
+		release_semaphore.wait()
+		box.result = {"kind": "mapping", "status": "mapped", "port": port, "external_ip": "203.0.113.5", "permanent": false}
+		box.done = true
+
+
 func after_each() -> void:
 	if is_instance_valid(_upnp):
 		_upnp.queue_free()
 	_upnp = null
+	# Safety net for the WM_CLOSE_REQUEST tests below: restore the real,
+	# shared SceneTree's flag even if an assertion failed before its own
+	# explicit restore line ran.
+	get_tree().auto_accept_quit = true
 
 
 ## Normal session end (BACK/LEAVE RACE/END SESSION, `_quitting` unset): a
@@ -118,6 +133,83 @@ func test_wm_close_request_notification_sets_quitting() -> void:
 	assert_false(_upnp._quitting, "sanity: _quitting starts false")
 	_upnp._notification(NOTIFICATION_WM_CLOSE_REQUEST)
 	assert_true(_upnp._quitting, "NOTIFICATION_WM_CLOSE_REQUEST must set _quitting")
+
+
+## Review finding 4: a live worker at the moment of the OS close request
+## must veto the automatic quit and arm a bounded wait instead, then fire
+## exactly once the worker reports back. Uses `NetUpnpQuitWaiter`'s
+## injectable `quit_override` (never the real `get_tree().quit()` — that
+## would kill the whole test run) with a semaphore-blocked worker, the same
+## proven technique `FakeBlockingUpnp` uses below for removal.
+func test_wm_close_request_with_a_live_worker_defers_quit_then_fires_once_when_it_finishes() -> void:
+	FakeBlockingMapUpnp.release_semaphore = Semaphore.new()
+	_upnp = FakeBlockingMapUpnp.new()
+	GameState.add_child(_upnp)
+	_upnp.map_port(40020)
+	assert_not_null(_upnp._thread, "sanity: the discovery worker must have started and still be blocked on the semaphore")
+	# A single-element Array, not a plain int (GDScript lambdas capture outer
+	# locals by value — mutating a captured int would be invisible out here;
+	# see `test_net_lobby.gd`'s own `broadcasts[0] += 1` for the same idiom).
+	var quit_calls: Array = [0]
+	_upnp._quit_waiter.quit_override = func() -> void: quit_calls[0] += 1
+	_upnp._notification(NOTIFICATION_WM_CLOSE_REQUEST)
+	assert_false(_upnp.get_tree().auto_accept_quit, "a live worker must veto the automatic quit so the bounded wait can run first")
+	assert_true(_upnp._quit_waiter.is_armed(), "a live worker must arm the bounded wait")
+	_upnp._process(0.0)
+	_upnp._process(0.0)
+	assert_eq(quit_calls[0], 0, "quit must not fire while the worker is still blocked and the deadline has not elapsed")
+	FakeBlockingMapUpnp.release_semaphore.post()
+	var deadline_ms: int = Time.get_ticks_msec() + 2000
+	while quit_calls[0] == 0 and Time.get_ticks_msec() < deadline_ms:
+		await wait_process_frames(1)
+	assert_eq(quit_calls[0], 1, "the injected quit hook must fire exactly once the worker reports back")
+	assert_false(_upnp._quit_waiter.is_armed(), "firing must disarm the wait")
+	_upnp.get_tree().auto_accept_quit = true # Restore the real, shared SceneTree's flag for the rest of the suite.
+
+
+## The mirror image: no worker ever reports back, so the bounded deadline —
+## not the worker — must be what fires the quit hook. Forcing the deadline
+## into the past (whitebox on `NetUpnpQuitWaiter.deadline_at`) exercises
+## exactly the `now >= deadline_at` branch `poll()` checks, without a real
+## multi-second sleep.
+func test_wm_close_request_quit_deadline_fires_if_the_worker_never_finishes() -> void:
+	FakeBlockingMapUpnp.release_semaphore = Semaphore.new()
+	_upnp = FakeBlockingMapUpnp.new()
+	GameState.add_child(_upnp)
+	_upnp.map_port(40021)
+	var quit_calls: Array = [0] # See the sibling test above for why not a plain int.
+	_upnp._quit_waiter.quit_override = func() -> void: quit_calls[0] += 1
+	_upnp._notification(NOTIFICATION_WM_CLOSE_REQUEST)
+	assert_true(_upnp._quit_waiter.is_armed(), "sanity: a live worker must arm the wait")
+	# 0.0, not `_now() - 1.0`: this early in a single-file test run `_now()`
+	# (ticks since engine start) can itself be under a second, and
+	# `NetUpnpQuitWaiter.deadline_at` treats any negative value as unarmed —
+	# 0.0 is unambiguously "already overdue" without risking that sentinel.
+	_upnp._quit_waiter.deadline_at = 0.0
+	_upnp._process(0.0)
+	assert_eq(quit_calls[0], 1, "the deadline elapsing must fire the quit hook even though the worker never reported back")
+	assert_false(_upnp._quit_waiter.is_armed(), "firing must disarm the wait")
+	_upnp.get_tree().auto_accept_quit = true # Restore the real, shared SceneTree's flag for the rest of the suite.
+	# Let the still-blocked worker finish so its thread doesn't dangle past
+	# this test — it can never touch this node either way (static body,
+	# RefCounted box), but a thread parked on a Semaphore forever would leak.
+	FakeBlockingMapUpnp.release_semaphore.post()
+	await wait_process_frames(2)
+
+
+## No live worker: nothing to defer, so neither the wait nor our own quit
+## hook engage at all — the engine's own automatic quit (untouched
+## `auto_accept_quit`) is what actually quits immediately in the real app.
+func test_wm_close_request_with_no_live_worker_quits_immediately() -> void:
+	_upnp = NetUpnp.new()
+	GameState.add_child(_upnp)
+	var quit_calls: Array = [0] # See the earlier test above for why not a plain int.
+	_upnp._quit_waiter.quit_override = func() -> void: quit_calls[0] += 1
+	_upnp._notification(NOTIFICATION_WM_CLOSE_REQUEST)
+	assert_false(_upnp._quit_waiter.is_armed(), "no live worker means nothing to wait for")
+	assert_true(_upnp.get_tree().auto_accept_quit, "no live worker means the automatic quit must stay armed")
+	_upnp._process(0.0)
+	assert_eq(quit_calls[0], 0, "no live worker means our own quit hook must never fire — the engine's automatic quit handles it")
 
 
 ## Review finding 1 (the redesigned worker): freeing this node while its

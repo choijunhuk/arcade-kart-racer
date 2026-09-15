@@ -10,6 +10,10 @@ signal mapping_finished(result: Dictionary)
 
 const DESCRIPTION: String = "TurboCircuit"
 const TIMEOUT_MS: int = 3000
+## Cushion on top of TIMEOUT_MS for the delayed-quit wait below (review
+## finding 4), so a worker returning right at the timeout still gets a
+## moment to write its box before the wait gives up anyway.
+const QUIT_WAIT_MARGIN_MS: int = 250
 ## Requested router lease duration in seconds (backlog item 2): duration 0
 ## (the previous, argument-less `add_port_mapping` call) left a genuinely
 ## permanent forward that only a router reboot cleared, surviving a crash or
@@ -21,11 +25,9 @@ const LEASE_DURATION_SECONDS: int = 3600
 ## mid-session.
 const RENEW_MARGIN_SECONDS: float = 300.0
 
-## Mutable box a worker thread's bound Callable writes its result into,
-## instead of calling back into this node directly (review finding 1: the
-## previous `call_deferred("_finish"/"_finish_removal", ...)` targeted
-## `self`, and `_exit_tree()` detaching a still-running thread let the node
-## free before that deferred call landed — on a freed instance). A
+## Mutable box a worker thread's bound Callable writes into, instead of
+## calling back into this node directly (finding 1: `call_deferred(...)`
+## targeted `self`, and a freed node dropped mid-call was a crash). A
 ## `RefCounted` box has no lifecycle tied to this node: a freed node just
 ## drops its `_box` reference, and the worker harmlessly finishes writing
 ## into a box nobody reads. The node polls `box.done` from `_process`.
@@ -41,19 +43,20 @@ var _mapped_port: int = -1
 ## that never expires and so is never renewed — `is_renewal_due()` already
 ## treats any negative value as "nothing to renew".
 var _lease_expires_at: float = -1.0
-## Renewal retry back-off (review finding 1), independent of
-## `_lease_expires_at` — see `NetUpnpRenewalBackoff`'s own doc comment.
+## Renewal retry back-off (finding 1) — see `NetUpnpRenewalBackoff`.
 var _renewal_backoff: NetUpnpRenewalBackoff = NetUpnpRenewalBackoff.new()
 ## Set when release_and_free() arrives while a worker thread is still
 ## running: the poller frees the node once its result lands instead of
 ## touching state out from under it.
 var _release_pending: bool = false
-## Set once the OS sends a close request (window close, Alt+F4, Cmd+Q): the
-## app is shutting down, not a normal in-session exit. Explicit and
-## asserted via this node's own `_notification()` (review finding 3)
-## instead of inferred from tree-exiting order, which was never asserted
-## anywhere and could read either way. Tests set it directly.
+## Set once the OS sends a close request: the app is shutting down, not a
+## normal in-session exit. Explicit via `_notification()` (finding 3)
+## instead of inferred from tree-exiting order, which could read either
+## way. Tests set it directly.
 var _quitting: bool = false
+## Bounds a delayed OS-close quit (see `_notification()`) on a live worker —
+## see `NetUpnpQuitWaiter`'s own doc comment.
+var _quit_waiter: NetUpnpQuitWaiter = NetUpnpQuitWaiter.new()
 
 
 func _ready() -> void:
@@ -67,6 +70,13 @@ func _ready() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		_quitting = true
+		if _box != null and not _box.done:
+			# A worker is still discovering/mapping (review finding 4): veto
+			# the automatic quit; `_process()` below calls it once the worker
+			# reports back or the bounded margin elapses (see `_exit_tree()`
+			# for exactly what this does and does not guarantee).
+			get_tree().auto_accept_quit = false
+			_quit_waiter.arm(_now(), float(TIMEOUT_MS) / 1000.0, float(QUIT_WAIT_MARGIN_MS) / 1000.0)
 
 
 ## Starts discovery + port mapping for `port` on a worker thread. Gated on
@@ -81,19 +91,16 @@ func map_port(port: int) -> void:
 
 
 ## Releases the mapping created by `map_port` and frees this node once the
-## router has answered. Discovery costs up to TIMEOUT_MS, so it runs on the
-## same worker-thread pattern `map_port` uses rather than on the UI thread;
-## the caller is typically a lobby about to change scene, so the node
-## reparents onto the persistent GameState owner first, and the removal is
-## fire-and-forget, reporting only a log line.
+## router has answered, on the same worker-thread pattern as `map_port`; the
+## caller is typically a lobby about to change scene, so the node reparents
+## onto the persistent GameState owner first, and the removal is fire-and-
+## forget, reporting only a log line.
 ##
 ## `NetSession.tree_exiting` (this method's caller) also fires during full
-## app teardown, not just BACK/LEAVE RACE/END SESSION — at that point
-## `_quitting` is set (review finding 3), so starting the removal worker
-## here would only get detached rather than joined by `_exit_tree()`, the
-## exact main-thread freeze this node exists to avoid. App teardown skips
-## the round trip and just frees, leaving the (now finite,
-## LEASE_DURATION_SECONDS) lease to expire on its own;
+## app teardown, where `_quitting` is set (finding 3) — starting a removal
+## worker there would only get detached rather than joined by
+## `_exit_tree()`, so teardown instead skips the round trip and just frees,
+## leaving the (now finite) lease to expire on its own;
 ## `_warn_abandoned_mapping()` still names the port for a headless operator.
 func release_and_free() -> void:
 	# `_box != null`, not `_thread.is_alive()` (review finding 3, see
@@ -219,11 +226,9 @@ static func _attempt_mapping(port: int, lease_seconds: int) -> Dictionary:
 
 
 ## Human-readable status line for anything other than a successful reachable
-## mapping (`OnlineLobby`'s "mapped" branch handles that one itself).
-## Distinguishes "mapped but not internet-reachable" (CGNAT/double-NAT,
-## finding 2) from a genuine failure. Untrusted IGD text (finding 4):
-## `external_ip` on "mapped_unreachable" is raw SSDP LAN text — never echoed
-## into the UI unless it actually parses as a dotted-quad IPv4 address.
+## mapping. Distinguishes "mapped but not internet-reachable" (CGNAT/double-
+## NAT) from a genuine failure. `external_ip` on "mapped_unreachable" is raw
+## SSDP LAN text — never echoed unless it parses as a dotted-quad IPv4.
 static func status_message(result: Dictionary, port: int) -> String:
 	if String(result.get("status", "")) == "mapped_unreachable":
 		var external_ip: String = String(result.get("external_ip", ""))
@@ -235,9 +240,8 @@ static func status_message(result: Dictionary, port: int) -> String:
 	return "UPnP unavailable — forward UDP port %d manually." % port
 
 
-## Parses `ip` as four 0-255 octets, or an empty array if it is not a
-## well-formed dotted-quad — malformed/untrusted input fails closed for
-## every caller (`is_internet_reachable_address` and `status_message`).
+## Parses `ip` as four 0-255 octets, or empty if not a well-formed dotted-
+## quad — malformed/untrusted input fails closed for every caller.
 static func _parse_ipv4_octets(ip: String) -> Array[int]:
 	var parts: PackedStringArray = ip.split(".")
 	if parts.size() != 4:
@@ -254,14 +258,11 @@ static func _parse_ipv4_octets(ip: String) -> Array[int]:
 
 
 ## True when `ip` is a routable, internet-reachable IPv4 address. False for
-## every private/CGNAT/link-local/loopback/reserved range an IGD can
-## legitimately (or a false-WAN-down router can spuriously) hand back as its
-## own "external" address: 0.0.0.0/8 ("no address", a down/misconfigured WAN
-## — the exact false success this feature exists to catch), 10.0.0.0/8,
-## 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10 (CGNAT, RFC 6598),
-## 169.254.0.0/16 (link-local), 127.0.0.0/8 (loopback), and 224.0.0.0/4 +
-## 240.0.0.0/4 (multicast/reserved, includes 255.255.255.255). Malformed
-## input fails closed (not reachable).
+## every private/CGNAT/link-local/loopback/reserved range an IGD can hand
+## back as its own "external" address: 0.0.0.0/8 (down/misconfigured WAN),
+## 10/8, 172.16/12, 192.168/16, 100.64/10 (CGNAT), 169.254/16 (link-local),
+## 127/8 (loopback), and 224/4 + 240/4 (multicast/reserved, includes
+## 255.255.255.255). Malformed input fails closed (not reachable).
 static func is_internet_reachable_address(ip: String) -> bool:
 	var octets: Array[int] = _parse_ipv4_octets(ip)
 	if octets.is_empty():
@@ -299,6 +300,10 @@ static func _now() -> float:
 
 
 func _process(_delta: float) -> void:
+	# Bounded quit-wait (review finding 4): a no-op unless `_notification()`
+	# armed it on this node's own live worker; see `NetUpnpQuitWaiter.poll()`
+	# for why "no box" must never read as "worker done" here.
+	_quit_waiter.poll(_now(), _box != null and _box.done, get_tree())
 	if _box != null:
 		if not _box.done:
 			return
@@ -376,14 +381,16 @@ func _finish_renewal(result: Dictionary) -> void:
 		release_and_free()
 
 
-## Detaches rather than joins a still-running worker thread (review finding
-## 3): a full app close reaches every node's `_exit_tree()` on the main
-## thread, and `Thread.wait_to_finish()` here would block it for up to
-## TIMEOUT_MS — the exact freeze this node exists to avoid. Dropping the
-## reference without joining lets the thread (discovery, removal, or a
-## renewal) run to completion in the background, writing into a `_box` this
-## freed node no longer reads; Godot's own `Thread` destructor safely
-## detaches an unfinished thread instead of crashing.
+## Detaches rather than joins a still-running worker thread (finding 3):
+## joining here would block whatever main-thread path frees this node for
+## up to TIMEOUT_MS. What this does and does not guarantee (finding 4): the
+## OS close-request path bounds its wait first (`_notification()`'s delayed
+## quit), so the worker has very likely already finished by the time
+## teardown reaches here — not guaranteed, since that margin can still
+## elapse with it genuinely running, and any other free path (a direct
+## `get_tree().quit()`, a scene change, a hard kill) skips the wait
+## entirely. This method only keeps the join from hanging or crashing,
+## never the worker's own in-flight engine calls from racing a teardown.
 func _exit_tree() -> void:
 	if _thread != null and _thread.is_alive():
 		_warn_abandoned_mapping()
