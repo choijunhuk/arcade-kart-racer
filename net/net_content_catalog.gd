@@ -7,6 +7,15 @@ extends RefCounted
 const TRACK_DIRECTORY: String = "res://data/tracks"
 const AI_DIRECTORY: String = "res://data/ai"
 
+## Fallbacks for `default_driver_id()`/`default_kart_id()` (backlog item 5):
+## the scan they read is memoized even when it comes back empty (directory
+## missing, or every file in it broken) — without these, `[0]` on that empty
+## scan is an out-of-bounds script error for the rest of the process's
+## lifetime, on every host()/admit. Preloaded, not scanned, so they resolve
+## even when the real content directories cannot.
+const DEFAULT_DRIVER: DriverData = preload("res://data/drivers/aurora_vale.tres")
+const DEFAULT_KART: KartData = preload("res://data/karts/basalt_crown.tres")
+
 ## Per-directory memo of the shipped content catalog. A peer's `_selection`
 ## reaches `has()` twice, and each call used to re-open the directory and
 ## re-load every `.tres` — pure disk churn for an identical result, since the
@@ -41,14 +50,25 @@ static func clear_cache() -> void:
 	_catalog.clear()
 
 
-## Returns the first catalog driver id, used to seed a freshly joined row.
+## Returns the first catalog driver id, used to seed a freshly joined row;
+## falls back to the preloaded default (backlog item 5) once the memoized
+## scan of `DRIVER_DIRECTORY` is empty instead of indexing `[0]` of nothing.
 static func default_driver_id() -> String:
-	return String((_scan(LocalLobby.DRIVER_DIRECTORY)[0] as DriverData).id)
+	return _first_id_or_default(LocalLobby.DRIVER_DIRECTORY, DEFAULT_DRIVER)
 
 
-## Returns the first catalog kart id, used to seed a freshly joined row.
+## Returns the first catalog kart id, used to seed a freshly joined row;
+## falls back to the preloaded default (backlog item 5) once the memoized
+## scan of `KART_DIRECTORY` is empty instead of indexing `[0]` of nothing.
 static func default_kart_id() -> String:
-	return String((_scan(LocalLobby.KART_DIRECTORY)[0] as KartData).id)
+	return _first_id_or_default(LocalLobby.KART_DIRECTORY, DEFAULT_KART)
+
+
+static func _first_id_or_default(directory: String, fallback: Resource) -> String:
+	var scanned: Array[Resource] = _scan(directory)
+	if scanned.is_empty():
+		return String(fallback.get("id"))
+	return String(scanned[0].get("id"))
 
 
 ## True when `id` exists in the scanned `.tres` catalog at `directory`.
