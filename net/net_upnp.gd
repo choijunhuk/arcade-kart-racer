@@ -103,9 +103,9 @@ func map_port(port: int) -> void:
 ## `NetSession.tree_exiting` (this method's caller) also fires during full
 ## app teardown, where `_quitting` is set (finding 3) — starting a removal
 ## worker there would only get detached rather than joined by
-## `_exit_tree()`, so teardown instead skips the round trip and just frees,
-## leaving the (now finite) lease to expire on its own;
-## `_warn_abandoned_mapping()` still names the port for a headless operator.
+## `_exit_tree()`, so teardown skips the round trip and just frees, leaving
+## the mapping: a finite lease expires on its own, a permanent one does not
+## (item 6). `_warn_abandoned_mapping()` still names the port for an operator.
 func release_and_free() -> void:
 	# `_box != null`, not `_thread.is_alive()` (review finding 3, see
 	# `map_port()`'s own doc comment): a worker that already returned but
@@ -172,9 +172,9 @@ func _free_thread_and_self() -> void:
 	queue_free()
 
 
-## Logs that a live mapping is left on the router instead of released
-## (review finding 3): it still expires there on its own (finite lease), but
-## a headless server operator should see which port was abandoned.
+## Logs that a live mapping is left on the router (finding 3): a finite
+## lease still expires there on its own, a permanent one does not (item 6) —
+## either way, a headless operator should see which port was abandoned.
 func _warn_abandoned_mapping() -> void:
 	if _mapped_port >= 0:
 		push_warning("UPnP mapping for port %d abandoned on quit" % _mapped_port)
