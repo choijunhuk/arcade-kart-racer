@@ -2686,3 +2686,15 @@ Cinematic 프리셋 값 = 위 기준 대비 부드럽게 낮춤(신규):
 
 Settings → Gameplay에 `CameraPresetOption`(OptionButton, "Arcade"/"Cinematic") 추가, 기존 세로 포커스 내비게이션에 자동 편입.
 검증: `godot --headless --path . --quit` 스크립트/파스 에러 0. 새 테스트 `tests/unit/test_camera_preset.gd`(5/5), `tests/unit/test_race_camera_preset.gd`(3/3) 개별 실행 통과, 기존 `test_settings_manager.gd`(6/6)·`test_camera_fov.gd`+`test_camera_shake.gd`(9/9)·`test_race_camera_clipping.gd`(2/2) 회귀 없음 확인.
+
+## track_02 레코드/고스트 리셋 — save version 3 (2026-09-15, executor)
+
+PR #30이 track_02(Lumen Underpass)를 완전히 새 레이아웃으로 교체해, 기존에 저장된
+`track_02_lumen_underpass`의 best lap/position/고스트가 더 이상 존재하지 않는
+지형을 기준으로 남아 있었다. `core/autoload/save_manager.gd`에 버전 3 마이그레이션을
+추가해 top-level `best_laps`/`best_positions`와 `player_profiles`의 각 P1-P4 항목에서
+해당 트랙 키만 제거하고(다른 트랙·필드는 그대로 유지), 같은 마이그레이션이 새
+`race/ghost_track_reset.gd`(`GhostTrackReset`)를 호출해 `user://ghosts`의 해당 고스트
+파일(및 남아 있을 수 있는 `.tmp`)을 삭제한다 — 디렉터리/파일 부재는 정상 상태로 처리.
+검증: GUT `test_save_manager.gd`/`test_ghost_track_reset.gd` 통과, `--quit` 스크립트·파스
+에러 0, `race/race.tscn` 240틱 헤드리스 런 ERROR 0(RID 경고 제외).

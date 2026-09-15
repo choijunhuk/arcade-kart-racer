@@ -15,6 +15,12 @@ scanning and track instancing after export, not rendering, input, or audio.
 **Windows and Linux builds have never been executed at all.** Treat all three as
 needing a manual smoke run on real hardware before anyone relies on them.
 
+## Save data
+
+Save version 3 resets track_02 (Lumen Underpass) best laps, best positions and its
+ghost — PR #30 replaced that track's layout, so records set on the old geometry no
+longer apply; every other track's saved progress carries over untouched.
+
 ## Opening the macOS build
 
 The app is unsigned (`export_presets.cfg` has `codesign/codesign=0` — no Apple
