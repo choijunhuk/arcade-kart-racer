@@ -32,7 +32,7 @@ func before_each() -> void:
 		var player: PlayerSlot = PlayerSlot.new()
 		player.grid_slot = index
 		player.device_id = index - 1
-		player.driver_id = &"nova"
+		player.driver_id = &"aurora_vale"
 		player.kart_id = &"medium"
 		config.players.append(player)
 	_manager = (load("res://race/race.tscn") as PackedScene).instantiate() as RaceManager
@@ -43,6 +43,21 @@ func after_each() -> void:
 	GameState.net_session = null
 	GameState.is_networked = false
 	GameState.automation_mode = false
+
+## Backlog item 4: `NetRace._build_automated_source`'s NetHumanAIController
+## must drive with its own kart's DriverData.ai_personality, exactly like
+## RaceManager._spawn_ai_kart() does locally, instead of a neutral default
+## (aurora_vale's ai_personality is non-default on every axis, so a wrong
+## fallback to null would fail this). Server-authoritative AI needs no
+## protocol change for this — only the local simulation this peer's own
+## input derives from is affected.
+func test_automated_source_uses_the_local_karts_driver_personality() -> void:
+	var kart: KartController = _manager.get_karts()[_session.local_slot()]
+	var controller: AIController = kart.get_node("NetHumanAIController") as AIController
+	assert_not_null(controller, "the automated human must be driven by a real AIController")
+	var expected: AIPersonality = kart.get_driver_data().ai_personality
+	assert_not_null(expected, "sanity: the test driver must actually carry a personality")
+	assert_eq(controller.get("_personality"), expected, "the automated human's AIController must receive its own kart's driver personality, not the neutral default")
 
 func test_loading_barrier_freezes_countdown_until_begin() -> void:
 	await wait_physics_frames(5)

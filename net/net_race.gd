@@ -64,7 +64,13 @@ func configure(owner_race: RaceManager, owner_session: NetSession) -> void:
 ## kart never tripped checkpoint 0 and the race hung in FINISHING forever.
 ## Reads THIS peer's own local kart (the authoritative kart on the host, the
 ## locally predicted kart on the client) and feeds its frames through the
-## normal `_source.get_frame()` -> network input path, unchanged.
+## normal `_source.get_frame()` -> network input path, unchanged. Passes the
+## kart's own DriverData.ai_personality through exactly like
+## RaceManager._spawn_ai_kart() does locally (backlog item 4: this used to
+## omit it, so an online automated human always drove with a neutral
+## personality instead of the one its selected driver carries); no protocol
+## change needed since AI stays server-authoritative — only the local
+## simulation this peer's own input derives from is affected.
 func _build_automated_source(track: TrackRoot) -> InputProvider:
 	var kart: KartController = _karts[_local]
 	var context: AIRaceContext = AIRaceContext.new()
@@ -80,7 +86,9 @@ func _build_automated_source(track: TrackRoot) -> InputProvider:
 	var controller: AIController = AIController.new()
 	controller.name = "NetHumanAIController"
 	kart.add_child(controller)
-	controller.setup(kart, track, context, LocalLobby.DEFAULT_DIFFICULTY, rng)
+	var driver: DriverData = kart.get_driver_data()
+	var personality: AIPersonality = driver.ai_personality if driver != null else null
+	controller.setup(kart, track, context, LocalLobby.DEFAULT_DIFFICULTY, rng, 0.0, personality)
 	return controller.get_input_provider()
 
 ## Starts the authoritative countdown only after every participant has loaded.
