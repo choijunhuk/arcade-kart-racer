@@ -33,20 +33,30 @@ func map_port(port: int) -> void:
 ## typically a lobby that is about to change scene, so the node reparents
 ## itself onto the persistent GameState owner first and the removal is
 ## fire-and-forget, reporting only a log line.
+##
+## `NetSession.tree_exiting` (this method's caller) also fires during full
+## app teardown, not just BACK/LEAVE RACE/END SESSION — at that point
+## `GameState` can itself be mid-exit (review finding 2), so starting the
+## removal worker here would only get joined moments later by
+## `_exit_tree()`'s `wait_to_finish()`, the exact up-to-seconds main-thread
+## freeze this node exists to avoid. The UPnP lease expires on the router on
+## its own regardless, so app teardown skips the network round trip and just
+## frees.
 func release_and_free() -> void:
 	if _thread != null and _thread.is_alive():
 		# A discovery thread is mid-flight and will call back into this node;
 		# let it finish and free us there rather than freeing under it.
 		_release_pending = true
 		return
-	if _mapped_port < 0:
+	if _mapped_port < 0 or not is_inside_tree() or not GameState.is_inside_tree():
 		_free_thread_and_self()
 		return
 	var port: int = _mapped_port
 	_mapped_port = -1
-	if get_parent() != null:
-		get_parent().remove_child(self)
-	GameState.add_child(self)
+	if get_parent() != GameState:
+		if get_parent() != null:
+			get_parent().remove_child(self)
+		GameState.add_child(self)
 	_thread = Thread.new()
 	_thread.start(_run_removal.bind(port))
 
