@@ -4,7 +4,9 @@
 
 - Save version 3: reset track_02 (Lumen Underpass) best laps, best positions and its
   ghost after PR #30 replaced the track's layout; all other tracks' saved progress
-  is preserved.
+  is preserved. Anyone who played `main` since the track_02 redesign (2026-09-13,
+  PR #30) loses those new-layout track_02 records and ghost on this migration — no
+  released build is affected, but dev players who raced the pre-reset layout are.
 
 ## v0.5 — Phase 16 (internet play, free infrastructure only)
 
