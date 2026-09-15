@@ -222,8 +222,21 @@ func test_wm_close_request_quit_deadline_fires_if_the_worker_never_finishes() ->
 	# Let the still-blocked worker finish so its thread doesn't dangle past
 	# this test — it can never touch this node either way (static body,
 	# RefCounted box), but a thread parked on a Semaphore forever would leak.
+	# Bounded on `_thread` actually going back to null (debugging finding),
+	# not a fixed frame count: in headless --fixed-fps mode, raw engine
+	# frames elapse far faster than the OS reaps the just-released worker,
+	# so a fixed `wait_process_frames(2)` reliably left `_thread` still alive
+	# here. `after_each()`'s `queue_free()` would then free this node later,
+	# and its deferred `_exit_tree()` logs Godot's "Thread object destroyed"
+	# warning during a completely unrelated LATER test's own frame
+	# processing — failing that test instead of this one, since only
+	# `test_exit_tree_with_a_live_worker_returns_promptly_without_joining`
+	# marks that specific warning as expected.
 	FakeBlockingMapUpnp.release_semaphore.post()
-	await wait_process_frames(2)
+	var reap_deadline_ms: int = Time.get_ticks_msec() + 2000
+	while _upnp._thread != null and Time.get_ticks_msec() < reap_deadline_ms:
+		await wait_process_frames(1)
+	assert_null(_upnp._thread, "the worker thread must be joined before this test ends, or its teardown warning leaks into a later test")
 
 
 ## No live worker: nothing to defer, so neither the wait nor our own quit
