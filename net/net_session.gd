@@ -126,11 +126,10 @@ func restart_to_lobby() -> void:
 ## Host-only: reopens the ENet listener to new connections once the lobby
 ## scene is genuinely active again (finding: lobby-reopen connection window).
 ## Called from the lobby scene's own rebind path, never automatically by
-## `restart_to_lobby()` — see its doc comment. Guarded explicitly (review
-## finding 4), not just by callers already clearing `started`/`race` first.
+## `restart_to_lobby()` — see its doc comment. Body lives on
+## NetSessionTransport (400-line budget), same pattern as _admit_peer/_reject_peer.
 func reopen_connections() -> void:
-	if multiplayer.is_server() and peer != null and not started and race == null:
-		peer.refuse_new_connections = false
+	_transport.reopen_connections()
 
 ## Non-host counterpart to `restart_to_lobby()`: clears only local race state
 ## on BACK TO LOBBY; `started` waits for the host's own broadcast to clear.
