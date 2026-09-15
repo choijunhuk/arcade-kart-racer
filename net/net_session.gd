@@ -32,6 +32,9 @@ var difficulty_id: String = ""
 var password_hash: String = ""
 var _password_attempt_hash: String = ""
 var _input_limiter: NetRateLimiter = NetRateLimiter.new()
+## Guards `_selection` (backlog item 6): much lower-frequency than race input,
+## since it is only ever a lobby UI action, not a per-physics-tick send.
+var _selection_limiter: NetRateLimiter = NetRateLimiter.new(10.0, 5.0)
 var _gate: NetPeerGate = NetPeerGate.new()
 var _loss: NetLossEstimator = NetLossEstimator.new()
 var _roster: NetSessionLobby = NetSessionLobby.new()
@@ -176,14 +179,7 @@ func _peer_connected(id: int) -> void:
 		return
 	_gate.track(id, now())
 func _admit_peer(id: int) -> void:
-	var ok: bool = _roster.add_waiting(id) if started else _roster.add(id, automated)
-	if not ok:
-		return
-	NetTuning.widen_peer_timeout(peer, id) # Finding 1: only once admitted — see NetTuning; an unauthenticated peer keeps ENet's default ~5s timeout so it can't squat a connection slot on the widened one.
-	print("SERVER_ADMIT peer=%d" % id)
-	send(&"_admitted", id, [started], true)
-	if not started:
-		_broadcast_lobby()
+	_roster.admit_peer(id) # Body lives on NetSessionLobby (400-line budget); test_net_session_admission.gd calls this wrapper directly.
 ## Tells a just-admitted client whether it joined mid-race as a `waiting`
 ## spectator (no row until the next lobby, so `local_slot()` stays -1).
 @rpc("authority", "call_remote", "reliable")
@@ -202,11 +198,7 @@ func _update_player(id: int, driver: String, kart: String, ready: bool) -> void:
 	if started or not NetContentCatalog.has(LocalLobby.DRIVER_DIRECTORY, driver) or not NetContentCatalog.has(LocalLobby.KART_DIRECTORY, kart):
 		return
 	if _roster.update(id, driver, kart, ready):
-		_broadcast_lobby()
-
-func _broadcast_lobby() -> void:
-	send(&"_lobby", 0, [players, laps, ai_count, track_id, difficulty_id], true)
-	lobby_changed.emit()
+		_roster.broadcast_lobby()
 
 ## Sender id of the `any_peer` RPC being handled, or -1 off-server / unverified (spec 6).
 func _verified_sender() -> int:
@@ -219,7 +211,7 @@ func _sender() -> int:
 @rpc("any_peer", "call_remote", "reliable")
 func _selection(driver: String, kart: String, ready: bool) -> void:
 	var id: int = _verified_sender()
-	if id > 0:
+	if id > 0 and _selection_limiter.allow(id, now()):
 		_update_player(id, driver, kart, ready)
 
 @rpc("authority", "call_remote", "reliable")
@@ -260,19 +252,8 @@ func _handshake(client_version: String, password_attempt: String) -> void:
 	elif _gate.verify(id):
 		_admit_peer(id)
 
-## Sends the reason first, then defers the disconnect via KICK_GRACE_SECONDS
-## (spec item 1); a no-op once queued so a resend can't delay it.
 func _reject_peer(id: int, message: String) -> void:
-	if _gate.is_kicking(id):
-		return
-	print("SERVER_REJECT peer=%d reason=%s" % [id, message])
-	_deliver_reject(id, message)
-	_roster.remove(id)
-	_input_limiter.remove(id)
-	_loss.remove(id)
-	_gate.remove(id)
-	_gate.queue_kick(id, now())
-	_broadcast_lobby()
+	_roster.reject_peer(id, message) # Body lives on NetSessionLobby (400-line budget); test_net_internet.gd calls this wrapper directly.
 
 func _deliver_reject(id: int, message: String) -> void:
 	if multiplayer.has_multiplayer_peer() and multiplayer.get_peers().has(id):
@@ -341,6 +322,7 @@ func _peer_disconnected(id: int) -> void:
 	if not multiplayer.is_server():
 		return
 	_input_limiter.remove(id)
+	_selection_limiter.remove(id)
 	_loss.remove(id)
 	_gate.remove(id)
 	if _roster.waiting_has(id):
@@ -353,7 +335,7 @@ func _peer_disconnected(id: int) -> void:
 		_player_left(id)
 	else:
 		_roster.remove(id)
-		_broadcast_lobby()
+		_roster.broadcast_lobby()
 
 @rpc("authority", "call_remote", "reliable")
 func _player_left(id: int) -> void:

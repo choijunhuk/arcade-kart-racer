@@ -199,6 +199,24 @@ func _gate_session() -> GateSession:
 	add_child_autofree(session)
 	return session
 
+## Backlog item 6: `_selection` must be rate-limited exactly like
+## `_receive_input` — an authenticated peer looping the RPC must eventually
+## get dropped instead of triggering unbounded catalog scans/broadcasts.
+func test_selection_is_rate_limited_like_receive_input() -> void:
+	var session: GateSession = _gate_session()
+	session._peer_connected(20)
+	session.handshake_from(20, _version(), "")
+	assert_eq(session.players.size(), 1, "the peer must hold a roster row for this test to prove anything")
+	var driver_id: String = NetContentCatalog.default_driver_id()
+	var kart_id: String = NetContentCatalog.default_kart_id()
+	for _i: int in range(int(session._selection_limiter.capacity)):
+		session.selection_from(20, driver_id, kart_id, true)
+	# Reset the flag directly (bypassing the RPC/limiter) so the next assert
+	# isolates the limiter's own drop, not a stale `true` from the burst above.
+	session._roster.update(20, driver_id, kart_id, false)
+	session.selection_from(20, driver_id, kart_id, true)
+	assert_false(bool(session.players[0]["ready"]), "an over-budget _selection call must be dropped by the rate limiter, exactly like _receive_input")
+
 func test_peer_gate_blocks_until_handshake_then_allows() -> void:
 	var gate: NetPeerGate = NetPeerGate.new()
 	gate.track(5, 0.0)

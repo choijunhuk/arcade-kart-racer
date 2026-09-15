@@ -3,6 +3,16 @@ extends RefCounted
 
 const REMAP_SUFFIX: String = ".remap"
 
+## Per-directory memo of a whole-directory scan (backlog item 6: content is
+## read-only at runtime, so re-opening the directory and re-loading every
+## `.tres` on every catalog lookup — e.g. NetSession._update_player checking
+## driver/kart validity twice per accepted `_selection` RPC — was pure
+## repeated disk churn for an identical result). Only whole-directory scans
+## (empty `listed_files`) are memoized; an explicit `listed_files` call (the
+## exported `.tres.remap` listing path) always re-scans since that argument
+## varies per caller and must keep working unmemoized.
+static var _cache: Dictionary[String, Array] = {}
+
 
 ## Loads `.tres`/`.res` resources, including exported `.tres.remap` listings,
 ## from one directory in deterministic logical-path order.
@@ -10,6 +20,10 @@ static func scan_tres(
 	directory_path: String,
 	listed_files: PackedStringArray = PackedStringArray(),
 ) -> Array[Resource]:
+	if listed_files.is_empty() and _cache.has(directory_path):
+		var cached: Array[Resource] = []
+		cached.assign(_cache[directory_path])
+		return cached
 	var resources: Array[Resource] = []
 	var file_names: PackedStringArray = listed_files.duplicate()
 	if file_names.is_empty():
@@ -33,6 +47,8 @@ static func scan_tres(
 			push_warning("Resource could not be loaded: %s" % resource_path)
 			continue
 		resources.append(resource)
+	if listed_files.is_empty():
+		_cache[directory_path] = resources.duplicate()
 	return resources
 
 
