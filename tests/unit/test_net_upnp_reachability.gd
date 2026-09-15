@@ -75,3 +75,22 @@ func test_status_message_hides_untrusted_igd_text_for_a_junk_or_oversized_value(
 	assert_true(message.findn("the address your router reported") >= 0)
 	assert_true(message.findn("<script>") < 0, "untrusted IGD text must never reach the UI string")
 
+## Backlog item 2: a permanent (duration 0) UPnP lease survives a crash/kill
+## until the router itself reboots — `is_renewal_due` is the pure predicate
+## that decides only WHEN a periodic renewal is due, exercised here without
+## any real UPnP network discovery.
+func test_is_renewal_due_false_while_no_lease_is_held() -> void:
+	assert_false(NetUpnp.is_renewal_due(-1.0, 1000.0), "expires_at < 0.0 means no mapping is held, so nothing is due")
+
+func test_is_renewal_due_false_well_before_the_renewal_window() -> void:
+	var expires_at: float = 10000.0
+	assert_false(NetUpnp.is_renewal_due(expires_at, expires_at - NetUpnp.RENEW_MARGIN_SECONDS - 1.0))
+
+func test_is_renewal_due_true_at_the_start_of_the_renewal_window() -> void:
+	var expires_at: float = 10000.0
+	assert_true(NetUpnp.is_renewal_due(expires_at, expires_at - NetUpnp.RENEW_MARGIN_SECONDS))
+
+func test_is_renewal_due_true_once_the_lease_has_actually_expired() -> void:
+	var expires_at: float = 10000.0
+	assert_true(NetUpnp.is_renewal_due(expires_at, expires_at + 1.0))
+

@@ -99,6 +99,12 @@ func test_a_broken_file_degrades_the_catalog_once_not_per_lookup() -> void:
 	# call above did not rescan (the bug this test guards against).
 	assert_push_warning("broken.tres")
 	assert_push_warning_count(1)
+	# Review item 8: the one scan attempt resolved zero usable resources (the
+	# only file in the directory failed to parse), so _scan() must also have
+	# push_error'd once, loudly, that this directory's catalog is empty —
+	# not just the per-file push_warning above.
+	assert_push_error("scanned empty")
+	assert_push_error_count(1)
 	# broken.tres fails to parse via Godot's own text-resource loader on that
 	# one attempt; that loader reports the malformed content as its own raw
 	# engine errors — same pattern as test_phase11_robustness.gd's
@@ -111,3 +117,19 @@ func test_a_broken_file_degrades_the_catalog_once_not_per_lookup() -> void:
 			err.handled = true
 			engine_errors.append(err)
 	assert_true(engine_errors.size() >= 1, "broken.tres must raise at least one engine error via Godot's own text-resource loader")
+
+
+## Backlog item 5: an empty catalog (directory missing, or every file in it
+## broken — the memo above caches that empty result too) used to turn
+## `default_driver_id()`/`default_kart_id()`'s `_scan(...)[0]` into an
+## out-of-bounds script error for the rest of the process's lifetime, on
+## every host()/admit. `_DIR` is never created here, so its scan is empty
+## without needing a real broken/missing shipped content directory.
+func test_default_driver_and_kart_id_fall_back_to_preloaded_defaults_for_an_empty_catalog() -> void:
+	assert_eq(NetContentCatalog._first_id_or_default(_DIR, NetContentCatalog.DEFAULT_DRIVER), String(NetContentCatalog.DEFAULT_DRIVER.id))
+	assert_eq(NetContentCatalog._first_id_or_default(_DIR, NetContentCatalog.DEFAULT_KART), String(NetContentCatalog.DEFAULT_KART.id))
+	# Review item 8: falling back must not also be silent — the first call
+	# above's scan (the only one; the second reuses the memo) must have
+	# push_error'd once that this directory's catalog is empty.
+	assert_push_error("scanned empty")
+	assert_push_error_count(1)
