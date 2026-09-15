@@ -52,6 +52,9 @@ func _init() -> void:
 	_transport.attach(self)
 
 func _ready() -> void:
+	# Pausing the tree (pause menu, settings) must never stall the deferred
+	# lobby broadcast or _service_peers() (review finding 5).
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	multiplayer.peer_connected.connect(_peer_connected)
 	multiplayer.peer_disconnected.connect(_peer_disconnected)
 	multiplayer.connected_to_server.connect(_connected)
