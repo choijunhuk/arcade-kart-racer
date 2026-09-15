@@ -78,6 +78,26 @@ func test_is_local_excludes_a_remote_kart_when_networked() -> void:
 	GameState.net_session = null
 
 
+## Audit finding: `_is_local()` must fail CLOSED (not "true") whenever the
+## current scene isn't the RaceManager while online — mirroring
+## RaceTelemetryService's fail-closed sibling gate. Previously any such
+## moment (e.g. mid scene-swap) let a remote player's kart action through
+## as "local" and could burn the one-shot hint.
+func test_is_local_fails_closed_when_current_scene_is_not_the_race_manager_and_networked() -> void:
+	var session: NetSession = NetSession.new()
+	add_child_autofree(session)
+	GameState.net_session = session
+	var kart: KartController = KartController.new()
+	kart.input_provider = PlayerInputProvider.new()
+	autofree(kart)
+	var service: FirstRaceHintsService = FirstRaceHintsService.new()
+	add_child_autofree(service)
+	await wait_process_frames(1)
+	assert_false(get_tree().current_scene is RaceManager, "the GUT runner scene isn't a RaceManager, so this proves the fail-closed path")
+	assert_false(service.call("_is_local", kart), "must fail closed, not open, when the current scene isn't the RaceManager")
+	GameState.net_session = null
+
+
 ## Offline regression: with no net_session, any kart (including null) still
 ## counts as local, matching prior (pre-network-fix) behavior.
 func test_is_local_still_true_for_any_kart_when_offline() -> void:

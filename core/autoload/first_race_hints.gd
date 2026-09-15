@@ -85,7 +85,7 @@ func _is_local(kart: Node) -> bool:
 	if local_karts_override != null:
 		return (local_karts_override as Array).has(kart)
 	var manager: RaceManager = get_tree().current_scene as RaceManager
-	return manager == null or manager.get_local_human_karts().has(kart)
+	return manager != null and manager.get_local_human_karts().has(kart)
 
 
 ## Pure gate check (no autoload/DisplayServer reads) so it is testable without
