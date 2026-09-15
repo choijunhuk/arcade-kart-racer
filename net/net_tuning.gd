@@ -23,17 +23,27 @@ const MAX_PROJECTILES: int = 64
 const CLOCK_INTERVAL: int = 30
 const CHANNEL_COUNT: int = 3
 const RACE_PROCESS_PRIORITY: int = 100
-## Widened ENet per-peer ack timeout (net_session.gd `_widen_peer_timeout`),
-## re-landed after an earlier PR's squash silently reverted it. Loading
-## race.tscn -- and, on first run, compiling shaders -- can block the main
-## thread for ~10s, during which ENet is never serviced; ENet's own default
-## timeout_min (5000ms, used once packetThrottle has degraded to 0 from the
-## missing ack traffic) trips well inside that window and the host drops the
-## peer before the race even starts. timeout_min=12000ms leaves >2s of
+## Widened ENet per-peer ack timeout (`NetTuning.widen_peer_timeout`, applied
+## from `net_session.gd`), re-landed after an earlier PR's squash silently
+## reverted it. Loading race.tscn -- and, on first run, compiling shaders --
+## can block the main thread for ~10s, during which ENet is never serviced;
+## ENet disconnects a peer once its earliest unacked reliable command has sat
+## past `earliestTimeout`, measured against the per-peer `timeout_min`/
+## `timeout_max` window below (not `packetThrottle`, which only scales send
+## rate/resend pacing and never itself disconnects). ENet's own default
+## timeout_min (5000ms) trips well inside that ~10s stall and the host drops
+## the peer before the race even starts. timeout_min=12000ms leaves >2s of
 ## margin over that ~10s worst case; timeout_max=20000ms still reaps a
 ## genuinely dead peer (crashed process, unplugged cable) in well under the
 ## ENet default of 30s rather than lingering. timeout_limit keeps ENet's
 ## default backoff step count (32).
+##
+## Cost: this also widens the window for a peer that goes silent AFTER
+## admission (not just during the one-time race-load stall) — the host now
+## takes 12-20s (instead of ENet's default ~5s) to notice and drop it, during
+## which that peer's roster row blocks the all-loaded START gate (the host's
+## `retry_start()` is the manual escape), and a client takes the same
+## 12-20s to notice a crashed/unplugged host instead of ~5s.
 const PEER_TIMEOUT_LIMIT: int = 32
 const PEER_TIMEOUT_MIN_MS: int = 12000
 const PEER_TIMEOUT_MAX_MS: int = 20000
