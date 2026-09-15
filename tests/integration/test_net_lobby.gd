@@ -1,5 +1,11 @@
 extends GutTest
 
+## Attached to the GameState autoload directly (not via add_child_autofree)
+## by test_upnp_mapping_releases_itself_once_the_session_closes below;
+## defensively freed in after_each (review finding 6) so an assertion
+## failure mid-test never leaks a node parented onto GameState.
+var _test_upnp: NetUpnp
+
 func test_online_lobby_has_shared_panels_and_enabled_connection_controls() -> void:
 	var lobby: OnlineLobby = (load("res://ui/menus/online_lobby.tscn") as PackedScene).instantiate() as OnlineLobby
 	add_child_autofree(lobby)
@@ -363,14 +369,14 @@ func test_upnp_mapping_releases_itself_once_the_session_closes() -> void:
 	var session: NetSession = NetSession.new()
 	add_child_autofree(session)
 	lobby.set("_session", session)
-	var upnp: NetUpnp = NetUpnp.new()
-	GameState.add_child(upnp)
-	lobby.call("_bind_upnp_release", upnp)
-	assert_true(session.tree_exiting.is_connected(upnp.release_and_free), "_start_upnp's binding must tie the mapping's release to the session closing")
-	assert_true(is_instance_valid(upnp), "sanity: the mapping node must still be alive before the session closes")
+	_test_upnp = NetUpnp.new() # Freed defensively in after_each (finding 6) in case an assertion below fails first.
+	GameState.add_child(_test_upnp)
+	lobby.call("_bind_upnp_release", _test_upnp)
+	assert_true(session.tree_exiting.is_connected(_test_upnp.release_and_free), "_start_upnp's binding must tie the mapping's release to the session closing")
+	assert_true(is_instance_valid(_test_upnp), "sanity: the mapping node must still be alive before the session closes")
 	session.close()
 	await wait_process_frames(1)
-	assert_false(is_instance_valid(upnp), "closing the session must release the still-unmapped NetUpnp node too (no mapping ever attempted, so this is the fast synchronous path)")
+	assert_false(is_instance_valid(_test_upnp), "closing the session must release the still-unmapped NetUpnp node too (no mapping ever attempted, so this is the fast synchronous path)")
 
 ## Finding 6: `test_delayed_load_ack_and_clock_reach_countdown_then_racing`
 ## above sets `GameState.is_networked` / `GameState.net_session` directly and
@@ -383,5 +389,13 @@ func test_upnp_mapping_releases_itself_once_the_session_closes() -> void:
 ## of test_net_internet.gd; that file owns the `multiplayer_peer` reset those
 ## tests need.
 func after_each() -> void:
+	if is_instance_valid(_test_upnp):
+		_test_upnp.queue_free()
+	_test_upnp = null
 	GameState.is_networked = false
 	GameState.net_session = null
+	# session.close() (used above) assigns a fresh OfflineMultiplayerPeer to
+	# the tree-wide multiplayer peer; restore it explicitly regardless of
+	# pass/fail (review finding 6), mirroring
+	# test_net_session_admission.gd's after_each.
+	get_tree().get_multiplayer().multiplayer_peer = OfflineMultiplayerPeer.new()
