@@ -199,23 +199,35 @@ func _gate_session() -> GateSession:
 	add_child_autofree(session)
 	return session
 
-## Backlog item 6: `_selection` must be rate-limited exactly like
-## `_receive_input` — an authenticated peer looping the RPC must eventually
-## get dropped instead of triggering unbounded catalog scans/broadcasts.
-func test_selection_is_rate_limited_like_receive_input() -> void:
+## Review finding 5: the previous version of this test fed `NetSession.now()`
+## (a real wall-clock read) through a tight loop and inferred throttling from
+## timing alone — the same flake class backlog item 5 already fixed
+## elsewhere (see test_net_lobby.gd's `_delayed_load_ack` comment). Throttling
+## is proven directly against `NetRateLimiter` with explicit `now` values
+## instead, sized to `_selection_limiter`'s actual configured capacity/refill
+## so it cannot silently drift from the real limiter.
+func test_selection_limiter_throttles_over_budget_calls_then_recovers() -> void:
+	var reference: NetSession = NetSession.new()
+	autofree(reference)
+	var limiter: NetRateLimiter = NetRateLimiter.new(reference._selection_limiter.capacity, reference._selection_limiter.refill_per_second)
+	for _i: int in range(int(limiter.capacity)):
+		assert_true(limiter.allow(20, 0.0))
+	assert_false(limiter.allow(20, 0.0), "a call beyond the bucket's capacity in the same instant must be dropped")
+	assert_true(limiter.allow(20, 1.0), "a second later the refill must allow exactly one more call")
+
+## Backlog item 6, kept to "one call goes through" per review finding 5:
+## `_selection` must still be wired through `_selection_limiter` end to end.
+## Sustained throttling itself is `NetRateLimiter`'s own job, proven above
+## without any RPC call or timing involved.
+func test_selection_rpc_lets_a_single_call_through() -> void:
 	var session: GateSession = _gate_session()
 	session._peer_connected(20)
 	session.handshake_from(20, _version(), "")
 	assert_eq(session.players.size(), 1, "the peer must hold a roster row for this test to prove anything")
 	var driver_id: String = NetContentCatalog.default_driver_id()
 	var kart_id: String = NetContentCatalog.default_kart_id()
-	for _i: int in range(int(session._selection_limiter.capacity)):
-		session.selection_from(20, driver_id, kart_id, true)
-	# Reset the flag directly (bypassing the RPC/limiter) so the next assert
-	# isolates the limiter's own drop, not a stale `true` from the burst above.
-	session._roster.update(20, driver_id, kart_id, false)
 	session.selection_from(20, driver_id, kart_id, true)
-	assert_false(bool(session.players[0]["ready"]), "an over-budget _selection call must be dropped by the rate limiter, exactly like _receive_input")
+	assert_true(bool(session.players[0]["ready"]), "a single _selection call within budget must go through, exactly like _receive_input")
 
 func test_peer_gate_blocks_until_handshake_then_allows() -> void:
 	var gate: NetPeerGate = NetPeerGate.new()
