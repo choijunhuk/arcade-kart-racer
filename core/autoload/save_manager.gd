@@ -34,7 +34,11 @@ func default_data() -> Dictionary:
 func load_data() -> Dictionary:
 	var primary: Dictionary = _read_valid_data(save_path)
 	if not primary.is_empty():
-		return _migrate(primary)
+		var original_version: int = int(primary.get("version", -1))
+		var migrated: Dictionary = _migrate(primary)
+		if int(migrated.get("version", -1)) != original_version:
+			_write_json(save_path, migrated)
+		return migrated
 
 	var future_version: int = _read_future_version(save_path)
 	if future_version > 0:
