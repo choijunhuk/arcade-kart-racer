@@ -273,3 +273,48 @@ func _remove_test_files() -> void:
 		var absolute_path: String = ProjectSettings.globalize_path(path)
 		if FileAccess.file_exists(path):
 			DirAccess.remove_absolute(absolute_path)
+
+
+## Review finding: a save written by a NEWER build than this one must be
+## treated as unreadable rather than migrated or partially trusted — the
+## player's real profile stays on disk while this build falls back to the
+## backup (or to defaults when there is none).
+func test_a_future_version_save_falls_back_instead_of_migrating() -> void:
+	var future_data: Dictionary = {
+		"version": SaveManagerService.CURRENT_VERSION + 96,
+		"best_laps": {"track_01_ridgeline_circuit": 61_000, RESET_TRACK_ID: 59_000},
+		"best_positions": {},
+		"last_selection": {"driver": "", "kart": "medium", "track": "test_loop"},
+		"unlocks": [],
+	}
+	_write_text(SAVE_PATH, JSON.stringify(future_data))
+	var manager: SaveManagerService = SaveManagerService.new(SAVE_PATH, GHOST_DIRECTORY)
+	autofree(manager)
+
+	var loaded: Dictionary = manager.load_data()
+
+	assert_eq(int(loaded["version"]), SaveManagerService.CURRENT_VERSION)
+	assert_false((loaded["best_laps"] as Dictionary).has("track_01_ridgeline_circuit"),
+		"a future-version save must not be read as if this build understood it")
+
+
+func test_a_future_version_primary_recovers_the_backup_it_can_read() -> void:
+	_write_text(SAVE_PATH, JSON.stringify({"version": SaveManagerService.CURRENT_VERSION + 96, "best_laps": {}}))
+	var backup_data: Dictionary = {
+		"version": 2,
+		"best_laps": {"track_03_glacier_crown": 68_500, RESET_TRACK_ID: 57_000},
+		"best_positions": {},
+		"last_selection": {"driver": "", "kart": "medium", "track": "test_loop"},
+		"unlocks": [],
+	}
+	_write_text(BACKUP_PATH, JSON.stringify(backup_data))
+	var manager: SaveManagerService = SaveManagerService.new(SAVE_PATH, GHOST_DIRECTORY)
+	autofree(manager)
+
+	var recovered: Dictionary = manager.load_data()
+
+	assert_eq(int(recovered["version"]), SaveManagerService.CURRENT_VERSION)
+	assert_eq(int(recovered["best_laps"]["track_03_glacier_crown"]), 68_500)
+	assert_false((recovered["best_laps"] as Dictionary).has(RESET_TRACK_ID),
+		"the recovered v2 backup must still get the track_02 reset")
+
