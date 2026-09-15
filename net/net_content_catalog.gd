@@ -8,11 +8,14 @@ const TRACK_DIRECTORY: String = "res://data/tracks"
 const AI_DIRECTORY: String = "res://data/ai"
 
 ## Fallbacks for `default_driver_id()`/`default_kart_id()` (backlog item 5):
-## the scan they read is memoized even when it comes back empty (directory
-## missing, or every file in it broken) — without these, `[0]` on that empty
-## scan is an out-of-bounds script error for the rest of the process's
-## lifetime, on every host()/admit. Preloaded, not scanned, so they resolve
-## even when the real content directories cannot.
+## the scan they read is memoized even when it comes back empty (the shipped
+## content directory missing, or every file in it broken) — without these,
+## `[0]` on that empty scan is an out-of-bounds script error for the rest of
+## the process's lifetime, on every host()/admit. Preloaded, not scanned, so
+## they resolve even when DRIVER_DIRECTORY/KART_DIRECTORY themselves cannot
+## be — but only those directories: a missing or broken `aurora_vale.tres`/
+## `basalt_crown.tres` here fails the whole script at parse/load time
+## instead, not something this fallback can catch (review item 8).
 const DEFAULT_DRIVER: DriverData = preload("res://data/drivers/aurora_vale.tres")
 const DEFAULT_KART: KartData = preload("res://data/karts/basalt_crown.tres")
 
@@ -40,6 +43,17 @@ static func _scan(directory: String) -> Array[Resource]:
 	if not _catalog.has(directory):
 		var result: Dictionary = ResourceScanner.scan_tres_complete(directory)
 		_catalog[directory] = result["resources"]
+		if (_catalog[directory] as Array).is_empty():
+			# Loud once per directory, not per lookup (review item 8): this
+			# memo already bounds a directory to one scan attempt per process,
+			# so this fires exactly once for it. An empty catalog silently
+			# degrades to the same preloaded default (or resolve_track()'s/
+			# resolve_difficulty()'s existing-default) forever — a lobby that
+			# can never actually offer a choice, or shipped without its
+			# content directory at all — and a headless server operator needs
+			# to see that, not just find it later as a suspiciously narrow
+			# roster.
+			push_error("NetContentCatalog: %s scanned empty — content missing or entirely broken" % directory)
 	var scanned: Array[Resource] = []
 	scanned.assign(_catalog[directory])
 	return scanned
