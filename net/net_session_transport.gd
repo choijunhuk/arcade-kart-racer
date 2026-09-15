@@ -28,9 +28,13 @@ func deliver(method: StringName, target: int, args: Array, reliable: bool) -> vo
 
 
 ## Drains deferred kicks and rejects peers whose handshake deadline elapsed.
+## Kicks are always a reject/handshake-timeout outcome (never a normal leave),
+## so they force the disconnect rather than waiting on the peer's own ack —
+## a half-open or hostile peer would otherwise keep its connection slot for
+## the full widened timeout instead of dropping immediately (finding 2).
 func service_peers() -> void:
 	for id: int in _session._gate.take_kicks(NetSession.now()):
-		if _session.multiplayer.get_peers().has(id):
-			_session.multiplayer.disconnect_peer(id)
+		if _session.peer != null and _session.multiplayer.get_peers().has(id):
+			_session.peer.disconnect_peer(id, true)
 	for id: int in _session._gate.expired(NetSession.now()):
 		_session._reject_peer(id, "Handshake timed out.")
