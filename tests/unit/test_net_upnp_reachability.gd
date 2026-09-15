@@ -65,3 +65,13 @@ func test_status_message_flags_a_cgnat_mapping_as_not_internet_reachable() -> vo
 func test_status_message_keeps_the_plain_unavailable_text_for_a_real_failure() -> void:
 	var message: String = NetUpnp.status_message({"status": "no_igd"}, 24565)
 	assert_eq(message, "UPnP unavailable — forward UDP port 24565 manually.")
+
+## Finding 4: `external_ip` is untrusted IGD/SSDP text on the branch where it
+## already failed reachability validation — a junk or oversized value must
+## never be interpolated into the UI string.
+func test_status_message_hides_untrusted_igd_text_for_a_junk_or_oversized_value() -> void:
+	var junk: String = "not-an-ip; <script>" + "x".repeat(500)
+	var message: String = NetUpnp.status_message({"status": "mapped_unreachable", "external_ip": junk, "port": 24565}, 24565)
+	assert_true(message.findn("the address your router reported") >= 0)
+	assert_true(message.findn("<script>") < 0, "untrusted IGD text must never reach the UI string")
+

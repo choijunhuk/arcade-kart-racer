@@ -104,11 +104,17 @@ func _attempt_mapping(port: int) -> Dictionary:
 ## itself, since it also needs the join code). Distinguishes "mapped but not
 ## internet-reachable" (CGNAT/double-NAT, finding 2) from a genuine mapping
 ## failure so a guest is never handed a code that could never work.
+## Untrusted IGD text (finding 4): `external_ip` on the "mapped_unreachable"
+## branch comes straight from `query_external_address()`, i.e. whatever
+## answered SSDP on the LAN — never echoed into the UI unless it actually
+## parses as a dotted-quad IPv4 address.
 static func status_message(result: Dictionary, port: int) -> String:
 	if String(result.get("status", "")) == "mapped_unreachable":
+		var external_ip: String = String(result.get("external_ip", ""))
+		var reported: String = external_ip if not _parse_ipv4_octets(external_ip).is_empty() else "the address your router reported"
 		return (
 			"UPnP mapped, but %s is not internet-reachable (likely CGNAT/double-NAT) — use the relay above or forward UDP port %d on your router manually."
-			% [String(result.get("external_ip", "")), port]
+			% [reported, port]
 		)
 	return "UPnP unavailable — forward UDP port %d manually." % port
 
