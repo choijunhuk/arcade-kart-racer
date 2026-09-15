@@ -238,6 +238,55 @@ func test_wm_close_request_with_no_live_worker_quits_immediately() -> void:
 	assert_eq(quit_calls[0], 0, "no live worker means our own quit hook must never fire — the engine's automatic quit handles it")
 
 
+## Review item 1: a worker that finishes is consumed the very tick
+## `_process()` first observes it done (via `Thread.is_alive()` going
+## false), and consuming it can itself free this node (here: a "removal"
+## result reaching `_finish_removal()` -> `_free_thread_and_self()` ->
+## `queue_free()`). The armed wait must still fire exactly once for that
+## same tick, not be silently dropped by the free. Drives a finished-but-
+## never-started box directly (the same `ResultBox` test seam
+## `test_release_while_a_finished_but_unconsumed_mapping_result_waits_for_it`
+## above uses), so this needs no real thread timing at all.
+func test_wm_close_request_fires_exactly_once_even_when_consuming_the_result_frees_the_node() -> void:
+	_upnp = NetUpnp.new()
+	GameState.add_child(_upnp)
+	var quit_calls: Array = [0] # See the earlier test above for why not a plain int.
+	_upnp._quit_waiter.quit_override = func() -> void: quit_calls[0] += 1
+	_upnp.get_tree().auto_accept_quit = false
+	_upnp._quit_waiter.arm(_upnp._now(), float(NetUpnp.TIMEOUT_MS) / 1000.0, float(NetUpnp.QUIT_WAIT_MARGIN_MS) / 1000.0)
+	var box: NetUpnp.ResultBox = NetUpnp.ResultBox.new()
+	box.result = {"kind": "removal", "port": 40040, "removed": true}
+	box.done = true
+	_upnp._box = box
+	_upnp._process(0.0)
+	assert_eq(quit_calls[0], 1, "the quit hook must fire exactly once for the tick that consumes the finished box")
+	assert_false(_upnp._quit_waiter.is_armed(), "firing must disarm the wait")
+	var freed_in_time: bool = await wait_for_signal(_upnp.tree_exited, 1.0)
+	assert_true(freed_in_time, "a removal result reached while the wait was armed must still free the node")
+	assert_eq(quit_calls[0], 1, "the node freeing afterward must not fire the hook a second time")
+	get_tree().auto_accept_quit = true # Restore the real, shared SceneTree's flag for the rest of the suite.
+
+
+## Review item 1: a node freed by some path other than `_process()`'s own
+## box-consuming branch (which already polls the waiter first) while the
+## wait is still armed must not leave `auto_accept_quit` vetoed forever —
+## nothing would ever be left to call `quit()` again, silently blocking
+## every later window close. `_exit_tree()`'s own `fire_on_exit()` backstop
+## must restore it and still fire the quit hook exactly once.
+func test_freeing_an_armed_node_outside_process_restores_auto_accept_quit_and_fires_once() -> void:
+	_upnp = NetUpnp.new()
+	GameState.add_child(_upnp)
+	var quit_calls: Array = [0] # See the earlier test above for why not a plain int.
+	_upnp._quit_waiter.quit_override = func() -> void: quit_calls[0] += 1
+	_upnp.get_tree().auto_accept_quit = false
+	_upnp._quit_waiter.arm(_upnp._now(), float(NetUpnp.TIMEOUT_MS) / 1000.0, float(NetUpnp.QUIT_WAIT_MARGIN_MS) / 1000.0)
+	_upnp.queue_free() # No box involved at all: `_process()`'s own poll never runs for this free.
+	var freed_in_time: bool = await wait_for_signal(_upnp.tree_exited, 1.0)
+	assert_true(freed_in_time, "sanity: the node must still free")
+	assert_eq(quit_calls[0], 1, "_exit_tree()'s backstop must still fire the quit hook exactly once")
+	assert_true(get_tree().auto_accept_quit, "auto_accept_quit must be restored so a later close request is not vetoed forever")
+
+
 ## Review finding 1 (the redesigned worker): freeing this node while its
 ## removal worker is still genuinely running must return `_exit_tree()`
 ## immediately (detach, never join — the ~11s freeze bug this node's design

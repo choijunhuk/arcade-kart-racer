@@ -38,12 +38,43 @@ func is_armed() -> bool:
 ## live worker's own box (`box != null and box.done`), never merely "there
 ## is no box" — an absent box is not evidence the worker this wait was
 ## armed for has finished, only that nothing is being watched right now.
+## Callers must pass `worker_done = true` at the exact moment they are about
+## to consume a finished box (review item 1) — never derived from `box.done`
+## alone before `Thread.is_alive()` has confirmed the worker actually
+## returned, or this could fire (and disarm) a tick before the result is
+## really safe to read.
 func poll(now: float, worker_done: bool, tree: SceneTree) -> void:
 	if not is_armed():
 		return
 	if not (worker_done or now >= deadline_at):
 		return
 	deadline_at = -1.0
+	if quit_override.is_valid():
+		quit_override.call()
+	else:
+		tree.quit()
+
+
+## Called from `NetUpnp._exit_tree()` when this node is being freed while the
+## wait is still armed (review item 1): the box-consuming branch of
+## `_process()` always calls `poll()` with `worker_done = true` first, so
+## normally there is nothing left armed by the time a result frees the node
+## — but any *other* free path (a direct `queue_free()`, a scene change,
+## `release_and_free()`'s quitting branch) can still land here with the wait
+## armed and the deadline not yet reached. Left unfired, `auto_accept_quit`
+## would stay false forever with nothing left to ever call `quit()` again,
+## silently blocking every later window close. Restores `auto_accept_quit`
+## before quitting so a cancelled quit (if the override intercepts it) still
+## leaves the tree in its normal state.
+func fire_on_exit(tree: SceneTree) -> void:
+	if not is_armed():
+		return
+	deadline_at = -1.0
+	# Restored unconditionally, even under `quit_override` (tests use it to
+	# assert exactly this without triggering a real engine quit) — the flag
+	# itself, not just what fires afterward, is what a later close request
+	# depends on.
+	tree.auto_accept_quit = true
 	if quit_override.is_valid():
 		quit_override.call()
 	else:

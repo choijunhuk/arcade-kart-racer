@@ -80,7 +80,8 @@ func _notification(what: int) -> void:
 			# automatic quit; `_process()` fires it once the worker reports
 			# back or the bounded margin elapses (see `_exit_tree()`).
 			get_tree().auto_accept_quit = false
-			_quit_waiter.arm(_now(), float(TIMEOUT_MS) / 1000.0, float(QUIT_WAIT_MARGIN_MS) / 1000.0)
+			if not _quit_waiter.is_armed(): # Only arm once (item 1).
+				_quit_waiter.arm(_now(), float(TIMEOUT_MS) / 1000.0, float(QUIT_WAIT_MARGIN_MS) / 1000.0)
 
 
 ## Starts discovery + port mapping for `port` on a worker thread. Gated on
@@ -303,21 +304,20 @@ static func _now() -> float:
 
 
 func _process(_delta: float) -> void:
-	# Bounded quit-wait (finding 4): a no-op unless `_notification()` armed
-	# it on this node's own live worker — see `NetUpnpQuitWaiter.poll()`.
-	_quit_waiter.poll(_now(), _box != null and _box.done, get_tree())
+	# Bounded quit-wait (finding 4); `box_ready` is snapshotted once and
+	# reused below for both the poll and consume decision (item 1 race fix).
 	if _box != null:
-		# `Thread.is_alive()` first (review item 7, see `ResultBox`): its
-		# going false is what makes `box`'s writes safe to read below.
-		if _thread != null and _thread.is_alive():
-			return
-		if not _box.done:
+		var thread_alive: bool = _thread != null and _thread.is_alive()
+		var box_ready: bool = not thread_alive and _box.done
+		_quit_waiter.poll(_now(), box_ready, get_tree())
+		if not box_ready:
 			return
 		var box: ResultBox = _box
 		_box = null
 		_free_finished_thread()
 		_handle_result(box.result)
 		return
+	_quit_waiter.poll(_now(), false, get_tree())
 	_maybe_start_renewal(_now())
 
 
@@ -386,15 +386,15 @@ func _finish_renewal(result: Dictionary) -> void:
 		release_and_free()
 
 
-## Detaches rather than joins a still-running worker thread (finding 3):
-## joining would block whatever main-thread path frees this node for up to
-## TIMEOUT_MS. Guarantees only that: the close-request path's own bounded
-## wait (`_notification()`) makes the worker very likely already finished
-## by the time teardown reaches here, never for certain — that margin can
-## still elapse with it genuinely running, and any other free path (a
-## direct `get_tree().quit()`, a scene change, a hard kill) skips the wait
-## entirely.
+## Detaches a still-running worker thread (finding 3); joins one that already
+## returned but was never joined (item 4). Also fires the quit waiter (item
+## 1) if still armed when a free path other than `_process()`'s own lands here.
 func _exit_tree() -> void:
-	if _thread != null and _thread.is_alive():
-		_warn_abandoned_mapping()
-		_thread = null
+	if _thread != null:
+		if _thread.is_alive():
+			_warn_abandoned_mapping()
+			_thread = null
+		else:
+			_thread.wait_to_finish()
+			_thread = null
+	_quit_waiter.fire_on_exit(get_tree())
