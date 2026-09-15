@@ -16,6 +16,20 @@ var _mapped_port: int = -1
 ## Set when release_and_free() arrives while a worker thread is still running:
 ## the thread's deferred callback frees the node instead of touching state.
 var _release_pending: bool = false
+## Set once the OS sends a close request (window close button, Alt+F4,
+## Cmd+Q, ...): the app itself is shutting down, not a normal in-session
+## exit (BACK/LEAVE RACE/END SESSION). Explicit and asserted via this node's
+## own `_notification()` (review finding 3) instead of inferred from
+## `GameState.is_inside_tree()`, which depends on Godot's `tree_exiting`
+## cascade order and was never asserted anywhere — it could read either way
+## depending on where in that cascade this node's own `tree_exiting` fires.
+## Tests set it directly rather than driving a real close request.
+var _quitting: bool = false
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		_quitting = true
 
 
 ## Starts discovery + port mapping for `port` on a worker thread.
@@ -36,19 +50,24 @@ func map_port(port: int) -> void:
 ##
 ## `NetSession.tree_exiting` (this method's caller) also fires during full
 ## app teardown, not just BACK/LEAVE RACE/END SESSION — at that point
-## `GameState` can itself be mid-exit (review finding 2), so starting the
-## removal worker here would only get joined moments later by
-## `_exit_tree()`'s `wait_to_finish()`, the exact up-to-seconds main-thread
-## freeze this node exists to avoid. The UPnP lease expires on the router on
-## its own regardless, so app teardown skips the network round trip and just
-## frees.
+## `_quitting` is set (review finding 3), so starting the removal worker
+## here would only get detached rather than joined by `_exit_tree()` (see
+## below), the exact up-to-seconds main-thread freeze this node exists to
+## avoid. The UPnP lease expires on the router on its own regardless, so app
+## teardown skips the network round trip and just frees;
+## `_warn_abandoned_mapping()` still names the port so a headless server
+## operator sees it in the log.
 func release_and_free() -> void:
 	if _thread != null and _thread.is_alive():
 		# A discovery thread is mid-flight and will call back into this node;
 		# let it finish and free us there rather than freeing under it.
 		_release_pending = true
 		return
-	if _mapped_port < 0 or not is_inside_tree() or not GameState.is_inside_tree():
+	if _quitting:
+		_warn_abandoned_mapping()
+		_free_thread_and_self()
+		return
+	if _mapped_port < 0 or not is_inside_tree():
 		_free_thread_and_self()
 		return
 	var port: int = _mapped_port
@@ -80,6 +99,14 @@ func _free_thread_and_self() -> void:
 		_thread.wait_to_finish()
 		_thread = null
 	queue_free()
+
+
+## Logs that a live mapping is being left on the router instead of released
+## (review finding 3): the lease expires there on its own regardless, but a
+## headless server operator should still see which port was abandoned.
+func _warn_abandoned_mapping() -> void:
+	if _mapped_port >= 0:
+		push_warning("UPnP mapping for port %d abandoned on quit" % _mapped_port)
 
 
 func _run(port: int) -> void:
@@ -194,7 +221,14 @@ func _finish(result: Dictionary) -> void:
 	mapping_finished.emit(result)
 
 
+## Detaches rather than joins a still-running worker thread (review finding
+## 3): a full app close reaches every node's `_exit_tree()` on the main
+## thread, and `Thread.wait_to_finish()` here would block it for up to
+## TIMEOUT_MS — the exact freeze this node exists to avoid. Dropping the
+## reference without joining lets the thread (`map_port()` discovery, most
+## likely) run to completion in the background; Godot's own `Thread`
+## destructor safely detaches an unfinished thread instead of crashing.
 func _exit_tree() -> void:
 	if _thread != null and _thread.is_alive():
-		_thread.wait_to_finish()
+		_warn_abandoned_mapping()
 		_thread = null
