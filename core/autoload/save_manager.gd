@@ -1,16 +1,21 @@
 class_name SaveManagerService
 extends Node
 
-const CURRENT_VERSION: int = 2
+const CURRENT_VERSION: int = 3
 const DEFAULT_SAVE_PATH: String = "user://save.json"
 const BACKUP_SUFFIX: String = ".bak"
 const PLAYER_PROFILE_COUNT: int = 4
+## PR #30 replaced this track's geometry outright; version 3 drops its stale records.
+## Sourced from GhostTrackReset so the id can never drift between the two files.
+const RESET_TRACK_ID: String = GhostTrackReset.TRACK_02_ID
 
 var save_path: String = DEFAULT_SAVE_PATH
+var ghost_directory: String = GhostRecording.DEFAULT_DIRECTORY
 
 
-func _init(custom_save_path: String = DEFAULT_SAVE_PATH) -> void:
+func _init(custom_save_path: String = DEFAULT_SAVE_PATH, custom_ghost_directory: String = GhostRecording.DEFAULT_DIRECTORY) -> void:
 	save_path = custom_save_path
+	ghost_directory = custom_ghost_directory
 
 
 ## Returns a fresh save payload with every key required by the current version.
@@ -30,7 +35,15 @@ func default_data() -> Dictionary:
 func load_data() -> Dictionary:
 	var primary: Dictionary = _read_valid_data(save_path)
 	if not primary.is_empty():
-		return _migrate(primary)
+		var original_version: int = int(primary.get("version", -1))
+		var migrated: Dictionary = _migrate(primary)
+		if int(migrated.get("version", -1)) != original_version:
+			_write_json(save_path, migrated)
+		return migrated
+
+	var future_version: int = _read_future_version(save_path)
+	if future_version > 0:
+		return _recover_future_version_primary(future_version)
 
 	var backup_path: String = save_path + BACKUP_SUFFIX
 	var backup: Dictionary = _read_valid_data(backup_path)
@@ -42,6 +55,52 @@ func load_data() -> Dictionary:
 	var defaults: Dictionary = default_data()
 	_write_json(save_path, defaults)
 	return defaults
+
+
+## A primary save that parses fine but reports a version newer than this build
+## understands (e.g. a rollback to an older build after a newer one ran). It
+## must never be treated as readable: the original is moved aside so no later
+## write can lose the player's real (newer) profile, and a readable backup —
+## or in-memory defaults when none exists — stands in for this session only.
+func _recover_future_version_primary(version: int) -> Dictionary:
+	_preserve_future_version_save(save_path, version)
+	var backup: Dictionary = _read_valid_data(save_path + BACKUP_SUFFIX)
+	if not backup.is_empty():
+		var recovered: Dictionary = _migrate(backup)
+		_write_json(save_path, recovered)
+		return recovered
+	return default_data()
+
+
+## Best-effort: renames a too-new primary out of save_path's way so a later
+## write can never overwrite it. A no-op if a preserved copy for this exact
+## version already exists (e.g. this load already ran once).
+func _preserve_future_version_save(path: String, version: int) -> void:
+	var preserved_path: String = "%s.v%d" % [path, version]
+	if not FileAccess.file_exists(preserved_path):
+		DirAccess.rename_absolute(path, preserved_path)
+
+
+## Returns the declared version of `path` when it parses as a JSON Dictionary
+## with a numeric version newer than CURRENT_VERSION, or -1 otherwise (missing,
+## corrupt, or a version this build can already read) — so callers can tell
+## "too new" apart from "corrupt" instead of treating both as unreadable.
+func _read_future_version(path: String) -> int:
+	if not FileAccess.file_exists(path):
+		return -1
+	var parser: JSON = JSON.new()
+	if parser.parse(FileAccess.get_file_as_string(path)) != OK:
+		return -1
+	var parsed: Variant = parser.data
+	if not parsed is Dictionary:
+		return -1
+	var version_value: Variant = (parsed as Dictionary).get("version", -1)
+	if not version_value is int and not version_value is float:
+		return -1
+	var version: int = int(version_value)
+	if not is_equal_approx(float(version), float(version_value)) or version <= CURRENT_VERSION:
+		return -1
+	return version
 
 
 ## Writes versioned data and preserves the last valid primary as a backup.
@@ -199,15 +258,22 @@ func _migrate(data: Dictionary) -> Dictionary:
 	var migrated: Dictionary = data.duplicate(true)
 	var version: int = int(migrated.get("version", 0))
 	while version < CURRENT_VERSION:
+		var version_before_step: int = version
 		match version:
 			0:
 				migrated = _migrate_v0_to_v1(migrated)
 			1:
 				migrated = _migrate_v1_to_v2(migrated)
+			2:
+				migrated = _migrate_v2_to_v3(migrated)
 			_:
 				push_error("No save migration registered for version %d" % version)
 				return default_data()
 		version = int(migrated.get("version", version + 1))
+		if version <= version_before_step:
+			# A step deferred itself (e.g. a cleanup side effect failed) instead
+			# of advancing; stop here rather than looping on the same version.
+			break
 	return _merge_with_defaults(migrated)
 
 
@@ -230,6 +296,32 @@ func _migrate_v1_to_v2(data: Dictionary) -> Dictionary:
 		legacy.merge(records, true)
 	profiles["P1"] = primary
 	migrated["version"] = 2
+	return migrated
+
+
+## Drops RESET_TRACK_ID from every records section (top-level and per-profile) and
+## clears its now-invalid ghost. Other tracks and every other field are untouched.
+## If the ghost can't be deleted (e.g. a read-only user dir), the whole step is
+## skipped and the version is left unchanged so the next launch retries it in full.
+func _migrate_v2_to_v3(data: Dictionary) -> Dictionary:
+	var ghost_error: Error = GhostTrackReset.remove_track_02_ghost(ghost_directory)
+	if ghost_error != OK:
+		push_warning("track_02 save migration deferred to next launch: ghost cleanup failed (%s)" % error_string(ghost_error))
+		return _merge_with_defaults(data)
+
+	var migrated: Dictionary = _merge_with_defaults(data)
+	for section: String in ["best_laps", "best_positions"]:
+		(migrated[section] as Dictionary).erase(RESET_TRACK_ID)
+	var profiles: Dictionary = migrated["player_profiles"]
+	for profile_key: String in profiles:
+		var profile: Dictionary = profiles[profile_key]
+		for section: String in ["best_laps", "best_positions"]:
+			var records: Dictionary = profile.get(section, {})
+			records.erase(RESET_TRACK_ID)
+			profile[section] = records
+		profiles[profile_key] = profile
+	migrated["player_profiles"] = profiles
+	migrated["version"] = 3
 	return migrated
 
 
