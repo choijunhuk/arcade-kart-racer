@@ -53,6 +53,14 @@ func test_remove_ghost_runs_safely_when_called_more_than_once() -> void:
 	assert_false(FileAccess.file_exists(_path(GhostTrackReset.TRACK_02_ID)))
 
 
+## Security review finding: an arbitrary track_id must never resolve outside
+## the ghosts directory (e.g. "../save" reaching user://save.json).
+func test_remove_ghost_rejects_a_path_traversal_track_id() -> void:
+	var result: Error = GhostTrackReset.remove_ghost(&"../save", DIRECTORY)
+
+	assert_eq(result, ERR_INVALID_PARAMETER)
+
+
 func _path(track_id: StringName) -> String:
 	return DIRECTORY.path_join("%s.json" % track_id)
 

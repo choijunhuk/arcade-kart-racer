@@ -257,6 +257,7 @@ func _migrate(data: Dictionary) -> Dictionary:
 	var migrated: Dictionary = data.duplicate(true)
 	var version: int = int(migrated.get("version", 0))
 	while version < CURRENT_VERSION:
+		var version_before_step: int = version
 		match version:
 			0:
 				migrated = _migrate_v0_to_v1(migrated)
@@ -268,6 +269,10 @@ func _migrate(data: Dictionary) -> Dictionary:
 				push_error("No save migration registered for version %d" % version)
 				return default_data()
 		version = int(migrated.get("version", version + 1))
+		if version <= version_before_step:
+			# A step deferred itself (e.g. a cleanup side effect failed) instead
+			# of advancing; stop here rather than looping on the same version.
+			break
 	return _merge_with_defaults(migrated)
 
 
@@ -295,7 +300,14 @@ func _migrate_v1_to_v2(data: Dictionary) -> Dictionary:
 
 ## Drops RESET_TRACK_ID from every records section (top-level and per-profile) and
 ## clears its now-invalid ghost. Other tracks and every other field are untouched.
+## If the ghost can't be deleted (e.g. a read-only user dir), the whole step is
+## skipped and the version is left unchanged so the next launch retries it in full.
 func _migrate_v2_to_v3(data: Dictionary) -> Dictionary:
+	var ghost_error: Error = GhostTrackReset.remove_track_02_ghost(ghost_directory)
+	if ghost_error != OK:
+		push_warning("track_02 save migration deferred to next launch: ghost cleanup failed (%s)" % error_string(ghost_error))
+		return _merge_with_defaults(data)
+
 	var migrated: Dictionary = _merge_with_defaults(data)
 	for section: String in ["best_laps", "best_positions"]:
 		(migrated[section] as Dictionary).erase(RESET_TRACK_ID)
@@ -308,7 +320,6 @@ func _migrate_v2_to_v3(data: Dictionary) -> Dictionary:
 			profile[section] = records
 		profiles[profile_key] = profile
 	migrated["player_profiles"] = profiles
-	GhostTrackReset.remove_track_02_ghost(ghost_directory)
 	migrated["version"] = 3
 	return migrated
 
