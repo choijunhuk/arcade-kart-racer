@@ -175,11 +175,11 @@ func _peer_connected(id: int) -> void:
 	if not multiplayer.is_server():
 		return
 	_gate.track(id, now())
-	NetTuning.widen_peer_timeout(peer, id) # Finding 1: survives the client's own race-load stall — see NetTuning.
 func _admit_peer(id: int) -> void:
 	var ok: bool = _roster.add_waiting(id) if started else _roster.add(id, automated)
 	if not ok:
 		return
+	NetTuning.widen_peer_timeout(peer, id) # Finding 1: only once admitted — see NetTuning; an unauthenticated peer keeps ENet's default ~5s timeout so it can't squat a connection slot on the widened one.
 	print("SERVER_ADMIT peer=%d" % id)
 	send(&"_admitted", id, [started], true)
 	if not started:
