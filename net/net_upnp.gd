@@ -10,9 +10,8 @@ signal mapping_finished(result: Dictionary)
 
 const DESCRIPTION: String = "TurboCircuit"
 const TIMEOUT_MS: int = 3000
-## Cushion on top of TIMEOUT_MS for the delayed-quit wait below (review
-## finding 4), so a worker returning right at the timeout still gets a
-## moment to write its box before the wait gives up anyway.
+## Cushion on top of TIMEOUT_MS for the delayed-quit wait (finding 4), so a
+## worker returning right at the timeout still gets a moment to write its box.
 const QUIT_WAIT_MARGIN_MS: int = 250
 ## Requested router lease duration in seconds (backlog item 2): duration 0
 ## (the previous, argument-less `add_port_mapping` call) left a genuinely
@@ -26,15 +25,21 @@ const LEASE_DURATION_SECONDS: int = 3600
 const RENEW_MARGIN_SECONDS: float = 300.0
 
 ## Mutable box a worker thread's bound Callable writes into, instead of
-## calling back into this node directly (finding 1: `call_deferred(...)`
-## targeted `self`, and a freed node dropped mid-call was a crash). A
-## `RefCounted` box has no lifecycle tied to this node: a freed node just
-## drops its `_box` reference, and the worker harmlessly finishes writing
-## into a box nobody reads. The node polls `box.done` from `_process`.
+## calling back into this node directly (finding 1: a freed node dropped
+## mid-`call_deferred` was a crash). A `RefCounted` box has no lifecycle
+## tied to this node: a freed node just drops its `_box` reference.
+##
+## `done` alone does not make `result` safe to read cross-thread (review
+## item 7) — a plain, unsynchronised bool. `_process()` trusts `result`
+## only once `Thread.is_alive()` (engine-synchronised) confirms the worker
+## returned; `done` remains a test seam for a finished result with no real
+## `Thread` — see `_thread` below.
 class ResultBox extends RefCounted:
 	var done: bool = false
 	var result: Dictionary = {}
 
+## Null while idle, or a test double skipped starting one (`_process()`
+## treats that as "finished" too) — see `ResultBox` above.
 var _thread: Thread
 var _box: ResultBox
 var _mapped_port: int = -1
@@ -71,19 +76,17 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		_quitting = true
 		if _box != null and not _box.done:
-			# A worker is still discovering/mapping (review finding 4): veto
-			# the automatic quit; `_process()` below calls it once the worker
-			# reports back or the bounded margin elapses (see `_exit_tree()`
-			# for exactly what this does and does not guarantee).
+			# A worker is still discovering/mapping (finding 4): veto the
+			# automatic quit; `_process()` fires it once the worker reports
+			# back or the bounded margin elapses (see `_exit_tree()`).
 			get_tree().auto_accept_quit = false
 			_quit_waiter.arm(_now(), float(TIMEOUT_MS) / 1000.0, float(QUIT_WAIT_MARGIN_MS) / 1000.0)
 
 
 ## Starts discovery + port mapping for `port` on a worker thread. Gated on
-## `_box != null` (review finding 3), not `_thread.is_alive()`, which reads
-## false the instant a worker *returns* — before `_process()` has consumed
-## its result — and so would let a second worker start over an unconsumed
-## one.
+## `_box != null` (finding 3), not `_thread.is_alive()`, which reads false
+## the instant a worker *returns* — before `_process()` consumes its result
+## — and so would let a second worker start over an unconsumed one.
 func map_port(port: int) -> void:
 	if _box != null:
 		return
@@ -300,11 +303,14 @@ static func _now() -> float:
 
 
 func _process(_delta: float) -> void:
-	# Bounded quit-wait (review finding 4): a no-op unless `_notification()`
-	# armed it on this node's own live worker; see `NetUpnpQuitWaiter.poll()`
-	# for why "no box" must never read as "worker done" here.
+	# Bounded quit-wait (finding 4): a no-op unless `_notification()` armed
+	# it on this node's own live worker — see `NetUpnpQuitWaiter.poll()`.
 	_quit_waiter.poll(_now(), _box != null and _box.done, get_tree())
 	if _box != null:
+		# `Thread.is_alive()` first (review item 7, see `ResultBox`): its
+		# going false is what makes `box`'s writes safe to read below.
+		if _thread != null and _thread.is_alive():
+			return
 		if not _box.done:
 			return
 		var box: ResultBox = _box
@@ -315,9 +321,8 @@ func _process(_delta: float) -> void:
 	_maybe_start_renewal(_now())
 
 
-## Joins the worker thread once its result box is observed done (a
-## formality, not a wait — see `_free_thread_and_self`), without freeing
-## this node, unlike `_free_thread_and_self`.
+## Joins the worker thread once `_process()` confirmed `not
+## _thread.is_alive()` (a formality, not a wait), without freeing this node.
 func _free_finished_thread() -> void:
 	if _thread != null:
 		_thread.wait_to_finish()
@@ -382,15 +387,13 @@ func _finish_renewal(result: Dictionary) -> void:
 
 
 ## Detaches rather than joins a still-running worker thread (finding 3):
-## joining here would block whatever main-thread path frees this node for
-## up to TIMEOUT_MS. What this does and does not guarantee (finding 4): the
-## OS close-request path bounds its wait first (`_notification()`'s delayed
-## quit), so the worker has very likely already finished by the time
-## teardown reaches here — not guaranteed, since that margin can still
-## elapse with it genuinely running, and any other free path (a direct
-## `get_tree().quit()`, a scene change, a hard kill) skips the wait
-## entirely. This method only keeps the join from hanging or crashing,
-## never the worker's own in-flight engine calls from racing a teardown.
+## joining would block whatever main-thread path frees this node for up to
+## TIMEOUT_MS. Guarantees only that: the close-request path's own bounded
+## wait (`_notification()`) makes the worker very likely already finished
+## by the time teardown reaches here, never for certain — that margin can
+## still elapse with it genuinely running, and any other free path (a
+## direct `get_tree().quit()`, a scene change, a hard kill) skips the wait
+## entirely.
 func _exit_tree() -> void:
 	if _thread != null and _thread.is_alive():
 		_warn_abandoned_mapping()
