@@ -1,5 +1,10 @@
 extends GutTest
 
+## Sibling test file's bounded `Semaphore.wait()` helper (review item 2):
+## reused here instead of duplicated, so a failed assertion in this file's
+## own blocking-worker test can never hang the whole gate either.
+const _ReleaseTest: GDScript = preload("res://tests/integration/test_net_upnp_release.gd")
+
 ## Backlog item 2's renewal back-off (review finding 1): `_maybe_start_renewal()`
 ## must not retry a rejected renewal on the very next `_process` tick — see
 ## `NetUpnpRenewalBackoff`'s own doc comment for why re-arming the lease's
@@ -39,7 +44,7 @@ class FakeRenewalUpnp extends NetUpnp:
 class FakeBlockingRenewalUpnp extends NetUpnp:
 	static var release_semaphore: Semaphore
 	static func _run_renewal(port: int, box: NetUpnp.ResultBox) -> void:
-		release_semaphore.wait()
+		_ReleaseTest._UpnpTestWait.wait_bounded(release_semaphore)
 		box.result = {"kind": "renewal", "status": "mapped", "port": port, "external_ip": "8.8.8.8"}
 		box.done = true
 	static func _run_removal(port: int, box: NetUpnp.ResultBox) -> void:
@@ -47,10 +52,28 @@ class FakeBlockingRenewalUpnp extends NetUpnp:
 		box.done = true
 
 
+## Bounded poll for `_upnp._thread` going null (review item 2): a fixed
+## `wait_process_frames(2)` used to race a real (if fast) worker `Thread`
+## actually finishing and being joined by `_process()`, flaky on a loaded
+## machine. Capped so a genuine bug can never hang the suite.
+func _await_thread_joined() -> void:
+	var deadline_ms: int = Time.get_ticks_msec() + 2000
+	while _upnp._thread != null and Time.get_ticks_msec() < deadline_ms:
+		await wait_process_frames(1)
+
+
 func after_each() -> void:
 	if is_instance_valid(_upnp):
 		_upnp.queue_free()
 	_upnp = null
+	# Safety nets (review item 2), mirroring test_net_upnp_release.gd's own:
+	# post (never null — a not-yet-started worker may still read the static
+	# var) any semaphore a failed assertion left a worker waiting on, and
+	# reset the fake's result so a later test can never read a stale value
+	# from this one.
+	if FakeBlockingRenewalUpnp.release_semaphore != null:
+		FakeBlockingRenewalUpnp.release_semaphore.post()
+	FakeRenewalUpnp.next_result = {}
 
 
 ## Regression test for review finding 1: the margins used to cancel out, so
@@ -77,7 +100,7 @@ func test_failed_renewal_backs_off_instead_of_retrying_next_tick() -> void:
 	FakeRenewalUpnp.next_result = {"status": "mapped", "port": 40010, "external_ip": "8.8.8.8"}
 	_upnp._maybe_start_renewal(now + 61.0)
 	assert_not_null(_upnp._thread, "a renewal retry past the back-off window must start a worker")
-	await wait_process_frames(2)
+	await _await_thread_joined()
 	assert_null(_upnp._thread, "the fake renewal worker must have finished and been joined")
 
 
@@ -92,10 +115,14 @@ func test_renewal_does_not_start_before_due_but_starts_once_due() -> void:
 	_upnp._maybe_start_renewal(now)
 	assert_null(_upnp._thread, "a lease not yet inside the renewal margin must not start a renewal worker")
 	_upnp._lease_expires_at = now + 1.0 # now inside the margin: due.
+	# Set before starting the worker, not after (review item 2): the worker
+	# reads this static var from its own thread as soon as it starts, so
+	# writing it afterward is both a cross-thread race and, on a later test
+	# run, a stale value left over from whichever test ran before this one.
+	FakeRenewalUpnp.next_result = {"status": "mapped", "port": 40012, "external_ip": "8.8.8.8"}
 	_upnp._maybe_start_renewal(now)
 	assert_not_null(_upnp._thread, "a lease inside the renewal margin must start a renewal worker")
-	FakeRenewalUpnp.next_result = {"status": "mapped", "port": 40012, "external_ip": "8.8.8.8"}
-	await wait_process_frames(2)
+	await _await_thread_joined()
 	assert_null(_upnp._thread, "the fake renewal worker must have finished and been joined")
 
 

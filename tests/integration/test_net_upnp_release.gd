@@ -80,15 +80,18 @@ func after_each() -> void:
 	if is_instance_valid(_upnp):
 		_upnp.queue_free()
 	_upnp = null
-	# Safety net: post (and drop) any semaphore a failed assertion left a
-	# fake's worker still waiting on, so the next test starts clean and no
-	# background thread from this one lingers past it (review item 6).
+	# Safety net: post any semaphore a failed assertion left a fake's worker
+	# still waiting on, so the next test starts clean and no background
+	# thread from this one lingers past it (review item 6). Posted, not
+	# nulled out: each test that uses these fakes assigns its own fresh
+	# `Semaphore` before starting a worker (the fakes' own doc comments), and
+	# nulling here could race a worker whose thread has started but has not
+	# yet reached its own `wait_bounded(release_semaphore)` read — leaving it
+	# to read a null static var instead of the semaphore it should block on.
 	if FakeBlockingUpnp.release_semaphore != null:
 		FakeBlockingUpnp.release_semaphore.post()
-		FakeBlockingUpnp.release_semaphore = null
 	if FakeBlockingMapUpnp.release_semaphore != null:
 		FakeBlockingMapUpnp.release_semaphore.post()
-		FakeBlockingMapUpnp.release_semaphore = null
 	# Safety net for the WM_CLOSE_REQUEST tests below: restore the real,
 	# shared SceneTree's flag even if an assertion failed before its own
 	# explicit restore line ran.
