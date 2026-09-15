@@ -24,6 +24,10 @@ var _session: NetSession
 ## sent on, so a burst of triggers within one physics tick (backlog item 6:
 ## a looping `_selection` RPC) coalesces to a single reliable broadcast.
 var _broadcast_tick: int = -1
+## True when a trigger landed after this tick's own send already went out
+## (review finding 1); `flush_pending_lobby_broadcast()` sends it once the
+## tick counter has moved on, so it is deferred rather than dropped.
+var _lobby_pending: bool = false
 
 
 func attach(session: NetSession) -> void:
@@ -148,13 +152,31 @@ func reject_peer(id: int, message: String) -> void:
 ## Coalesces repeated triggers (a looping `_selection` RPC, several peers
 ## admitted/rejected in the same tick, ...) to at most one reliable `_lobby`
 ## send per physics tick (backlog item 6), keyed off the session's own
-## `_clock_ticks` counter, which only `_physics_process` advances.
+## `_clock_ticks` counter, which only `_physics_process` advances. A trigger
+## landing after this tick's own send already went out is DEFERRED, not
+## discarded (review finding 1): `flush_pending_lobby_broadcast()` sends it
+## once the tick counter moves on, so a burst of mutations within one tick
+## never leaves the last one unbroadcast.
 func broadcast_lobby() -> void:
 	if _broadcast_tick == _session._clock_ticks:
+		_lobby_pending = true
 		return
+	_send_lobby()
+
+
+func _send_lobby() -> void:
 	_broadcast_tick = _session._clock_ticks
+	_lobby_pending = false
 	_session.send(&"_lobby", 0, [_session.players, _session.laps, _session.ai_count, _session.track_id, _session.difficulty_id], true)
 	_session.lobby_changed.emit()
+
+
+## Server-only; called once per tick from `NetSession._physics_process` once
+## `_clock_ticks` has advanced past the tick a `broadcast_lobby()` call was
+## coalesced on, flushing the deferred send at most once per tick.
+func flush_pending_lobby_broadcast() -> void:
+	if _lobby_pending and _broadcast_tick != _session._clock_ticks:
+		_send_lobby()
 
 
 ## Applies one peer's driver/kart/ready choice; false when it has no row.
