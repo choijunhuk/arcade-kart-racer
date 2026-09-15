@@ -35,6 +35,10 @@ var _input_limiter: NetRateLimiter = NetRateLimiter.new()
 ## Guards `_selection` (backlog item 6): much lower-frequency than race input,
 ## since it is only ever a lobby UI action, not a per-physics-tick send.
 var _selection_limiter: NetRateLimiter = NetRateLimiter.new(10.0, 5.0)
+## Guards `_ping` (review finding 3): it used to answer every call with an
+## unbounded reliable `_pong`. Sized well above the real per-client cadence
+## (one ping every `CLOCK_INTERVAL` ticks) so legitimate traffic never trips it.
+var _ping_limiter: NetRateLimiter = NetRateLimiter.new(10.0, float(NetTuning.TICK_RATE) / float(NetTuning.CLOCK_INTERVAL) * 4.0)
 var _gate: NetPeerGate = NetPeerGate.new()
 var _loss: NetLossEstimator = NetLossEstimator.new()
 var _roster: NetSessionLobby = NetSessionLobby.new()
@@ -315,7 +319,7 @@ func _event(kind: String, args: Array) -> void:
 @rpc("any_peer", "call_remote", "reliable")
 func _ping(sent: float) -> void:
 	var id: int = _verified_sender()
-	if id > 0:
+	if id > 0 and _ping_limiter.allow(id, now()):
 		send(&"_pong", id, [sent, now()], true)
 
 @rpc("authority", "call_remote", "reliable")
@@ -332,6 +336,7 @@ func _peer_disconnected(id: int) -> void:
 		return
 	_input_limiter.remove(id)
 	_selection_limiter.remove(id)
+	_ping_limiter.remove(id)
 	_loss.remove(id)
 	_gate.remove(id)
 	if _roster.waiting_has(id):
