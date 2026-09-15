@@ -93,14 +93,21 @@ func test_a_broken_file_degrades_the_catalog_once_not_per_lookup() -> void:
 	assert_false(NetContentCatalog.has(_DIR, "alpha"), "the one scan attempt must not see an id that does not exist")
 	_save_driver("cache_test_a.tres", "alpha")
 	assert_false(NetContentCatalog.has(_DIR, "alpha"), "a directory gets at most one scan attempt: once degraded by a broken file, a second lookup must not rescan to pick up a file written afterward")
-	# Asserted once, after both `has()` calls above: these totals must equal
-	# exactly what the FIRST call's one scan attempt produces. If the second
-	# call had rescanned (the bug this test guards against), broken.tres
-	# would have failed to load — and warned, and raised its parser's engine
-	# errors — a second time, doubling these counts.
+	# Asserted once, after both `has()` calls above, as an exact total for
+	# the whole test: this script's own push_warning fires once per failed
+	# load attempt, so exactly 1 here — not 2 — is what proves the second
+	# call above did not rescan (the bug this test guards against).
 	assert_push_warning("broken.tres")
-	# broken.tres fails to parse via Godot's own text-resource loader; that
-	# loader reports the malformed content as raw engine errors of its own,
-	# alongside this script's push_warning — same pattern as
-	# test_phase11_robustness.gd's corrupt-settings-file case.
-	assert_engine_error_count(3)
+	assert_push_warning_count(1)
+	# broken.tres fails to parse via Godot's own text-resource loader on that
+	# one attempt; that loader reports the malformed content as its own raw
+	# engine errors — same pattern as test_phase11_robustness.gd's
+	# corrupt-settings-file case. Unlike the push_warning above, that
+	# diagnostic count is Godot's own implementation detail, not this
+	# suite's to pin exactly (backlog item 7) — assert at least one instead.
+	var engine_errors: Array = []
+	for err: GutTrackedError in get_errors():
+		if err.is_engine_error():
+			err.handled = true
+			engine_errors.append(err)
+	assert_true(engine_errors.size() >= 1, "broken.tres must raise at least one engine error via Godot's own text-resource loader")
