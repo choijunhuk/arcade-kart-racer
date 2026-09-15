@@ -43,7 +43,7 @@ class FakeRemovalUpnp extends NetUpnp:
 class FakeBlockingUpnp extends NetUpnp:
 	static var release_semaphore: Semaphore
 	static func _run_removal(port: int, box: NetUpnp.ResultBox) -> void:
-		release_semaphore.wait()
+		_UpnpTestWait.wait_bounded(release_semaphore)
 		box.result = {"kind": "removal", "port": port, "removed": true}
 		box.done = true
 
@@ -54,15 +54,41 @@ class FakeBlockingUpnp extends NetUpnp:
 class FakeBlockingMapUpnp extends NetUpnp:
 	static var release_semaphore: Semaphore
 	static func _run(port: int, box: NetUpnp.ResultBox) -> void:
-		release_semaphore.wait()
+		_UpnpTestWait.wait_bounded(release_semaphore)
 		box.result = {"kind": "mapping", "status": "mapped", "port": port, "external_ip": "203.0.113.5", "permanent": false}
 		box.done = true
+
+
+## Bounded stand-in for `Semaphore.wait()` (review item 6): a test that
+## fails an assertion before reaching its own `post()` used to leave the
+## worker thread parked on the semaphore forever. Polling `try_wait()` with
+## a ~2s deadline instead means a bug in the test itself can never hang the
+## whole suite — only, at worst, log a spurious result nobody reads. A tiny
+## `RefCounted` helper class, not a method on this script, since an inner
+## `class` body (`FakeBlockingUpnp`/`FakeBlockingMapUpnp` above) cannot call
+## an outer script method by its bare name.
+class _UpnpTestWait extends RefCounted:
+	static func wait_bounded(sem: Semaphore) -> void:
+		var deadline_ms: int = Time.get_ticks_msec() + 2000
+		while not sem.try_wait():
+			if Time.get_ticks_msec() >= deadline_ms:
+				return
+			OS.delay_msec(5)
 
 
 func after_each() -> void:
 	if is_instance_valid(_upnp):
 		_upnp.queue_free()
 	_upnp = null
+	# Safety net: post (and drop) any semaphore a failed assertion left a
+	# fake's worker still waiting on, so the next test starts clean and no
+	# background thread from this one lingers past it (review item 6).
+	if FakeBlockingUpnp.release_semaphore != null:
+		FakeBlockingUpnp.release_semaphore.post()
+		FakeBlockingUpnp.release_semaphore = null
+	if FakeBlockingMapUpnp.release_semaphore != null:
+		FakeBlockingMapUpnp.release_semaphore.post()
+		FakeBlockingMapUpnp.release_semaphore = null
 	# Safety net for the WM_CLOSE_REQUEST tests below: restore the real,
 	# shared SceneTree's flag even if an assertion failed before its own
 	# explicit restore line ran.
@@ -224,6 +250,12 @@ func test_exit_tree_with_a_live_worker_returns_promptly_without_joining() -> voi
 	_upnp._mapped_port = 40002
 	_upnp.release_and_free()
 	assert_not_null(_upnp._thread, "sanity: the removal worker must have started and still be blocked on the semaphore")
+	# Captured before freeing (review item 6): the freed node drops its own
+	# `_box` reference, but the `RefCounted` box has no lifecycle tied to the
+	# node (net_upnp.gd's own doc comment), so this test keeps a reference of
+	# its own to prove directly that the worker finishes writing into it —
+	# never into anything reachable through the now-freed `_upnp`.
+	var box: NetUpnp.ResultBox = _upnp._box
 	var started_ms: int = Time.get_ticks_msec()
 	_upnp.queue_free()
 	await wait_process_frames(2)
@@ -231,16 +263,16 @@ func test_exit_tree_with_a_live_worker_returns_promptly_without_joining() -> voi
 	assert_lt(elapsed_ms, 1000, "_exit_tree() must detach, not join, a still-running worker")
 	assert_false(is_instance_valid(_upnp), "the node must free even while its worker is still blocked")
 	FakeBlockingUpnp.release_semaphore.post() # Let the blocked worker finish now the node is already gone.
-	await wait_process_frames(2) # Give the worker's write-then-return a moment to land.
-	var touched_freed_node_errors: Array = []
+	var deadline_ms: int = Time.get_ticks_msec() + 2000
+	while not box.done and Time.get_ticks_msec() < deadline_ms:
+		await wait_process_frames(1)
+	assert_true(box.done, "the worker must still finish and write into the box even after the node that started it is gone")
+	assert_eq(String(box.result.get("kind", "")), "removal", "the box it wrote into must hold the removal result — proof the worker's own write landed, not anything routed through the freed node")
 	for err: GutTrackedError in get_errors():
-		if err.is_engine_error():
+		# Godot's own Thread destructor logs this when a still-running thread
+		# is dropped without wait_to_finish() — exactly what `_exit_tree()`
+		# intentionally does (its own doc comment: "safely detaches an
+		# unfinished thread instead of crashing"), expected on every run of
+		# this test, not a sign of anything wrong.
+		if err.is_engine_error() and err.contains_text("thread object"):
 			err.handled = true
-			# Godot's own Thread destructor logs this when a still-running
-			# thread is dropped without wait_to_finish() — exactly what
-			# `_exit_tree()` intentionally does (its own doc comment: "safely
-			# detaches an unfinished thread instead of crashing"), not a sign
-			# the freed node was touched.
-			if not err.contains_text("thread object"):
-				touched_freed_node_errors.append(err)
-	assert_eq(touched_freed_node_errors.size(), 0, "the worker finishing after the node is freed must never touch the freed node")
