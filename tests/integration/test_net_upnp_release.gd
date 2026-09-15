@@ -11,6 +11,11 @@ extends GutTest
 ## synchronous free path — finding 3's fix had no coverage. Sets
 ## `_mapped_port`/`_quitting` directly, as `_finish()`/a real close request
 ## would, instead of running real UPnP network discovery or a real app quit.
+##
+## Also covers the redesigned worker/result-box handoff (PR #36 cross-model
+## review, item 1): worker bodies are `static` and write into a `RefCounted`
+## box instead of calling back into this node, so a node freed mid-discovery
+## never gets touched off the main thread.
 
 var _upnp: NetUpnp
 
@@ -18,10 +23,29 @@ var _upnp: NetUpnp
 ## Real `_run_removal` blocks on a 3s router discovery timeout; this fake
 ## reports back immediately so the test proves the removal worker started
 ## without waiting on real network I/O — this file's sibling tests already
-## avoid that (see test_net_lobby.gd's own UPnP coverage).
+## avoid that (see test_net_lobby.gd's own UPnP coverage). Static, matching
+## the real worker's signature: resolved via `Callable(get_script(), ...)`
+## (net_upnp.gd's `_worker_callable`), which dispatches through this
+## override the same way it would through an instance-method override.
 class FakeRemovalUpnp extends NetUpnp:
-	func _run_removal(port: int) -> void:
-		call_deferred("_finish_removal", port, true)
+	static func _run_removal(port: int, box: NetUpnp.ResultBox) -> void:
+		box.result = {"kind": "removal", "port": port, "removed": true}
+		box.done = true
+
+
+## Blocks its worker on a `Semaphore` until the test releases it, so a test
+## can free the node WHILE the worker is still genuinely running and only
+## then let the worker finish — proving `_exit_tree()` detaches instead of
+## joining, and that the worker completing afterward never touches the now-
+## freed node (it can't: the static body only ever sees `port`/`box`).
+## `static var` so the worker (which cannot read instance state) can reach
+## it; each test that uses this fake assigns a fresh Semaphore first.
+class FakeBlockingUpnp extends NetUpnp:
+	static var release_semaphore: Semaphore
+	static func _run_removal(port: int, box: NetUpnp.ResultBox) -> void:
+		release_semaphore.wait()
+		box.result = {"kind": "removal", "port": port, "removed": true}
+		box.done = true
 
 
 func after_each() -> void:
@@ -39,7 +63,11 @@ func test_release_starts_the_removal_worker_on_a_normal_session_end() -> void:
 	_upnp._mapped_port = 40000
 	_upnp.release_and_free()
 	assert_eq(_upnp._mapped_port, -1, "a live mapping must be cleared synchronously before the removal worker starts")
-	await wait_for_signal(_upnp.tree_exited, 1.0, "release_and_free() must free the node once the removal worker reports back")
+	# GUT's wait_for_signal returns false (without failing the test) on its
+	# own timeout, so the removal never actually completing would otherwise
+	# pass silently — assert the result explicitly.
+	var freed_in_time: bool = await wait_for_signal(_upnp.tree_exited, 1.0)
+	assert_true(freed_in_time, "release_and_free() must free the node once the removal worker reports back, within the timeout")
 
 
 ## Quitting: the network round trip must be skipped outright (no worker
@@ -55,3 +83,47 @@ func test_release_on_quit_frees_with_no_worker_and_warns_the_abandoned_port() ->
 	assert_push_warning("40001")
 	await wait_process_frames(1)
 	assert_false(is_instance_valid(_upnp), "quitting must still free the node")
+
+
+## Review finding 3: `_quitting` is asserted directly via the node's own
+## `_notification()`, not inferred from tree-exiting order.
+func test_wm_close_request_notification_sets_quitting() -> void:
+	_upnp = NetUpnp.new()
+	GameState.add_child(_upnp)
+	assert_false(_upnp._quitting, "sanity: _quitting starts false")
+	_upnp._notification(NOTIFICATION_WM_CLOSE_REQUEST)
+	assert_true(_upnp._quitting, "NOTIFICATION_WM_CLOSE_REQUEST must set _quitting")
+
+
+## Review finding 1 (the redesigned worker): freeing this node while its
+## removal worker is still genuinely running must return `_exit_tree()`
+## immediately (detach, never join — the ~11s freeze bug this node's design
+## exists to avoid) and must never touch the node once it is freed, even
+## once that worker later finishes and writes to its result box.
+func test_exit_tree_with_a_live_worker_returns_promptly_without_joining() -> void:
+	FakeBlockingUpnp.release_semaphore = Semaphore.new()
+	_upnp = FakeBlockingUpnp.new()
+	GameState.add_child(_upnp)
+	_upnp._mapped_port = 40002
+	_upnp.release_and_free()
+	assert_not_null(_upnp._thread, "sanity: the removal worker must have started and still be blocked on the semaphore")
+	var started_ms: int = Time.get_ticks_msec()
+	_upnp.queue_free()
+	await wait_process_frames(2)
+	var elapsed_ms: int = Time.get_ticks_msec() - started_ms
+	assert_lt(elapsed_ms, 1000, "_exit_tree() must detach, not join, a still-running worker")
+	assert_false(is_instance_valid(_upnp), "the node must free even while its worker is still blocked")
+	FakeBlockingUpnp.release_semaphore.post() # Let the blocked worker finish now the node is already gone.
+	await wait_process_frames(2) # Give the worker's write-then-return a moment to land.
+	var touched_freed_node_errors: Array = []
+	for err: GutTrackedError in get_errors():
+		if err.is_engine_error():
+			err.handled = true
+			# Godot's own Thread destructor logs this when a still-running
+			# thread is dropped without wait_to_finish() — exactly what
+			# `_exit_tree()` intentionally does (its own doc comment: "safely
+			# detaches an unfinished thread instead of crashing"), not a sign
+			# the freed node was touched.
+			if not err.contains_text("thread object"):
+				touched_freed_node_errors.append(err)
+	assert_eq(touched_freed_node_errors.size(), 0, "the worker finishing after the node is freed must never touch the freed node")

@@ -10,11 +10,41 @@ signal mapping_finished(result: Dictionary)
 
 const DESCRIPTION: String = "TurboCircuit"
 const TIMEOUT_MS: int = 3000
+## Requested router lease duration in seconds (backlog item 2). Most IGDs
+## treat duration 0 (the UPNP default) as PERMANENT — the previous
+## `add_port_mapping(port, port, DESCRIPTION, "UDP")` call (no duration
+## argument) left a genuinely permanent static forward on the router that a
+## crash, kill, or force-quit never cleared; only a router reboot did. A
+## finite lease bounds that worst case to this many seconds even when the
+## process never gets to run `release_and_free()` at all.
+const LEASE_DURATION_SECONDS: int = 3600
+## Renew this long before the lease's own expiry (backlog item 2) so a slow
+## renewal discovery round trip never lets the real router mapping lapse
+## mid-session.
+const RENEW_MARGIN_SECONDS: float = 300.0
+
+## Mutable box a worker thread's bound Callable writes its result into,
+## instead of calling back into this node directly. Review finding 1: the
+## previous `call_deferred("_finish"/"_finish_removal", ...)` targeted
+## `self`, and `_exit_tree()` detaching a still-running thread lets the node
+## be freed before that deferred call lands — on a freed instance. A
+## `RefCounted` box has no lifecycle tied to this node: a freed node simply
+## drops its `_box` reference, and the worker thread, which never touches
+## `self`, harmlessly finishes writing into a box nobody reads any more. The
+## node polls `box.done` from `_process` instead of being called into.
+class ResultBox extends RefCounted:
+	var done: bool = false
+	var result: Dictionary = {}
 
 var _thread: Thread
+var _box: ResultBox
 var _mapped_port: int = -1
+## `NetUpnp._now()` timestamp the current mapping's lease expires at, or
+## -1.0 while no mapping is held. Drives `is_renewal_due()`.
+var _lease_expires_at: float = -1.0
 ## Set when release_and_free() arrives while a worker thread is still running:
-## the thread's deferred callback frees the node instead of touching state.
+## the poller frees the node once that worker's result lands instead of
+## touching state out from under it.
 var _release_pending: bool = false
 ## Set once the OS sends a close request (window close button, Alt+F4,
 ## Cmd+Q, ...): the app itself is shutting down, not a normal in-session
@@ -27,6 +57,14 @@ var _release_pending: bool = false
 var _quitting: bool = false
 
 
+func _ready() -> void:
+	# Renewal polling and the discovery/removal result-box handoff (both in
+	# `_process`) must keep working while the game tree is paused (pause
+	# menu, settings) — mirrors NetSession's own PROCESS_MODE_ALWAYS, set for
+	# the same reason (net_session.gd's _ready()).
+	process_mode = Node.PROCESS_MODE_ALWAYS
+
+
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		_quitting = true
@@ -36,8 +74,7 @@ func _notification(what: int) -> void:
 func map_port(port: int) -> void:
 	if _thread != null and _thread.is_alive():
 		return
-	_thread = Thread.new()
-	_thread.start(_run.bind(port))
+	_start_worker(_worker_callable("_run"), port)
 
 
 ## Releases the mapping created by `map_port` and frees this node once the
@@ -53,14 +90,12 @@ func map_port(port: int) -> void:
 ## `_quitting` is set (review finding 3), so starting the removal worker
 ## here would only get detached rather than joined by `_exit_tree()` (see
 ## below), the exact up-to-seconds main-thread freeze this node exists to
-## avoid. The UPnP lease expires on the router on its own regardless, so app
-## teardown skips the network round trip and just frees;
-## `_warn_abandoned_mapping()` still names the port so a headless server
-## operator sees it in the log.
+## avoid. App teardown skips the network round trip and just frees, leaving
+## the lease (backlog item 2: now finite, LEASE_DURATION_SECONDS, never
+## permanent) to expire on the router on its own; `_warn_abandoned_mapping()`
+## still names the port so a headless server operator sees it in the log.
 func release_and_free() -> void:
 	if _thread != null and _thread.is_alive():
-		# A discovery thread is mid-flight and will call back into this node;
-		# let it finish and free us there rather than freeing under it.
 		_release_pending = true
 		return
 	if _quitting:
@@ -72,20 +107,38 @@ func release_and_free() -> void:
 		return
 	var port: int = _mapped_port
 	_mapped_port = -1
+	_lease_expires_at = -1.0
 	if get_parent() != GameState:
 		if get_parent() != null:
 			get_parent().remove_child(self)
 		GameState.add_child(self)
+	_start_worker(_worker_callable("_run_removal"), port)
+
+
+## A script-bound Callable (never object-bound — see the `ResultBox` doc
+## comment above) for the named static worker, resolved against this
+## instance's actual script so a test double's override (e.g.
+## `test_net_upnp_release.gd`'s `FakeRemovalUpnp`) still runs instead of the
+## real network call, exactly like overriding an instance method would.
+func _worker_callable(method: StringName) -> Callable:
+	return Callable(get_script() as GDScript, method)
+
+
+func _start_worker(worker: Callable, port: int) -> void:
+	_box = ResultBox.new()
 	_thread = Thread.new()
-	_thread.start(_run_removal.bind(port))
+	_thread.start(worker.bind(port, _box))
 
 
-func _run_removal(port: int) -> void:
+## Static: never touches `self`, so this can safely keep running on its own
+## thread after the node that started it has been freed.
+static func _run_removal(port: int, box: ResultBox) -> void:
 	var upnp: UPNP = UPNP.new()
 	var removed: bool = false
 	if upnp.discover(TIMEOUT_MS) == UPNP.UPNP_RESULT_SUCCESS:
 		removed = upnp.delete_port_mapping(port, "UDP") == UPNP.UPNP_RESULT_SUCCESS
-	call_deferred("_finish_removal", port, removed)
+	box.result = {"kind": "removal", "port": port, "removed": removed}
+	box.done = true
 
 
 func _finish_removal(port: int, removed: bool) -> void:
@@ -93,7 +146,9 @@ func _finish_removal(port: int, removed: bool) -> void:
 	_free_thread_and_self()
 
 
-## Joins the worker thread (if any) and frees this node exactly once.
+## Joins the worker thread (if any) and frees this node exactly once. Only
+## ever called once `_process` has already observed `_box.done`, so the
+## worker has already returned and this join is a formality, never a wait.
 func _free_thread_and_self() -> void:
 	if _thread != null:
 		_thread.wait_to_finish()
@@ -102,19 +157,34 @@ func _free_thread_and_self() -> void:
 
 
 ## Logs that a live mapping is being left on the router instead of released
-## (review finding 3): the lease expires there on its own regardless, but a
-## headless server operator should still see which port was abandoned.
+## (review finding 3): the lease is finite (backlog item 2) and expires
+## there on its own within LEASE_DURATION_SECONDS regardless, but a headless
+## server operator should still see which port was abandoned.
 func _warn_abandoned_mapping() -> void:
 	if _mapped_port >= 0:
 		push_warning("UPnP mapping for port %d abandoned on quit" % _mapped_port)
 
 
-func _run(port: int) -> void:
-	var result: Dictionary = _attempt_mapping(port)
-	call_deferred("_finish", result)
+## Static: never touches `self` (see `_run_removal`).
+static func _run(port: int, box: ResultBox) -> void:
+	var result: Dictionary = _attempt_mapping(port, LEASE_DURATION_SECONDS)
+	result["kind"] = "mapping"
+	box.result = result
+	box.done = true
 
 
-func _attempt_mapping(port: int) -> Dictionary:
+## Static: never touches `self` (see `_run_removal`). Re-adds the same
+## mapping with a fresh lease (backlog item 2); a plain re-run of
+## `_attempt_mapping` since most IGDs treat re-adding an identical
+## port/proto mapping as extending it rather than erroring.
+static func _run_renewal(port: int, box: ResultBox) -> void:
+	var result: Dictionary = _attempt_mapping(port, LEASE_DURATION_SECONDS)
+	result["kind"] = "renewal"
+	box.result = result
+	box.done = true
+
+
+static func _attempt_mapping(port: int, lease_seconds: int) -> Dictionary:
 	var upnp: UPNP = UPNP.new()
 	var discover_result: int = upnp.discover(TIMEOUT_MS)
 	if discover_result != UPNP.UPNP_RESULT_SUCCESS:
@@ -122,7 +192,7 @@ func _attempt_mapping(port: int) -> Dictionary:
 	var gateway: UPNPDevice = upnp.get_gateway()
 	if gateway == null or not gateway.is_valid_gateway():
 		return {"status": "no_igd"}
-	var add_result: int = upnp.add_port_mapping(port, port, DESCRIPTION, "UDP")
+	var add_result: int = upnp.add_port_mapping(port, port, DESCRIPTION, "UDP", lease_seconds)
 	if add_result != UPNP.UPNP_RESULT_SUCCESS:
 		return {"status": "failed", "code": add_result}
 	var external_ip: String = upnp.query_external_address()
@@ -206,12 +276,66 @@ static func is_internet_reachable_address(ip: String) -> bool:
 	return true
 
 
-func _finish(result: Dictionary) -> void:
-	if String(result.get("status", "")).begins_with("mapped"):
-		_mapped_port = int(result.get("port", -1))
+## True once `now` has reached the renewal window before `expires_at`
+## (backlog item 2's pure helper): renewing this early absorbs a slow
+## discovery round trip on the renewal itself so the real router lease never
+## actually lapses mid-session. `expires_at < 0.0` means no lease is
+## currently held, so there is nothing to renew.
+static func is_renewal_due(expires_at: float, now: float) -> bool:
+	if expires_at < 0.0:
+		return false
+	return now >= expires_at - RENEW_MARGIN_SECONDS
+
+
+static func _now() -> float:
+	return float(Time.get_ticks_usec()) / 1000000.0
+
+
+func _process(_delta: float) -> void:
+	if _box != null:
+		if not _box.done:
+			return
+		var box: ResultBox = _box
+		_box = null
+		_free_finished_thread()
+		_handle_result(box.result)
+		return
+	_maybe_start_renewal(_now())
+
+
+## Joins the worker thread once its result box is observed done (a
+## formality, not a wait — see `_free_thread_and_self`), without freeing
+## this node, unlike `_free_thread_and_self`.
+func _free_finished_thread() -> void:
 	if _thread != null:
 		_thread.wait_to_finish()
 		_thread = null
+
+
+## Split out so tests can drive renewal timing directly with a fake clock,
+## instead of waiting on real frames/wall-clock time.
+func _maybe_start_renewal(now: float) -> void:
+	if _mapped_port < 0 or _thread != null:
+		return
+	if not is_renewal_due(_lease_expires_at, now):
+		return
+	_start_worker(_worker_callable("_run_renewal"), _mapped_port)
+
+
+func _handle_result(result: Dictionary) -> void:
+	match String(result.get("kind", "")):
+		"removal":
+			_finish_removal(int(result.get("port", -1)), bool(result.get("removed", false)))
+		"renewal":
+			_finish_renewal(result)
+		_:
+			_finish(result)
+
+
+func _finish(result: Dictionary) -> void:
+	if String(result.get("status", "")).begins_with("mapped"):
+		_mapped_port = int(result.get("port", -1))
+		_lease_expires_at = _now() + float(LEASE_DURATION_SECONDS)
 	if _release_pending:
 		# Caller left the lobby while discovery was running: drop the mapping
 		# we just created (if any) and free, instead of emitting into a dead UI.
@@ -221,13 +345,28 @@ func _finish(result: Dictionary) -> void:
 	mapping_finished.emit(result)
 
 
+func _finish_renewal(result: Dictionary) -> void:
+	if String(result.get("status", "")).begins_with("mapped"):
+		_lease_expires_at = _now() + float(LEASE_DURATION_SECONDS)
+	else:
+		# Throttle retries to RENEW_MARGIN_SECONDS instead of re-attempting
+		# every _process tick: a router that just rejected one renewal is
+		# likely to reject the next one immediately too.
+		push_warning("UPnP lease renewal failed for port %d (status=%s); retrying later" % [_mapped_port, String(result.get("status", ""))])
+		_lease_expires_at = _now() + RENEW_MARGIN_SECONDS
+	if _release_pending:
+		_release_pending = false
+		release_and_free()
+
+
 ## Detaches rather than joins a still-running worker thread (review finding
 ## 3): a full app close reaches every node's `_exit_tree()` on the main
 ## thread, and `Thread.wait_to_finish()` here would block it for up to
 ## TIMEOUT_MS — the exact freeze this node exists to avoid. Dropping the
-## reference without joining lets the thread (`map_port()` discovery, most
-## likely) run to completion in the background; Godot's own `Thread`
-## destructor safely detaches an unfinished thread instead of crashing.
+## reference without joining lets the thread (discovery, removal, or a
+## renewal) run to completion in the background, writing into a `_box` this
+## freed node no longer reads; Godot's own `Thread` destructor safely
+## detaches an unfinished thread instead of crashing.
 func _exit_tree() -> void:
 	if _thread != null and _thread.is_alive():
 		_warn_abandoned_mapping()
