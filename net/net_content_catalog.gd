@@ -16,19 +16,20 @@ const AI_DIRECTORY: String = "res://data/ai"
 static var _catalog: Dictionary[String, Array] = {}
 
 
-## Cached whole-directory catalog scan. Only a scan where every matched file
-## actually loaded is memoized (review finding 7): one that hit a
-## `ResourceLoader.load()` failure (or found the directory unopenable) is
-## returned as-is but never cached as if it were the complete picture, so a
-## transient failure gets a fresh look on the next call instead of being
-## stuck wrong for the process's lifetime.
+## Cached whole-directory catalog scan. A directory gets at most one scan
+## attempt per process (bounded retry = 0): whatever loaded on that attempt
+## is memoized as-is, complete or not. An earlier version left an incomplete
+## scan wholly uncached so "a transient failure gets a fresh look on the next
+## call" — but one unloadable file (corrupt install, missing `.import` in an
+## export) never resolves itself between calls, so every `_selection` RPC
+## re-scanned the whole directory and re-`push_warning`'d per failing file at
+## the rate limiter's cadence: the disk-churn DoS this memo exists to
+## prevent, plus attacker-paced log growth on a headless server. Memoizing
+## the partial result means a broken file degrades the catalog once, not
+## per RPC; `clear_cache()` is still the only way to force a fresh look.
 static func _scan(directory: String) -> Array[Resource]:
 	if not _catalog.has(directory):
 		var result: Dictionary = ResourceScanner.scan_tres_complete(directory)
-		if not bool(result.get("complete", false)):
-			var uncached: Array[Resource] = []
-			uncached.assign((result["resources"] as Array))
-			return uncached
 		_catalog[directory] = result["resources"]
 	var scanned: Array[Resource] = []
 	scanned.assign(_catalog[directory])

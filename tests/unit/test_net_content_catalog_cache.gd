@@ -78,24 +78,29 @@ func test_explicit_listed_files_scan_bypasses_the_catalog_cache() -> void:
 	assert_eq(String((explicit[0] as DriverData).id), "beta")
 
 
-## Review finding 7: a scan that hits a `ResourceLoader.load()` failure must
-## not be memoized as if it were the complete catalog — otherwise a
-## transient failure (e.g. a directory caught mid-write) would stay wrong
-## for the rest of the process instead of getting a fresh look next call.
-func test_a_load_failure_is_never_cached_as_a_complete_scan() -> void:
+## Backlog item 2: a directory gets at most one scan attempt per process
+## (bounded retry = 0) — one unloadable file (corrupt install, missing
+## `.import` in an export) must not permanently disable the memo by getting
+## rescanned, and re-`push_warning`'d, on every subsequent lookup. That
+## re-scan-per-lookup behavior was itself the DoS this memo exists to
+## prevent, reinstated, plus attacker-paced log growth on a headless server.
+func test_a_broken_file_degrades_the_catalog_once_not_per_lookup() -> void:
 	DirAccess.make_dir_recursive_absolute(_DIR)
 	var broken: FileAccess = FileAccess.open(_DIR.path_join("broken.tres"), FileAccess.WRITE)
 	assert_not_null(broken)
 	broken.store_string("not a valid resource")
 	broken.close()
-	assert_false(NetContentCatalog.has(_DIR, "alpha"), "the broken scan must not see an id that does not exist yet")
-	assert_push_warning("broken.tres")
+	assert_false(NetContentCatalog.has(_DIR, "alpha"), "the one scan attempt must not see an id that does not exist")
 	_save_driver("cache_test_a.tres", "alpha")
-	assert_true(NetContentCatalog.has(_DIR, "alpha"), "a failed scan must not have been cached, so this lookup must see the file written afterward")
+	assert_false(NetContentCatalog.has(_DIR, "alpha"), "a directory gets at most one scan attempt: once degraded by a broken file, a second lookup must not rescan to pick up a file written afterward")
+	# Asserted once, after both `has()` calls above: these totals must equal
+	# exactly what the FIRST call's one scan attempt produces. If the second
+	# call had rescanned (the bug this test guards against), broken.tres
+	# would have failed to load — and warned, and raised its parser's engine
+	# errors — a second time, doubling these counts.
 	assert_push_warning("broken.tres")
-	# broken.tres fails to parse via Godot's own text-resource loader on each
-	# of the two scans above (it is never cached, by design); that loader
-	# reports the malformed content as raw engine errors of its own,
+	# broken.tres fails to parse via Godot's own text-resource loader; that
+	# loader reports the malformed content as raw engine errors of its own,
 	# alongside this script's push_warning — same pattern as
 	# test_phase11_robustness.gd's corrupt-settings-file case.
-	assert_engine_error_count(6)
+	assert_engine_error_count(3)
