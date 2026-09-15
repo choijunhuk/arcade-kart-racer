@@ -333,6 +333,29 @@ func test_delayed_load_ack_and_clock_reach_countdown_then_racing() -> void:
 	GameState.is_networked = false
 	GameState.automation_mode = false
 
+## Backlog item 3: the UPnP mapping must not outlive the session — only be
+## releasable from pressing BACK on the lobby (`go_back`). `_start_upnp` ties
+## release to `NetSession.close()` via `tree_exiting` (through the
+## `_bind_upnp_release` helper, split out so this test avoids running real
+## UPnP network discovery), so LEAVE RACE/END SESSION/app teardown release
+## the mapping too, instead of leaking one NetUpnp node + UDP mapping per
+## HOST press.
+func test_upnp_mapping_releases_itself_once_the_session_closes() -> void:
+	var lobby: OnlineLobby = (load("res://ui/menus/online_lobby.tscn") as PackedScene).instantiate() as OnlineLobby
+	add_child_autofree(lobby)
+	await wait_process_frames(2)
+	var session: NetSession = NetSession.new()
+	add_child_autofree(session)
+	lobby.set("_session", session)
+	var upnp: NetUpnp = NetUpnp.new()
+	GameState.add_child(upnp)
+	lobby.call("_bind_upnp_release", upnp)
+	assert_true(session.tree_exiting.is_connected(upnp.release_and_free), "_start_upnp's binding must tie the mapping's release to the session closing")
+	assert_true(is_instance_valid(upnp), "sanity: the mapping node must still be alive before the session closes")
+	session.close()
+	await wait_process_frames(1)
+	assert_false(is_instance_valid(upnp), "closing the session must release the still-unmapped NetUpnp node too (no mapping ever attempted, so this is the fast synchronous path)")
+
 ## Finding 6: `test_delayed_load_ack_and_clock_reach_countdown_then_racing`
 ## above sets `GameState.is_networked` / `GameState.net_session` directly and
 ## only clears them at its own tail end — an early failure there (it is a

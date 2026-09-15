@@ -146,11 +146,10 @@ func _on_race_options_changed(_value: Variant = null) -> void:
 		String(_tracks[_track.selected].get("id")), String(_difficulties[_difficulty.selected].get("id")),
 	)
 
-## Closes the connection and releases any UPnP mapping/relay proxy before leaving.
+## Closes the connection; any UPnP mapping releases itself once the session
+## actually closes (see `_start_upnp`), which `_session.close()` triggers.
 func go_back() -> void:
-	if _upnp != null:
-		_upnp.release_and_free()
-		_upnp = null
+	_upnp = null
 	if _relay_client != null:
 		_relay_client.stop()
 	if _session != null:
@@ -257,10 +256,23 @@ func _start_upnp(port: int) -> void:
 	# through the race scene change while discovery can still be running
 	# (measured ~11 s with no IGD), and freeing NetUpnp with the lobby joined
 	# that worker on the main thread, starving ENet until the joined peer
-	# timed the host out. BACK still releases it explicitly in go_back().
+	# timed the host out. Its lifetime is tied to the session rather than to
+	# this lobby screen: `tree_exiting` fires whenever `NetSession.close()`
+	# runs, from BACK here, LEAVE RACE, END SESSION, or app teardown, so the
+	# router mapping is released exactly once, however the session ends,
+	# instead of only from `go_back()` (finding: UPnP mapping outlives the
+	# session, leaking one worker/mapping per HOST press). Release stays
+	# fire-and-forget — see `NetUpnp.release_and_free()`'s own doc comment.
 	GameState.add_child(_upnp)
 	_upnp.mapping_finished.connect(_on_upnp_finished.bind(port))
+	_bind_upnp_release(_upnp)
 	_upnp.map_port(port)
+
+## Split out of `_start_upnp` so tests can exercise the release-on-close
+## wiring without running real UPnP network discovery.
+func _bind_upnp_release(upnp: NetUpnp) -> void:
+	if not _session.tree_exiting.is_connected(upnp.release_and_free):
+		_session.tree_exiting.connect(upnp.release_and_free)
 
 func _on_upnp_finished(result: Dictionary, port: int) -> void:
 	if String(result.get("status", "")) == "mapped":
