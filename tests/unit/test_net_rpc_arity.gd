@@ -19,7 +19,7 @@ const NET_SESSION_SCRIPT: String = "res://net/net_session.gd"
 
 ## Pinned to project.godot's current value so a protocol change without a
 ## version bump fails this test, not only a silent CALL_ERROR at runtime.
-const EXPECTED_CONFIG_VERSION: String = "0.6.0"
+const EXPECTED_CONFIG_VERSION: String = "0.7.0"
 
 ## method_name -> {arity, rpc_mode, transfer_mode, channel (only when != 0)}.
 ## rpc_mode/transfer_mode/channel mirror `Script.get_rpc_config()`'s own
@@ -32,6 +32,7 @@ const EXPECTED_RPC_CONFIG: Dictionary = {
 	"_return_to_lobby": {"arity": 1, "rpc_mode": MultiplayerAPI.RPC_MODE_AUTHORITY, "transfer_mode": MultiplayerPeer.TRANSFER_MODE_RELIABLE},
 	"_prepare_race": {"arity": 6, "rpc_mode": MultiplayerAPI.RPC_MODE_AUTHORITY, "transfer_mode": MultiplayerPeer.TRANSFER_MODE_RELIABLE},
 	"_handshake": {"arity": 2, "rpc_mode": MultiplayerAPI.RPC_MODE_ANY_PEER, "transfer_mode": MultiplayerPeer.TRANSFER_MODE_RELIABLE},
+	"_challenge": {"arity": 1, "rpc_mode": MultiplayerAPI.RPC_MODE_AUTHORITY, "transfer_mode": MultiplayerPeer.TRANSFER_MODE_RELIABLE},
 	"_race_loaded": {"arity": 0, "rpc_mode": MultiplayerAPI.RPC_MODE_ANY_PEER, "transfer_mode": MultiplayerPeer.TRANSFER_MODE_RELIABLE},
 	"_begin_race": {"arity": 0, "rpc_mode": MultiplayerAPI.RPC_MODE_AUTHORITY, "transfer_mode": MultiplayerPeer.TRANSFER_MODE_RELIABLE},
 	"_receive_input": {"arity": 1, "rpc_mode": MultiplayerAPI.RPC_MODE_ANY_PEER, "transfer_mode": MultiplayerPeer.TRANSFER_MODE_UNRELIABLE_ORDERED, "channel": 1},

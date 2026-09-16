@@ -28,12 +28,41 @@ const KICK_GRACE_SECONDS: float = 1.0
 var _deadlines: Dictionary[int, float] = {}
 var _verified: Dictionary[int, bool] = {}
 var _kicks: Dictionary[int, float] = {}
+## This peer's outstanding challenge nonce (spec item 6), if any.
+var _nonces: Dictionary[int, String] = {}
 
 
 ## Starts the handshake deadline for a freshly connected peer.
 func track(id: int, now: float) -> void:
 	_verified[id] = false
 	_deadlines[id] = now + DEADLINE_SECONDS
+
+
+## Generates, stores and returns a fresh one-time challenge nonce for `id`
+## (spec item 6): binding the password hash to a per-connection random value
+## means a network observer who captures one response cannot replay it
+## against a later handshake.
+func issue_nonce(id: int) -> String:
+	var nonce: String = Crypto.new().generate_random_bytes(32).hex_encode()
+	_nonces[id] = nonce
+	return nonce
+
+
+## This peer's outstanding challenge nonce, or "" once none is pending (no
+## challenge issued yet, or already consumed by a prior attempt/resend).
+## Non-destructive: a real handshake attempt consumes it via `take_nonce`
+## below; this peek exists for tests that need to compute the expected
+## response without also consuming the nonce themselves.
+func nonce_for(id: int) -> String:
+	return String(_nonces.get(id, ""))
+
+
+## Returns and clears `id`'s pending nonce in one step, so a handshake
+## attempt consumes it exactly once whether it succeeds or fails.
+func take_nonce(id: int) -> String:
+	var nonce: String = nonce_for(id)
+	_nonces.erase(id)
+	return nonce
 
 
 ## Marks a peer's handshake accepted. Returns false when the peer is unknown
@@ -76,6 +105,7 @@ func remove(id: int) -> void:
 	_deadlines.erase(id)
 	_verified.erase(id)
 	_kicks.erase(id)
+	_nonces.erase(id)
 
 
 ## Peers whose handshake deadline has elapsed, for the caller to reject.

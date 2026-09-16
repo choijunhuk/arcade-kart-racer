@@ -179,9 +179,13 @@ class GateSession extends NetSession:
 	func gate() -> NetPeerGate:
 		return _gate
 
-	func handshake_from(id: int, version: String, password: String) -> void:
+	## Mirrors the real client's own challenge-response step (spec item 6):
+	## computes the response for whatever nonce the gate currently holds for
+	## `id`, so every existing caller keeps passing the plain attempted-
+	## password hash exactly as before the challenge-response protocol landed.
+	func handshake_from(id: int, version: String, password_attempt_hash: String) -> void:
 		sender_id = id
-		_handshake(version, password)
+		_handshake(version, NetHandshake.response(gate().nonce_for(id), password_attempt_hash))
 
 	func selection_from(id: int, driver: String, kart: String, ready: bool) -> void:
 		sender_id = id

@@ -129,6 +129,25 @@ func admit_peer(id: int) -> void:
 		broadcast_lobby()
 
 
+## `_handshake`'s full body (400-line budget on net_session.gd, same pattern
+## as admit_peer/reject_peer above). Consumes the peer's one-time challenge
+## nonce (spec item 6) before validating anything else, so a resend — or a
+## replay of an earlier response — can never be checked against a live nonce
+## twice; an empty nonce (none issued yet, or already consumed) is dropped
+## silently, neither admitting nor rejecting the peer.
+func process_handshake(id: int, client_version: String, password_attempt: String) -> void:
+	var nonce: String = _session._gate.take_nonce(id)
+	if nonce.is_empty():
+		return
+	var expected_version: String = String(ProjectSettings.get_setting("application/config/version", ""))
+	var expected: String = NetHandshake.response(nonce, _session.password_hash)
+	var reason: String = NetHandshake.reject_reason(client_version, expected_version, password_attempt, expected)
+	if not reason.is_empty():
+		reject_peer(id, reason)
+	elif _session._gate.verify(id):
+		admit_peer(id)
+
+
 ## Sends the reason first, then defers the disconnect via KICK_GRACE_SECONDS
 ## (spec item 1); a no-op once queued so a resend can't delay it. Moved from
 ## `NetSession._reject_peer` for the same 400-line-budget reason as

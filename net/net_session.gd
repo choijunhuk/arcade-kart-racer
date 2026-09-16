@@ -194,21 +194,25 @@ func _peer_connected(id: int) -> void:
 	if not multiplayer.is_server():
 		return
 	_gate.track(id, now())
+	send(&"_challenge", id, [_gate.issue_nonce(id)], true) # Replay-proof handshake (spec item 6): see _challenge()/_handshake().
 func _admit_peer(id: int) -> void:
 	_roster.admit_peer(id) # Body lives on NetSessionLobby (400-line budget); test_net_session_admission.gd calls this wrapper directly.
-## Tells a just-admitted client whether it joined mid-race as a `waiting`
-## spectator (no row until the next lobby, so `local_slot()` stays -1).
+## Tells a just-admitted client whether it joined mid-race as a `waiting` spectator (no row until the next lobby, so `local_slot()` stays -1).
 @rpc("authority", "call_remote", "reliable")
 func _admitted(waiting: bool) -> void:
 	admitted.emit(waiting)
+	if automated and not waiting: # Moved from _connected() (spec item 6): sending before the challenge round trip would be dropped as an unadmitted peer.
+		var row: Dictionary = _roster.new_row(multiplayer.get_unique_id(), true)
+		select(row["driver"], row["kart"], true)
 
 func _connected() -> void:
 	NetTuning.widen_peer_timeout(peer, SERVER_ID)
 	send(&"_ping", SERVER_ID, [now()], true)
-	send(&"_handshake", SERVER_ID, [String(ProjectSettings.get_setting("application/config/version", "")), _password_attempt_hash], true)
-	if automated:
-		var row: Dictionary = _roster.new_row(multiplayer.get_unique_id(), true)
-		select(row["driver"], row["kart"], true)
+
+## Answers the server's one-time nonce (spec item 6): a captured hash cannot be replayed against a later handshake, unlike the plain hash _connected() used to send.
+@rpc("authority", "call_remote", "reliable")
+func _challenge(nonce: String) -> void:
+	send(&"_handshake", SERVER_ID, [String(ProjectSettings.get_setting("application/config/version", "")), NetHandshake.response(nonce, _password_attempt_hash)], true)
 
 func _update_player(id: int, driver: String, kart: String, ready: bool) -> void:
 	if started or not NetContentCatalog.has(LocalLobby.DRIVER_DIRECTORY, driver) or not NetContentCatalog.has(LocalLobby.KART_DIRECTORY, kart):
@@ -261,12 +265,7 @@ func _handshake(client_version: String, password_attempt: String) -> void:
 	var id: int = _sender()
 	if not multiplayer.is_server() or _gate.allows(id) or not _gate.is_pending(id):
 		return
-	var expected_version: String = String(ProjectSettings.get_setting("application/config/version", ""))
-	var reason: String = NetHandshake.reject_reason(client_version, expected_version, password_attempt, password_hash)
-	if not reason.is_empty():
-		_reject_peer(id, reason)
-	elif _gate.verify(id):
-		_admit_peer(id)
+	_roster.process_handshake(id, client_version, password_attempt) # Body lives on NetSessionLobby (400-line budget); test_net_internet.gd calls this wrapper directly.
 
 func _reject_peer(id: int, message: String) -> void:
 	_roster.reject_peer(id, message) # Body lives on NetSessionLobby (400-line budget); test_net_internet.gd calls this wrapper directly.
