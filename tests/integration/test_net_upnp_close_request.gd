@@ -17,7 +17,32 @@ var _upnp: NetUpnp
 ## test_net_upnp_release.gd's own `FakeRemovalUpnp`, duplicated here to keep
 ## this file self-contained.
 class FakeRemovalUpnp extends NetUpnp:
+	## Ports the fake "removed", so a test can prove the removal ran at all.
+	static var removed_ports: Array[int] = []
 	static func _run_removal(port: int, box: NetUpnp.ResultBox) -> void:
+		removed_ports.append(port)
+		box.result = {"kind": "removal", "port": port, "removed": true}
+		box.done = true
+
+
+## A discovery worker blocked on a Semaphore until the test releases it —
+## "still inside discover() when the close request lands" — that then
+## reports a PERMANENT lease; removal is instant, as above. Bounded wait,
+## so a failed assertion can never park the worker forever (see
+## test_net_upnp_release.gd's `_UpnpTestWait.wait_bounded`). Extends NetUpnp
+## directly and repeats the removal body: `Callable(get_script(), name)`
+## (net_upnp.gd's `_worker_callable`) does not resolve a static method
+## inherited from another inner class, so it cannot extend `FakeRemovalUpnp`.
+class FakeBlockingPermanentMapUpnp extends NetUpnp:
+	static var release_semaphore: Semaphore
+	static func _run(port: int, box: NetUpnp.ResultBox) -> void:
+		var deadline_ms: int = Time.get_ticks_msec() + 2000
+		while not release_semaphore.try_wait() and Time.get_ticks_msec() < deadline_ms:
+			OS.delay_msec(5)
+		box.result = {"kind": "mapping", "status": "mapped", "port": port, "external_ip": "203.0.113.5", "permanent": true}
+		box.done = true
+	static func _run_removal(port: int, box: NetUpnp.ResultBox) -> void:
+		FakeRemovalUpnp.removed_ports.append(port)
 		box.result = {"kind": "removal", "port": port, "removed": true}
 		box.done = true
 
@@ -28,6 +53,18 @@ func after_each() -> void:
 	_upnp = null
 	GameState.quit_override = Callable()
 	get_tree().auto_accept_quit = true
+	FakeRemovalUpnp.removed_ports = []
+	if FakeBlockingPermanentMapUpnp.release_semaphore != null:
+		FakeBlockingPermanentMapUpnp.release_semaphore.post() # Safety net: never leave a worker parked.
+
+
+## Bounded, wall-clock wait for the node to free itself (a real `process_frame`
+## signal, not GUT's simulated frames — see test_net_upnp_release.gd's
+## `_UpnpTestWait.wait_for_freed` doc comment); never joins the thread itself.
+func _wait_for_freed() -> void:
+	var deadline_ms: int = Time.get_ticks_msec() + 2000
+	while is_instance_valid(_upnp) and Time.get_ticks_msec() < deadline_ms:
+		await get_tree().process_frame
 
 
 ## A live NetUpnp discovery/mapping worker anywhere in the tree must veto
@@ -65,7 +102,7 @@ func test_close_request_removes_a_permanent_mapping_before_quitting() -> void:
 	_upnp = FakeRemovalUpnp.new()
 	GameState.add_child(_upnp)
 	_upnp._mapped_port = 40100
-	_upnp._lease_expires_at = -1.0 # Permanent (NetUpnp._finish()'s own sentinel).
+	_upnp._lease_permanent = true # As NetUpnp._finish() records a permanent result.
 	var quit_calls: Array = [0] # Array, not a plain int: a lambda captures outer locals by value.
 	_upnp._quit_waiter.quit_override = func() -> void: quit_calls[0] += 1 # Review RED-1: never let this reach the real engine quit mid-suite.
 	get_tree().auto_accept_quit = true
@@ -75,15 +112,9 @@ func test_close_request_removes_a_permanent_mapping_before_quitting() -> void:
 	assert_true(_upnp._quit_waiter.is_armed(), "the bounded quit wait must be armed for the removal worker")
 	assert_not_null(_upnp._thread, "a removal worker must actually have started")
 	# Let the (instant, fake) removal worker actually report back and free the
-	# node itself. Wall-clock bounded via a real `process_frame` signal, not
-	# GUT's `wait_process_frames` (simulated/fixed-step time that can diverge
-	# from a genuine background Thread's own scheduling — see
-	# test_net_upnp_release.gd's `_UpnpTestWait.wait_for_freed` doc comment,
-	# same reasoning here) — and never manually joins the thread itself
-	# (double-joining a Thread the engine also joins errors).
-	var deadline_ms: int = Time.get_ticks_msec() + 2000
-	while is_instance_valid(_upnp) and Time.get_ticks_msec() < deadline_ms:
-		await get_tree().process_frame
+	# node itself (never manually joining the thread — double-joining a
+	# Thread the engine also joins errors).
+	await _wait_for_freed()
 	assert_false(is_instance_valid(_upnp), "the removal worker finishing must free the node, same as a normal release_and_free()")
 	assert_eq(quit_calls[0], 1, "the injected quit hook must fire exactly once the removal worker reports back")
 	_upnp = null
@@ -103,3 +134,88 @@ func test_close_request_leaves_a_finite_mapping_alone() -> void:
 	assert_true(get_tree().auto_accept_quit, "a finite lease must not delay quitting")
 	assert_false(_upnp._quit_waiter.is_armed(), "nothing to wait for with a finite lease")
 	assert_null(_upnp._thread, "no removal worker for a finite lease")
+
+
+## Review YELLOW: `_finish()` records `result["permanent"]` in an explicit
+## `_lease_permanent`, instead of the close path inferring permanence from
+## `_lease_expires_at < 0.0` — which is also what "no mapping held" reads as.
+func test_finish_records_the_permanent_flag_explicitly() -> void:
+	_upnp = NetUpnp.new()
+	GameState.add_child(_upnp)
+	_upnp._finish({"kind": "mapping", "status": "mapped", "port": 40105, "external_ip": "8.8.8.8", "permanent": true})
+	assert_true(_upnp._lease_permanent, "a permanent result must set _lease_permanent")
+	assert_eq(_upnp._quit_waiter.permanent_mapping_port_to_remove_on_close(_upnp._mapped_port, _upnp._lease_permanent), 40105)
+	_upnp._finish({"kind": "mapping", "status": "mapped", "port": 40106, "external_ip": "8.8.8.8", "permanent": false})
+	assert_false(_upnp._lease_permanent, "a finite result must clear it again")
+	assert_eq(_upnp._quit_waiter.permanent_mapping_port_to_remove_on_close(_upnp._mapped_port, _upnp._lease_permanent), -1)
+
+
+## Review YELLOW: a worker that has FINISHED but whose result is not yet
+## consumed (`_box != null and _box.done`) used to fall through both
+## `_notification()` branches — the quit went ahead and, if that result was
+## a permanent lease, abandoned it. The close request must now defer, let
+## `_process()` consume the result, and only then start the removal.
+func test_close_request_during_the_finished_but_unconsumed_window_still_removes_a_permanent_lease() -> void:
+	_upnp = FakeRemovalUpnp.new()
+	GameState.add_child(_upnp)
+	var box: NetUpnp.ResultBox = NetUpnp.ResultBox.new() # Finished, never started (same seam as test_net_upnp_release.gd).
+	box.result = {"kind": "mapping", "status": "mapped", "port": 40107, "external_ip": "203.0.113.5", "permanent": true}
+	box.done = true
+	_upnp._box = box
+	var quit_calls: Array = [0]
+	_upnp._quit_waiter.quit_override = func() -> void: quit_calls[0] += 1
+	get_tree().auto_accept_quit = true
+	_upnp._notification(NOTIFICATION_WM_CLOSE_REQUEST)
+	assert_false(get_tree().auto_accept_quit, "a finished-but-unconsumed result must still veto the automatic quit")
+	assert_true(_upnp._quit_waiter.is_armed())
+	_upnp._process(0.0) # Consumes the box: lands the permanent lease, which must start the removal instead of quitting.
+	assert_eq(quit_calls[0], 0, "consuming a result that lands a permanent lease must not fire the quit before its removal ran")
+	assert_true(_upnp._quit_waiter.is_armed(), "the wait must be re-armed for the removal worker")
+	assert_eq(_upnp._mapped_port, -1, "the permanent mapping must be handed to the removal worker")
+	assert_not_null(_upnp._thread, "a removal worker must have started")
+	await _wait_for_freed()
+	assert_false(is_instance_valid(_upnp), "the removal finishing must free the node")
+	assert_eq(quit_calls[0], 1, "the quit must fire exactly once, after the removal reported back")
+	assert_eq(FakeRemovalUpnp.removed_ports, [40107] as Array[int], "the permanent lease must actually have been removed")
+	_upnp = null
+
+
+## Review YELLOW: discovery still running when the close request lands, and
+## its result (consumed during the close wait) is a permanent lease — the
+## removal must start before the waiter fires, on a re-armed wait.
+func test_discovery_landing_a_permanent_lease_during_the_close_wait_removes_it_before_quitting() -> void:
+	FakeBlockingPermanentMapUpnp.release_semaphore = Semaphore.new()
+	_upnp = FakeBlockingPermanentMapUpnp.new()
+	GameState.add_child(_upnp)
+	_upnp.map_port(40108)
+	assert_not_null(_upnp._thread, "sanity: the discovery worker must be running (blocked on the semaphore)")
+	var quit_calls: Array = [0]
+	_upnp._quit_waiter.quit_override = func() -> void: quit_calls[0] += 1
+	_upnp._notification(NOTIFICATION_WM_CLOSE_REQUEST)
+	assert_false(get_tree().auto_accept_quit)
+	_upnp._process(0.0)
+	assert_eq(quit_calls[0], 0, "still discovering: nothing fires yet")
+	FakeBlockingPermanentMapUpnp.release_semaphore.post() # Discovery now reports a permanent lease.
+	await _wait_for_freed()
+	assert_false(is_instance_valid(_upnp), "the close-time removal must run and free the node")
+	assert_eq(FakeRemovalUpnp.removed_ports, [40108] as Array[int], "the permanent lease landed mid-close must be removed, not abandoned")
+	assert_eq(quit_calls[0], 1, "the quit must fire exactly once, after that removal")
+	_upnp = null
+
+
+## Review YELLOW: once this session's discovery already came back `no_igd`,
+## the close-time removal is skipped — its own discovery would only burn
+## the timeout again, an exit delay a hostile LAN could otherwise force.
+func test_close_request_skips_the_removal_once_discovery_failed_this_session() -> void:
+	_upnp = FakeRemovalUpnp.new()
+	GameState.add_child(_upnp)
+	_upnp._finish({"kind": "mapping", "status": "no_igd"})
+	assert_true(_upnp._igd_discovery_failed, "a no_igd result must be remembered")
+	_upnp._mapped_port = 40109
+	_upnp._lease_permanent = true
+	get_tree().auto_accept_quit = true
+	_upnp._notification(NOTIFICATION_WM_CLOSE_REQUEST)
+	assert_true(get_tree().auto_accept_quit, "no removal, so the automatic quit must stay armed")
+	assert_false(_upnp._quit_waiter.is_armed())
+	assert_null(_upnp._thread, "no removal worker after a failed discovery")
+	assert_eq(FakeRemovalUpnp.removed_ports, [] as Array[int])
