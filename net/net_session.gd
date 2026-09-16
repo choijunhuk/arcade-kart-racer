@@ -31,13 +31,11 @@ var difficulty_id: String = ""
 ## SHA-256 of the session password ("" = none); plaintext is never stored or logged (spec item 6).
 var password_hash: String = ""
 var _password_attempt_hash: String = ""
-var _input_limiter: NetRateLimiter = NetRateLimiter.new()
-## Guards `_selection` (backlog item 6): much lower-frequency than race input,
-## since it is only ever a lobby UI action, not a per-physics-tick send.
-var _selection_limiter: NetRateLimiter = NetRateLimiter.new(10.0, 5.0)
-## Guards `_ping` (review finding 3): it used to answer every call with an
-## unbounded reliable `_pong`. Sized well above the real per-client cadence
-## (one ping every `CLOCK_INTERVAL` ticks) so legitimate traffic never trips it.
+var _input_limiter: NetRateLimiter = NetRateLimiter.new(3.0 * NetTuning.TICK_RATE, 1.5 * NetTuning.TICK_RATE) # Holds/refills a legit client's up-to-INPUT_BATCH_TICKS new ticks per call at TICK_RATE (review RED-2).
+var _input_last_tick: Dictionary[int, int] = {} # _receive_input's last-charged tick per sender (review RED-2); see NetSessionTransport.input_batch_cost().
+var _selection_limiter: NetRateLimiter = NetRateLimiter.new(10.0, 5.0) # Guards `_selection` (backlog item 6): a lobby UI action, not a per-physics-tick send.
+## Guards `_ping` (review finding 3): unbounded reliable `_pong` per call
+## otherwise. Sized above the real per-client cadence (one ping every `CLOCK_INTERVAL` ticks) so legitimate traffic never trips it.
 var _ping_limiter: NetRateLimiter = NetRateLimiter.new(10.0, float(NetTuning.TICK_RATE) / float(NetTuning.CLOCK_INTERVAL) * 4.0)
 var _gate: NetPeerGate = NetPeerGate.new()
 var _loss: NetLossEstimator = NetLossEstimator.new()
@@ -52,8 +50,7 @@ func _init() -> void:
 	_transport.attach(self)
 
 func _ready() -> void:
-	# Pausing the tree (pause menu, settings) must never stall the deferred
-	# lobby broadcast or _service_peers() (review finding 5).
+	# Pausing the tree (pause menu, settings) must never stall the deferred lobby broadcast or _service_peers() (review finding 5).
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	multiplayer.peer_connected.connect(_peer_connected)
 	multiplayer.peer_disconnected.connect(_peer_disconnected)
@@ -75,8 +72,7 @@ func host(port: int = NetTuning.PORT, max_players_value: int = NetTuning.MAX_PLA
 	lobby_changed.emit()
 	return OK
 
-## Connects to the supplied address; completion arrives through lobby_changed.
-## `password` is hashed locally, never sent or logged in cleartext (spec 6).
+## Connects to the supplied address; completion arrives through lobby_changed. `password` is hashed locally, never sent or logged in cleartext (spec 6).
 func join(ip: String, port: int = NetTuning.PORT, password: String = "") -> Error:
 	peer = ENetMultiplayerPeer.new()
 	var error: Error = peer.create_client(ip, port, NetTuning.CHANNEL_COUNT)
@@ -87,8 +83,7 @@ func join(ip: String, port: int = NetTuning.PORT, password: String = "") -> Erro
 		_password_attempt_hash = password.sha256_text() if not password.is_empty() else ""
 	return error
 
-## Sets the session password as its hash only (spec item 6: hashed compare,
-## never logged). Pass "" to clear (no password required).
+## Sets the session password as its hash only (spec item 6: hashed compare, never logged). Pass "" to clear (no password required).
 func set_password(plain: String) -> void:
 	password_hash = plain.sha256_text() if not plain.is_empty() else ""
 
@@ -194,21 +189,25 @@ func _peer_connected(id: int) -> void:
 	if not multiplayer.is_server():
 		return
 	_gate.track(id, now())
+	send(&"_challenge", id, [_gate.issue_nonce(id)], true) # Replay-proof handshake (spec item 6): see _challenge()/_handshake().
 func _admit_peer(id: int) -> void:
 	_roster.admit_peer(id) # Body lives on NetSessionLobby (400-line budget); test_net_session_admission.gd calls this wrapper directly.
-## Tells a just-admitted client whether it joined mid-race as a `waiting`
-## spectator (no row until the next lobby, so `local_slot()` stays -1).
+## Tells a just-admitted client whether it joined mid-race as a `waiting` spectator (no row until the next lobby, so `local_slot()` stays -1).
 @rpc("authority", "call_remote", "reliable")
 func _admitted(waiting: bool) -> void:
 	admitted.emit(waiting)
+	if automated and not waiting: # Moved from _connected() (spec item 6): sending before the challenge round trip would be dropped as an unadmitted peer.
+		var row: Dictionary = _roster.new_row(multiplayer.get_unique_id(), true)
+		select(row["driver"], row["kart"], true)
 
 func _connected() -> void:
 	NetTuning.widen_peer_timeout(peer, SERVER_ID)
 	send(&"_ping", SERVER_ID, [now()], true)
-	send(&"_handshake", SERVER_ID, [String(ProjectSettings.get_setting("application/config/version", "")), _password_attempt_hash], true)
-	if automated:
-		var row: Dictionary = _roster.new_row(multiplayer.get_unique_id(), true)
-		select(row["driver"], row["kart"], true)
+
+## Answers the server's one-time nonce (spec item 6): a captured hash cannot be replayed against a later handshake, unlike the plain hash _connected() used to send.
+@rpc("authority", "call_remote", "reliable")
+func _challenge(nonce: String) -> void:
+	send(&"_handshake", SERVER_ID, [String(ProjectSettings.get_setting("application/config/version", "")), NetHandshake.response(nonce, _password_attempt_hash)], true)
 
 func _update_player(id: int, driver: String, kart: String, ready: bool) -> void:
 	if started or not NetContentCatalog.has(LocalLobby.DRIVER_DIRECTORY, driver) or not NetContentCatalog.has(LocalLobby.KART_DIRECTORY, kart):
@@ -232,6 +231,8 @@ func _selection(driver: String, kart: String, ready: bool) -> void:
 
 @rpc("authority", "call_remote", "reliable")
 func _lobby(roster: Array, lobby_laps: int = 1, lobby_ai_count: int = 6, lobby_track_id: String = "", lobby_difficulty_id: String = "") -> void:
+	if race != null and not multiplayer.is_server(): # Backlog item 5: a stray lobby broadcast reaching a racing client would desync its roster; lobby return uses _return_to_lobby instead.
+		return
 	_roster.apply_lobby(roster, lobby_laps, lobby_ai_count, lobby_track_id, lobby_difficulty_id)
 	lobby_changed.emit()
 
@@ -261,12 +262,7 @@ func _handshake(client_version: String, password_attempt: String) -> void:
 	var id: int = _sender()
 	if not multiplayer.is_server() or _gate.allows(id) or not _gate.is_pending(id):
 		return
-	var expected_version: String = String(ProjectSettings.get_setting("application/config/version", ""))
-	var reason: String = NetHandshake.reject_reason(client_version, expected_version, password_attempt, password_hash)
-	if not reason.is_empty():
-		_reject_peer(id, reason)
-	elif _gate.verify(id):
-		_admit_peer(id)
+	_roster.process_handshake(id, client_version, password_attempt) # Body lives on NetSessionLobby (400-line budget); test_net_internet.gd calls this wrapper directly.
 
 func _reject_peer(id: int, message: String) -> void:
 	_roster.reject_peer(id, message) # Body lives on NetSessionLobby (400-line budget); test_net_internet.gd calls this wrapper directly.
@@ -302,7 +298,10 @@ func _receive_input(data: Dictionary) -> void:
 	var sender: int = _verified_sender()
 	if sender < 0 or not running or race == null:
 		return
-	if not _input_limiter.allow(sender, now()):
+	var frames: Variant = data.get("frames", [data])
+	if not frames is Array or (frames as Array).is_empty() or (frames as Array).size() > NetTuning.INPUT_BATCH_TICKS:
+		return
+	if not _input_limiter.allow(sender, now(), _transport.input_batch_cost(sender, frames as Array)): # One token per NEW tick only — a resend is free (review RED-2).
 		return
 	_loss.observe(sender, NetLossEstimator.batch_tick(data), now())
 	race.receive_input(sender, data)
@@ -338,6 +337,7 @@ func _peer_disconnected(id: int) -> void:
 	if not multiplayer.is_server():
 		return
 	_input_limiter.remove(id)
+	_input_last_tick.erase(id)
 	_selection_limiter.remove(id)
 	_ping_limiter.remove(id)
 	_loss.remove(id)

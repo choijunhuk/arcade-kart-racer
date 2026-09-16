@@ -31,6 +31,16 @@ func is_armed() -> bool:
 	return deadline_at >= 0.0
 
 
+## Backlog item 3: a PERMANENT lease (`NetUpnp._lease_permanent`, recorded
+## explicitly from the worker's `result["permanent"]`) never clears itself
+## the way a finite one does within its hour, so a normal close would abandon
+## it on the router forever. Returns the port `NetUpnp` must remove before
+## quitting, or -1 when there is nothing to do (no mapping, or a finite one
+## left to expire on its own with no close-time delay).
+func permanent_mapping_port_to_remove_on_close(mapped_port: int, permanent: bool) -> int:
+	return mapped_port if mapped_port >= 0 and permanent else -1
+
+
 ## Polls the wait: fires exactly once `worker_done` is true or `now` has
 ## reached the deadline, then disarms so a later call this same tick (or
 ## the next tick) is a no-op. A no-op while unarmed, so `NetUpnp._process()`
@@ -38,17 +48,22 @@ func is_armed() -> bool:
 ## live worker's own box (`box != null and box.done`), never merely "there
 ## is no box" — an absent box is not evidence the worker this wait was
 ## armed for has finished, only that nothing is being watched right now.
-## Callers must pass `worker_done = true` at the exact moment they are about
-## to consume a finished box (review item 1) — never derived from `box.done`
-## alone before `Thread.is_alive()` has confirmed the worker actually
-## returned, or this could fire (and disarm) a tick before the result is
-## really safe to read.
+## Callers must pass `worker_done = true` only in the tick that consumes a
+## finished box (review item 1), and only if consuming it left no new worker
+## running — never derived from `box.done` alone before `Thread.is_alive()`
+## has confirmed the worker actually returned, or this could fire (and
+## disarm) a tick before the result is really safe to read. Restores `auto_accept_quit` before firing, exactly
+## like `fire_on_exit()` (review YELLOW): the arming close request cleared
+## it, and nothing else ever sets it back — so a quit intercepted by
+## `quit_override` (or any later close request in a build that cancels one)
+## would otherwise leave every subsequent window close silently vetoed.
 func poll(now: float, worker_done: bool, tree: SceneTree) -> void:
 	if not is_armed():
 		return
 	if not (worker_done or now >= deadline_at):
 		return
 	deadline_at = -1.0
+	tree.auto_accept_quit = true
 	if quit_override.is_valid():
 		quit_override.call()
 	else:

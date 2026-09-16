@@ -46,6 +46,8 @@ func test_join_code_looks_like_code_distinguishes_from_ip_text() -> void:
 	assert_true(NetJoinCode.looks_like_code(NetJoinCode.encode("10.0.0.1", 24565)))
 	assert_false(NetJoinCode.looks_like_code("192.168.1.5"))
 	assert_false(NetJoinCode.looks_like_code("192.168.1.5:24565"))
+	var code: String = NetJoinCode.encode("10.0.0.1", 24565)
+	assert_true(NetJoinCode.looks_like_code(code.substr(0, 5) + " " + code.substr(5)), "review finding 4: looks_like_code must strip internal spaces exactly like decode() does")
 
 func test_rate_limiter_allows_burst_then_throttles() -> void:
 	var limiter: NetRateLimiter = NetRateLimiter.new(3.0, 1.0)
@@ -179,9 +181,13 @@ class GateSession extends NetSession:
 	func gate() -> NetPeerGate:
 		return _gate
 
-	func handshake_from(id: int, version: String, password: String) -> void:
+	## Mirrors the real client's own challenge-response step (spec item 6):
+	## computes the response for whatever nonce the gate currently holds for
+	## `id`, so every existing caller keeps passing the plain attempted-
+	## password hash exactly as before the challenge-response protocol landed.
+	func handshake_from(id: int, version: String, password_attempt_hash: String) -> void:
 		sender_id = id
-		_handshake(version, password)
+		_handshake(version, NetHandshake.response(gate().nonce_for(id), password_attempt_hash))
 
 	func selection_from(id: int, driver: String, kart: String, ready: bool) -> void:
 		sender_id = id

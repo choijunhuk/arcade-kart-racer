@@ -654,8 +654,10 @@ Builds on the Phase 15 server-authoritative design above without redesigning
 prediction/snapshots; every addition below is either transport/lobby state or
 sits entirely outside `NetSession`/`NetRace`.
 
-- **UPnP** (`net/net_upnp.gd`, `NetUpnp`, plus `net/net_upnp_quit_waiter.gd`
-  and `net/net_upnp_renewal_backoff.gd` split out for the 400-line rule): a
+- **UPnP** (`net/net_upnp.gd`, `NetUpnp`, plus `net/net_upnp_quit_waiter.gd`,
+  `net/net_upnp_renewal_backoff.gd` and `net/net_upnp_address.gd` — the pure
+  reachability/status-line helpers, wrapped by `NetUpnp`'s static names —
+  split out for the 400-line rule): a
   `Thread`-backed best-effort `UPNP.discover()` /
   `add_port_mapping(port, port, "TurboCircuit", "UDP", lease_seconds)` /
   `query_external_address()`, 3s discovery timeout. A worker thread never
@@ -672,30 +674,41 @@ sits entirely outside `NetSession`/`NetRace`.
   retrying every tick, and warning only on the first failure of a run. Some
   IGDs reject any finite lease outright (`UPNP_RESULT_ONLY_PERMANENT_LEASE_
   SUPPORTED`); `_attempt_mapping()` retries once with duration 0 there, and
-  both `_finish()` and `_finish_renewal()` record that as `permanent: true`
-  and stop renewing it (`_lease_expires_at = -1.0`, the same sentinel used
-  for "no mapping held"). On `NOTIFICATION_WM_CLOSE_REQUEST` with a live
-  worker, `_notification()` vetoes the automatic quit
-  (`auto_accept_quit = false`) and arms `NetUpnpQuitWaiter` — a bounded wait
-  of `TIMEOUT_MS + QUIT_WAIT_MARGIN_MS` polled from `_process()`, which
-  fires the real quit (or, in tests, an injectable override) once the
-  worker's result is confirmed consumable or the deadline elapses,
-  whichever comes first; `_exit_tree()`'s own `fire_on_exit()` is a backstop
-  that still fires (and restores `auto_accept_quit`) if some other free path
-  reaches it first. `release_and_free()`'s removal is fire-and-forget
+  both `_finish()` and `_finish_renewal()` record that in an explicit
+  `_lease_permanent` and stop renewing it (`_lease_expires_at = -1.0`, the
+  same sentinel used for "no mapping held"). On
+  `NOTIFICATION_WM_CLOSE_REQUEST` with a worker either still running or
+  finished but not yet consumed (`_box != null`), `_notification()` vetoes
+  the automatic quit (`auto_accept_quit = false`) and arms
+  `NetUpnpQuitWaiter` — a bounded wait of `TIMEOUT_MS + QUIT_WAIT_MARGIN_MS`
+  polled from `_process()` *after* it consumes a finished box, which fires
+  the real quit (or, in tests, an injectable override) once nothing is left
+  running or the deadline elapses, whichever comes first, restoring
+  `auto_accept_quit` as it fires; `_exit_tree()`'s own `fire_on_exit()` is a
+  backstop that does the same if some other free path reaches it first. `release_and_free()`'s removal is fire-and-forget
   (logs the outcome); a live worker at teardown is detached, not joined —
   joining would block app exit for up to the discovery timeout.
   **Known limitations**: the quit wait is bounded, but a no-router discovery
   can itself take ~11s (well past `TIMEOUT_MS`'s 3s SSDP round trip once
   retries are counted), so the exit-crash window is narrowed, not closed.
-  The in-app QUIT button (`ui/menus/main_menu.gd`) calls `get_tree().quit()`
-  directly and bypasses this deferral entirely. On a router that only
-  allows permanent leases, a normal close while hosting leaves a permanent
-  forward on the router until it reboots — the lease does not expire on its
-  own there, unlike the finite-lease case. A crash or kill (skipping
-  `release_and_free()` outright) leaves at most a 1h forward otherwise. A
-  hostile device on the LAN can stall SSDP discovery indefinitely; this is
-  LAN-only exposure, and the quit wait still bounds it.
+  The in-app QUIT button (`ui/menus/main_menu.gd`) routes through
+  `GameState.request_quit()`, which raises the same
+  `NOTIFICATION_WM_CLOSE_REQUEST` a real window-close does (backlog item 2) —
+  a live worker defers it exactly as for a real close, instead of bypassing
+  the deferral entirely. On a router that only allows permanent leases,
+  `_start_close_time_removal()` removes that lease for real before quitting
+  (backlog item 3), on the same bounded wait as a live discovery worker,
+  instead of leaving a permanent forward on the router until it reboots —
+  from `_notification()` when the lease is already held, or from
+  `_finish()`/`_finish_renewal()` (re-arming the wait) when the result
+  consumed during the close wait is what lands it. It is skipped once a
+  discovery this session already came back `no_igd`, so a hostile LAN
+  cannot force an extra ~3s exit delay through it. A crash or
+  kill (skipping `release_and_free()` and the close-request path outright)
+  still leaves at most a 1h forward for a finite lease, or a permanent one
+  until the router reboots. A hostile device on the LAN can stall SSDP
+  discovery indefinitely; this is LAN-only exposure, and the quit wait still
+  bounds it.
 - **Join code** (`net/join_code.gd`, `NetJoinCode`): packs 4 IPv4 octets + a
   16-bit port into 48 payload bits plus a 2-bit checksum (50 bits, zero
   padding), rendered as exactly 10 Crockford base32 characters. Decoding

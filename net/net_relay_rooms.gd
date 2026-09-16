@@ -25,6 +25,12 @@ var _partners: Dictionary[String, String] = {}
 var _rooms: Dictionary[String, String] = {}
 var _pending_since: Dictionary[String, float] = {}
 var _peer_seen: Dictionary[String, float] = {}
+## Peer keys `_evict_oldest_pending()` has dropped since the last
+## `take_evicted()` call (review YELLOW): eviction cleans this table's own
+## bookkeeping via `remove()`, after which the peer never shows up in
+## `expire()`'s returned stale list — so without this, NetRelayServer's
+## PacketPeerUDP for it leaked in `_peers` forever.
+var _evicted: Array[String] = []
 
 
 ## Registers `peer_key` (e.g. "ip:port") under `room_code` at time `now`.
@@ -64,11 +70,13 @@ func touch(peer_key: String, now: float) -> void:
 
 
 ## Drops a peer (disconnect/timeout), clearing its pairing and any pending
-## room slot it was occupying.
-func remove(peer_key: String) -> void:
+## room slot it was occupying. If the peer had a live partner, that partner
+## is re-announced under the same room code on its behalf (see
+## `_requeue_partner()`) instead of being left a permanent orphan (review
+## finding 3). The departed peer's own bookkeeping is cleared first, so the
+## pending-cap eviction that requeue may trigger never sees it.
+func remove(peer_key: String, now: float = 0.0) -> void:
 	var partner: String = _partners.get(peer_key, "")
-	if partner != "":
-		_partners.erase(partner)
 	_partners.erase(peer_key)
 	var room: String = _rooms.get(peer_key, "")
 	if room != "" and _pending.get(room, "") == peer_key:
@@ -76,6 +84,28 @@ func remove(peer_key: String) -> void:
 		_pending_since.erase(room)
 	_rooms.erase(peer_key)
 	_peer_seen.erase(peer_key)
+	if partner != "":
+		_partners.erase(partner)
+		_requeue_partner(partner, now)
+
+
+## Re-announces an abandoned partner under its own room code exactly as if
+## it had sent a fresh HELLO, so it is never dropped from the tables: with
+## the slot free it becomes that room's pending peer (through
+## `_evict_oldest_pending()`, so MAX_PENDING_ROOMS still holds); with some
+## other peer already waiting there (review YELLOW: a third peer, e.g. the
+## host reconnecting from a new port, announced the same code before this
+## departure) the two pair up, which is what any announce of a shared code
+## means. Re-entrancy: eviction calls `remove()` on a *pending* peer, which
+## by construction has no partner, so it can never recurse back in here.
+## The pending clock is seeded from the partner's own last-seen time rather
+## than `now`, so a peer already idle for a while does not get a whole fresh
+## ROOM_IDLE_SECONDS just because its partner happened to disconnect.
+func _requeue_partner(partner: String, now: float) -> void:
+	var room: String = _rooms.get(partner, "")
+	if room == "":
+		return
+	announce(room, partner, float(_peer_seen.get(partner, now)))
 
 
 ## Drops every peer silent past PEER_IDLE_SECONDS and every half-open room
@@ -92,7 +122,7 @@ func expire(now: float) -> Array[String]:
 			if waiting != "" and not stale.has(waiting):
 				stale.append(waiting)
 	for peer_key: String in stale:
-		remove(peer_key)
+		remove(peer_key, now)
 	return stale
 
 
@@ -101,6 +131,17 @@ func pending_count() -> int:
 	return _pending.size()
 
 
+## Returns and clears the peer keys `_evict_oldest_pending()` has dropped
+## since the last call, so the caller can close their sockets the same way
+## it already does for `expire()`'s own stale list.
+func take_evicted() -> Array[String]:
+	var evicted: Array[String] = _evicted
+	_evicted = []
+	return evicted
+
+
+## Drops the oldest half-open room once the pending table is full, recording
+## its peer in `_evicted` for `take_evicted()`.
 func _evict_oldest_pending() -> void:
 	if _pending.size() < MAX_PENDING_ROOMS:
 		return
@@ -112,6 +153,9 @@ func _evict_oldest_pending() -> void:
 			oldest_room = room_code
 	if oldest_room == "":
 		return
-	remove(_pending.get(oldest_room, ""))
+	var evicted_key: String = String(_pending.get(oldest_room, ""))
+	remove(evicted_key)
 	_pending.erase(oldest_room)
 	_pending_since.erase(oldest_room)
+	if evicted_key != "":
+		_evicted.append(evicted_key)

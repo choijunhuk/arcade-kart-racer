@@ -26,14 +26,11 @@ const RENEW_MARGIN_SECONDS: float = 300.0
 
 ## Mutable box a worker thread's bound Callable writes into, instead of
 ## calling back into this node directly (finding 1: a freed node dropped
-## mid-`call_deferred` was a crash). A `RefCounted` box has no lifecycle
-## tied to this node: a freed node just drops its `_box` reference.
-##
-## `done` alone does not make `result` safe to read cross-thread (review
-## item 7) — a plain, unsynchronised bool. `_process()` trusts `result`
-## only once `Thread.is_alive()` (engine-synchronised) confirms the worker
-## returned; `done` remains a test seam for a finished result with no real
-## `Thread` — see `_thread` below.
+## mid-`call_deferred` was a crash) — a `RefCounted` box has no lifecycle
+## tied to this node. `done` alone is not safe to read cross-thread (review
+## item 7): `_process()` trusts `result` only once `Thread.is_alive()` (engine-
+## synchronised) confirms the worker returned; `done` doubles as a test seam
+## for a finished result with no real `Thread` — see `_thread` below.
 class ResultBox extends RefCounted:
 	var done: bool = false
 	var result: Dictionary = {}
@@ -45,19 +42,25 @@ var _box: ResultBox
 var _mapped_port: int = -1
 ## `NetUpnp._now()` timestamp the current mapping's lease expires at; -1.0
 ## while no mapping is held, or (review finding 2) it is a permanent lease
-## that never expires and so is never renewed — `is_renewal_due()` already
-## treats any negative value as "nothing to renew".
+## that never expires — `is_renewal_due()` treats any negative as "nothing to renew".
 var _lease_expires_at: float = -1.0
+## `result["permanent"]` of the mapping currently held (review YELLOW):
+## explicit, rather than inferred from `_lease_expires_at < 0.0`, which is
+## also what "no mapping held" reads as. Only a permanent lease is removed
+## for real at close time (`_start_close_time_removal()`).
+var _lease_permanent: bool = false
+## Set once any discovery this session came back `no_igd` (review YELLOW):
+## the close-time removal is then skipped, so a hostile LAN that answers
+## SSDP only sometimes cannot buy itself an extra ~3s exit delay.
+var _igd_discovery_failed: bool = false
 ## Renewal retry back-off (finding 1) — see `NetUpnpRenewalBackoff`.
 var _renewal_backoff: NetUpnpRenewalBackoff = NetUpnpRenewalBackoff.new()
 ## Set when release_and_free() arrives while a worker thread is still
-## running: the poller frees the node once its result lands instead of
-## touching state out from under it.
+## running: the poller frees the node once its result lands, instead.
 var _release_pending: bool = false
 ## Set once the OS sends a close request: the app is shutting down, not a
-## normal in-session exit. Explicit via `_notification()` (finding 3)
-## instead of inferred from tree-exiting order, which could read either
-## way. Tests set it directly.
+## normal in-session exit. Explicit via `_notification()` (finding 3), not
+## inferred from tree-exiting order, which could read either way.
 var _quitting: bool = false
 ## Bounds a delayed OS-close quit (see `_notification()`) on a live worker —
 ## see `NetUpnpQuitWaiter`'s own doc comment.
@@ -75,13 +78,40 @@ func _ready() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		_quitting = true
-		if _box != null and not _box.done:
-			# A worker is still discovering/mapping (finding 4): veto the
-			# automatic quit; `_process()` fires it once the worker reports
-			# back or the bounded margin elapses (see `_exit_tree()`).
+		if _box != null:
+			# A worker is still discovering/mapping (finding 4), or has
+			# finished but its result is not consumed yet (review YELLOW —
+			# that result may itself land a permanent lease): veto the
+			# automatic quit; `_process()` consumes the box, `_finish()` /
+			# `_finish_renewal()` start the close-time removal if one is
+			# needed, and the waiter fires once nothing is left running or
+			# the bounded margin elapses (see `_exit_tree()`).
 			get_tree().auto_accept_quit = false
 			if not _quit_waiter.is_armed(): # Only arm once (item 1).
 				_quit_waiter.arm(_now(), float(TIMEOUT_MS) / 1000.0, float(QUIT_WAIT_MARGIN_MS) / 1000.0)
+		else:
+			_start_close_time_removal()
+
+
+## Backlog item 3: a still-held PERMANENT lease never expires on its own
+## (unlike a finite one, left alone here), so closing normally would abandon
+## it on the router forever — remove it for real before quitting, on the
+## same bounded wait as a live worker. Re-arms the waiter (fresh deadline)
+## when a result consumed *during* the close wait is what landed the lease.
+## Skipped once this session's discovery already failed (`no_igd`) — the
+## removal's own discovery would only burn the timeout again. Returns true
+## when a removal worker was started; it frees this node itself when done.
+func _start_close_time_removal() -> bool:
+	var port: int = _quit_waiter.permanent_mapping_port_to_remove_on_close(_mapped_port, _lease_permanent)
+	if port < 0 or _igd_discovery_failed:
+		return false
+	_mapped_port = -1
+	_lease_permanent = false
+	_lease_expires_at = -1.0
+	get_tree().auto_accept_quit = false
+	_quit_waiter.arm(_now(), float(TIMEOUT_MS) / 1000.0, float(QUIT_WAIT_MARGIN_MS) / 1000.0)
+	_start_worker(_worker_callable("_run_removal"), port)
+	return true
 
 
 ## Starts discovery + port mapping for `port` on a worker thread. Gated on
@@ -100,18 +130,16 @@ func map_port(port: int) -> void:
 ## onto the persistent GameState owner first, and the removal is fire-and-
 ## forget, reporting only a log line.
 ##
-## `NetSession.tree_exiting` (this method's caller) also fires during full
-## app teardown, where `_quitting` is set (finding 3) — starting a removal
-## worker there would only get detached rather than joined by
-## `_exit_tree()`, so teardown skips the round trip and just frees, leaving
-## the mapping: a finite lease expires on its own, a permanent one does not
-## (item 6). `_warn_abandoned_mapping()` still names the port for an operator.
+## `NetSession.tree_exiting` (this method's caller) also fires during app
+## teardown, where `_quitting` is set (finding 3): starting a worker here
+## would only get detached, not joined, so teardown just frees instead — a
+## FINITE lease is left to expire on its own; a PERMANENT one was already
+## removed by `_notification()` (backlog item 3), which clears `_mapped_port`
+## before teardown ever reaches here.
 func release_and_free() -> void:
-	# `_box != null`, not `_thread.is_alive()` (review finding 3, see
-	# `map_port()`'s own doc comment): a worker that already returned but
-	# whose result isn't consumed yet must still defer here, or a mapping
-	# the router just created could be abandoned before `_mapped_port`
-	# reflects it.
+	# `_box != null`, not `_thread.is_alive()` (finding 3, see map_port()'s
+	# doc comment): a worker that already returned but whose result isn't
+	# consumed yet must still defer, or a fresh mapping could be abandoned.
 	if _box != null:
 		_release_pending = true
 		return
@@ -124,6 +152,7 @@ func release_and_free() -> void:
 		return
 	var port: int = _mapped_port
 	_mapped_port = -1
+	_lease_permanent = false
 	_lease_expires_at = -1.0
 	if get_parent() != GameState:
 		if get_parent() != null:
@@ -133,9 +162,8 @@ func release_and_free() -> void:
 
 
 ## A script-bound Callable (never object-bound — see `ResultBox` above) for
-## the named static worker, resolved against this instance's actual script
-## so a test double's override (e.g. `FakeRemovalUpnp`) still runs instead
-## of the real network call.
+## the named static worker, resolved against this instance's actual script so
+## a test double's override (e.g. `FakeRemovalUpnp`) runs instead of the real call.
 func _worker_callable(method: StringName) -> Callable:
 	return Callable(get_script() as GDScript, method)
 
@@ -163,8 +191,7 @@ func _finish_removal(port: int, removed: bool) -> void:
 
 
 ## Joins the worker thread (if any) and frees this node exactly once. Only
-## ever called once `_process` has already observed `_box.done`, so the
-## worker has already returned and this join is a formality, never a wait.
+## called once `_process` has observed `_box.done`, so the join is a formality.
 func _free_thread_and_self() -> void:
 	if _thread != null:
 		_thread.wait_to_finish()
@@ -172,9 +199,8 @@ func _free_thread_and_self() -> void:
 	queue_free()
 
 
-## Logs that a live mapping is left on the router (finding 3): a finite
-## lease still expires there on its own, a permanent one does not (item 6) —
-## either way, a headless operator should see which port was abandoned.
+## Logs a mapping left on the router without removal (finding 3) — a finite
+## lease still expires there on its own; a headless operator should see the port either way.
 func _warn_abandoned_mapping() -> void:
 	if _mapped_port >= 0:
 		push_warning("UPnP mapping for port %d abandoned on quit" % _mapped_port)
@@ -229,65 +255,14 @@ static func _attempt_mapping(port: int, lease_seconds: int) -> Dictionary:
 	return {"status": "mapped", "external_ip": external_ip, "port": port, "permanent": permanent}
 
 
-## Human-readable status line for anything other than a successful reachable
-## mapping. Distinguishes "mapped but not internet-reachable" (CGNAT/double-
-## NAT) from a genuine failure. `external_ip` on "mapped_unreachable" is raw
-## SSDP LAN text — never echoed unless it parses as a dotted-quad IPv4.
+## Pure address helpers live in `NetUpnpAddress` (400-line rule); these
+## wrappers keep the public `NetUpnp.*` names every caller and test uses.
 static func status_message(result: Dictionary, port: int) -> String:
-	if String(result.get("status", "")) == "mapped_unreachable":
-		var external_ip: String = String(result.get("external_ip", ""))
-		var reported: String = external_ip if not _parse_ipv4_octets(external_ip).is_empty() else "the address your router reported"
-		return (
-			"UPnP mapped, but %s is not internet-reachable (likely CGNAT/double-NAT) — use the relay above or forward UDP port %d on your router manually."
-			% [reported, port]
-		)
-	return "UPnP unavailable — forward UDP port %d manually." % port
+	return NetUpnpAddress.status_message(result, port)
 
 
-## Parses `ip` as four 0-255 octets, or empty if not a well-formed dotted-
-## quad — malformed/untrusted input fails closed for every caller.
-static func _parse_ipv4_octets(ip: String) -> Array[int]:
-	var parts: PackedStringArray = ip.split(".")
-	if parts.size() != 4:
-		return []
-	var octets: Array[int] = []
-	for part: String in parts:
-		if not part.is_valid_int():
-			return []
-		var value: int = int(part)
-		if value < 0 or value > 255:
-			return []
-		octets.append(value)
-	return octets
-
-
-## True when `ip` is a routable, internet-reachable IPv4 address. False for
-## every private/CGNAT/link-local/loopback/reserved range an IGD can hand
-## back as its own "external" address: 0.0.0.0/8 (down/misconfigured WAN),
-## 10/8, 172.16/12, 192.168/16, 100.64/10 (CGNAT), 169.254/16 (link-local),
-## 127/8 (loopback), and 224/4 + 240/4 (multicast/reserved, includes
-## 255.255.255.255). Malformed input fails closed (not reachable).
 static func is_internet_reachable_address(ip: String) -> bool:
-	var octets: Array[int] = _parse_ipv4_octets(ip)
-	if octets.is_empty():
-		return false
-	if octets[0] == 0:
-		return false
-	if octets[0] == 10:
-		return false
-	if octets[0] == 172 and octets[1] >= 16 and octets[1] <= 31:
-		return false
-	if octets[0] == 192 and octets[1] == 168:
-		return false
-	if octets[0] == 100 and octets[1] >= 64 and octets[1] <= 127:
-		return false
-	if octets[0] == 169 and octets[1] == 254:
-		return false
-	if octets[0] == 127:
-		return false
-	if octets[0] >= 224:
-		return false
-	return true
+	return NetUpnpAddress.is_internet_reachable_address(ip)
 
 
 ## True once `now` has reached the renewal window before `expires_at`: this
@@ -304,18 +279,21 @@ static func _now() -> float:
 
 
 func _process(_delta: float) -> void:
-	# Bounded quit-wait (finding 4); `box_ready` is snapshotted once and
-	# reused below for both the poll and consume decision (item 1 race fix).
+	# Bounded quit-wait (finding 4): polled AFTER a finished box is consumed,
+	# so a result that itself starts the close-time removal (a permanent
+	# lease landing while `_quitting` — review YELLOW) re-arms the wait for
+	# that worker instead of quitting out from under it; `worker_done` is
+	# then "nothing is running any more", still exactly once per consume.
 	if _box != null:
 		var thread_alive: bool = _thread != null and _thread.is_alive()
-		var box_ready: bool = not thread_alive and _box.done
-		_quit_waiter.poll(_now(), box_ready, get_tree())
-		if not box_ready:
+		if thread_alive or not _box.done:
+			_quit_waiter.poll(_now(), false, get_tree())
 			return
 		var box: ResultBox = _box
 		_box = null
 		_free_finished_thread()
 		_handle_result(box.result)
+		_quit_waiter.poll(_now(), _box == null, get_tree())
 		return
 	_quit_waiter.poll(_now(), false, get_tree())
 	_maybe_start_renewal(_now())
@@ -352,9 +330,13 @@ func _handle_result(result: Dictionary) -> void:
 
 
 func _finish(result: Dictionary) -> void:
-	if String(result.get("status", "")).begins_with("mapped"):
+	var status: String = String(result.get("status", ""))
+	if status == "no_igd":
+		_igd_discovery_failed = true
+	if status.begins_with("mapped"):
 		_mapped_port = int(result.get("port", -1))
-		if bool(result.get("permanent", false)):
+		_lease_permanent = bool(result.get("permanent", false))
+		if _lease_permanent:
 			# A permanent lease (review finding 2) never expires on its own,
 			# so it is never due for renewal either — `is_renewal_due()`
 			# already treats a negative `_lease_expires_at` as "nothing to
@@ -362,6 +344,8 @@ func _finish(result: Dictionary) -> void:
 			_lease_expires_at = -1.0
 		else:
 			_lease_expires_at = _now() + float(LEASE_DURATION_SECONDS)
+	if _quitting and _start_close_time_removal():
+		return # The removal worker frees this node; the UI is gone anyway.
 	if _release_pending:
 		# Caller left the lobby while discovery was running: drop the mapping
 		# we just created (if any) and free, instead of emitting into a dead UI.
@@ -372,15 +356,21 @@ func _finish(result: Dictionary) -> void:
 
 
 func _finish_renewal(result: Dictionary) -> void:
-	if String(result.get("status", "")).begins_with("mapped"):
-		if bool(result.get("permanent", false)):
+	var status: String = String(result.get("status", ""))
+	if status == "no_igd":
+		_igd_discovery_failed = true
+	if status.begins_with("mapped"):
+		_lease_permanent = bool(result.get("permanent", false))
+		if _lease_permanent:
 			# Fell back to a permanent lease (item 3): never renews again.
 			_lease_expires_at = -1.0
 		else:
 			_lease_expires_at = _now() + float(LEASE_DURATION_SECONDS)
 		_renewal_backoff.on_success()
 	else: # Back off instead of retrying every tick (finding 1); warns once (item 6).
-		_renewal_backoff.on_failure_warn_once(_now(), "UPnP lease renewal failed for port %d (status=%s); backing off" % [_mapped_port, String(result.get("status", ""))])
+		_renewal_backoff.on_failure_warn_once(_now(), "UPnP lease renewal failed for port %d (status=%s); backing off" % [_mapped_port, status])
+	if _quitting and _start_close_time_removal():
+		return
 	if _release_pending:
 		_release_pending = false
 		release_and_free()

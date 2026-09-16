@@ -114,6 +114,16 @@ func _receive_input_frame(sender: int, data: Dictionary) -> void:
 	for key: String in ["drift", "drift_pressed", "item", "look_back"]:
 		if not data.get(key) is bool:
 			return
+	# Review finding 1: a single client corrupting the whole server-run
+	# simulation with NaN/Inf, or an out-of-range value NetInputBuffer.insert()
+	# would otherwise silently clamp, is rejected outright here instead.
+	var throttle: float = float(data["throttle"])
+	var brake: float = float(data["brake"])
+	var steer: float = float(data["steer"])
+	if not is_finite(throttle) or not is_finite(brake) or not is_finite(steer):
+		return
+	if throttle < 0.0 or throttle > 1.0 or brake < 0.0 or brake > 1.0 or steer < -1.0 or steer > 1.0:
+		return
 	var frame: InputFrame = InputFrame.from_dict(data)
 	for index: int in range(session.players.size()):
 		if int(session.players[index]["peer"]) == sender:
@@ -204,6 +214,8 @@ func _assemble_chunk(snapshot: RaceSnapshot) -> RaceSnapshot:
 	if snapshot.chunk_count <= 1:
 		return snapshot
 	var entry: Dictionary = _chunk_assemblies.get(snapshot.tick, {"chunks": {}, "count": snapshot.chunk_count})
+	if int(entry["count"]) != snapshot.chunk_count:
+		return null # Review finding 2: a chunk whose count disagrees with this tick's in-progress assembly is dropped, never counted toward it.
 	(entry["chunks"] as Dictionary)[snapshot.chunk_index] = snapshot
 	_chunk_assemblies[snapshot.tick] = entry
 	for stale_tick: int in _chunk_assemblies.keys():
@@ -216,6 +228,8 @@ func _assemble_chunk(snapshot: RaceSnapshot) -> RaceSnapshot:
 	return _merge_chunks(chunks, int(entry["count"]))
 
 static func _merge_chunks(chunks: Dictionary, count: int) -> RaceSnapshot:
+	if not chunks.has(0):
+		return null # Review finding 2: chunk 0 carries the shared tick/state fields every merge needs.
 	var first: RaceSnapshot = chunks[0]
 	var merged: RaceSnapshot = RaceSnapshot.new()
 	merged.tick = first.tick

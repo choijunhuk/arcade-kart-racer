@@ -27,6 +27,31 @@ func deliver(method: StringName, target: int, args: Array, reliable: bool) -> vo
 		_session.rpc_id.callv([target, method] + args)
 
 
+## Rate-limit cost for one `_receive_input` batch (review RED-2): only frames
+## newer than `sender`'s last-charged tick count, so a routine resend after
+## packet loss is free instead of costing the same token a genuinely new
+## tick would — otherwise a legitimate client sending up to
+## `INPUT_BATCH_TICKS` ticks per call at `TICK_RATE` would burn tokens far
+## faster than any sane bucket refills. Advances that watermark to the
+## batch's own highest tick regardless of outcome (so a later resend of the
+## same ticks is free even if this call is itself rejected), capped to at
+## most `frames.size()` past the previous watermark so one fabricated
+## far-future tick can never permanently disable this sender's own limiting.
+func input_batch_cost(sender: int, frames: Array) -> float:
+	var last: int = _session._input_last_tick.get(sender, 0)
+	var highest: int = last
+	var new_count: int = 0
+	for frame: Variant in frames:
+		if frame is Dictionary and (frame as Dictionary).get("tick") is int:
+			var tick: int = int((frame as Dictionary)["tick"])
+			if tick > last:
+				new_count += 1
+			if tick > highest:
+				highest = tick
+	_session._input_last_tick[sender] = mini(highest, last + frames.size())
+	return float(new_count)
+
+
 ## Drains deferred kicks and rejects peers whose handshake deadline elapsed.
 ## Kicks are always a reject/handshake-timeout outcome (never a normal leave),
 ## so they force the disconnect rather than waiting on the peer's own ack —

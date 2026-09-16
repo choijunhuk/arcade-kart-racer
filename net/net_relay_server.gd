@@ -50,8 +50,15 @@ func _process(_delta: float) -> void:
 
 ## Releases the sockets of peers the pairing table has timed out, so a HELLO
 ## flood cannot grow the relay's socket/room tables without bound (spec item 4).
+## Expiry can requeue an abandoned partner, which can in turn evict the
+## oldest pending peer (review YELLOW) — its socket goes too.
 func _sweep(now: float) -> void:
-	for key: String in _rooms.expire(now):
+	_close_peers(_rooms.expire(now))
+	_close_peers(_rooms.take_evicted())
+
+
+func _close_peers(keys: Array[String]) -> void:
+	for key: String in keys:
 		if _peers.has(key):
 			(_peers[key] as PacketPeerUDP).close()
 			_peers.erase(key)
@@ -78,6 +85,14 @@ func _handle_first_packet(connection: PacketPeerUDP, now: float) -> void:
 	var key: String = "%s:%d" % [connection.get_packet_ip(), connection.get_packet_port()]
 	_peers[key] = connection
 	var partner_key: String = _rooms.announce(room_code, key, now)
+	# A fresh HELLO past MAX_PENDING_ROOMS evicts the oldest half-open room
+	# (review YELLOW): close that peer's socket too, or it leaks in `_peers`.
+	# Never the announcer's own socket, though — a peer re-announcing a new
+	# code while its old slot was the oldest is evicted from the table and
+	# re-inserted under the new code in the same call, and still needs it.
+	var evicted: Array[String] = _rooms.take_evicted()
+	evicted.erase(key)
+	_close_peers(evicted)
 	if partner_key != "":
 		print("RELAY_STATE paired=true room=%s" % room_code)
 

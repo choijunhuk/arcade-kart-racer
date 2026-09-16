@@ -163,6 +163,27 @@ func test_batch_recovers_missing_edge_without_replaying_it_on_duplicate() -> voi
 	assert_false(buffer.consume(3).item)
 	assert_false(buffer.consume(4).drift_pressed)
 
+func _row(overrides: Dictionary) -> Dictionary:
+	var base: Dictionary = {"tick": 1, "throttle": 0.0, "brake": 0.0, "steer": 0.0,
+		"drift": false, "drift_pressed": false, "item": false, "look_back": false}
+	for key: String in overrides:
+		base[key] = overrides[key]
+	return base
+
+## Review finding 1: a single client's NaN/Inf/out-of-range throttle/brake/
+## steer must never reach the server-run simulation for every kart — rejected
+## outright at NetRace._receive_input_frame, not merely clamped downstream.
+func test_receive_input_frame_rejects_non_finite_and_out_of_range_values_but_accepts_normal() -> void:
+	var buffer: NetInputBuffer = _manager.network.get("_buffers")[1]
+	for bad_row: Dictionary in [
+		_row({"throttle": NAN}), _row({"throttle": INF}), _row({"brake": -INF}),
+		_row({"throttle": 1.5}), _row({"brake": -0.1}), _row({"steer": 1.1}), _row({"steer": -1.1}),
+	]:
+		_manager.network.receive_input(2, {"frames": [bad_row]})
+	assert_eq(buffer.last_received_tick, 0, "every malformed/out-of-range frame above must be rejected outright")
+	_manager.network.receive_input(2, {"frames": [_row({"throttle": 0.5, "steer": -1.0})]})
+	assert_eq(buffer.consume(1).throttle, 0.5, "a normal in-range frame must still pass")
+
 func test_malformed_or_oversized_batches_and_unknown_senders_do_not_drive() -> void:
 	var frame: InputFrame = InputFrame.new()
 	frame.tick = 1

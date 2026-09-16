@@ -15,16 +15,20 @@ func _init(bucket_capacity: float = 90.0, per_second: float = 75.0) -> void:
 	refill_per_second = per_second
 
 
-## Returns true and consumes one token if `key` may act at time `now`;
-## otherwise returns false without consuming anything.
-func allow(key: int, now: float) -> bool:
+## Returns true and consumes `cost` tokens if `key` may act at time `now`;
+## otherwise returns false without consuming anything. `cost` defaults to 1
+## (one call = one token); a caller whose single RPC does proportionally more
+## work — e.g. an input batch carrying several ticks in one packet — should
+## charge its real size instead, so a full batch cannot cost the same single
+## token a lone frame would (review finding 5).
+func allow(key: int, now: float, cost: float = 1.0) -> bool:
 	var last: float = _last_seen.get(key, now)
 	var tokens: float = minf(capacity, float(_tokens.get(key, capacity)) + maxf(0.0, now - last) * refill_per_second)
 	_last_seen[key] = now
-	if tokens < 1.0:
+	if tokens < cost:
 		_tokens[key] = tokens
 		return false
-	_tokens[key] = tokens - 1.0
+	_tokens[key] = tokens - cost
 	return true
 
 

@@ -63,7 +63,7 @@ func _on_skip_tutorial_pressed() -> void:
 
 
 func _quit_game() -> void:
-	get_tree().quit()
+	GameState.request_quit() # Spec item 2: lets NetUpnp veto for a live worker/permanent-lease removal, instead of quitting outright.
 
 
 ## Showcases the first cataloged kart, slowly orbiting behind the panel.

@@ -129,6 +129,25 @@ func admit_peer(id: int) -> void:
 		broadcast_lobby()
 
 
+## `_handshake`'s full body (400-line budget on net_session.gd, same pattern
+## as admit_peer/reject_peer above). Consumes the peer's one-time challenge
+## nonce (spec item 6) before validating anything else, so a resend — or a
+## replay of an earlier response — can never be checked against a live nonce
+## twice; an empty nonce (none issued yet, or already consumed) is dropped
+## silently, neither admitting nor rejecting the peer.
+func process_handshake(id: int, client_version: String, password_attempt: String) -> void:
+	var nonce: String = _session._gate.take_nonce(id)
+	if nonce.is_empty():
+		return
+	var expected_version: String = String(ProjectSettings.get_setting("application/config/version", ""))
+	var expected: String = NetHandshake.response(nonce, _session.password_hash)
+	var reason: String = NetHandshake.reject_reason(client_version, expected_version, password_attempt, expected)
+	if not reason.is_empty():
+		reject_peer(id, reason)
+	elif _session._gate.verify(id):
+		admit_peer(id)
+
+
 ## Sends the reason first, then defers the disconnect via KICK_GRACE_SECONDS
 ## (spec item 1); a no-op once queued so a resend can't delay it. Moved from
 ## `NetSession._reject_peer` for the same 400-line-budget reason as
@@ -141,6 +160,7 @@ func reject_peer(id: int, message: String) -> void:
 	_session._deliver_reject(id, message)
 	remove(id)
 	_session._input_limiter.remove(id)
+	_session._input_last_tick.erase(id)
 	_session._selection_limiter.remove(id)
 	_session._ping_limiter.remove(id)
 	_session._loss.remove(id)
@@ -293,11 +313,17 @@ func set_race_options(new_laps: int, new_ai_count: int, new_track_id: String, ne
 ## joiner's post-replace roster is what gets evaluated, never a stale
 ## pre-replace count that could let `slots + ai_count` exceed
 ## `RaceSnapshot.MAX_KARTS` and desync that peer for the whole race.
+## Also normalizes track/difficulty (backlog item 4): an id absent from
+## `NetContentCatalog` (a stale build's track, or a hostile payload) falls
+## back to the same default `resolve_track()`/`resolve_difficulty()` already
+## use when building the actual `RaceConfig` — so the id this call stores (and
+## re-broadcasts) always names the content that will really be raced on,
+## identically on host and client since both run this one function.
 func apply_race_settings(new_laps: int, new_ai_count: int, new_track_id: String, new_difficulty_id: String) -> void:
 	_session.laps = clampi(new_laps, 1, 9)
 	_session.ai_count = clampi(new_ai_count, 0, maxi(0, RaceSnapshot.MAX_KARTS - _session.players.size()))
-	_session.track_id = new_track_id
-	_session.difficulty_id = new_difficulty_id
+	_session.track_id = String(NetContentCatalog.resolve_track(new_track_id).id)
+	_session.difficulty_id = String(NetContentCatalog.resolve_difficulty(new_difficulty_id).id)
 
 
 ## `_lobby`'s full body: replaces the roster and applies the host's fields.

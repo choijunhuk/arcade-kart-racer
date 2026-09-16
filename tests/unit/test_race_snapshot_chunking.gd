@@ -81,3 +81,49 @@ func test_pack_chunked_returns_one_chunk_for_a_small_snapshot() -> void:
 		assert_eq(unpacked.chunk_count, 1)
 		assert_eq(unpacked.chunk_index, 0)
 		assert_eq(unpacked.karts.size(), 1)
+
+## Review finding 2: `_merge_chunks` used to index `chunks[0]` unconditionally
+## — a hostile/buggy sender that never delivers chunk 0 (every other chunk
+## carries only kart/projectile rows; the shared tick/state fields live only
+## on chunk 0) must be dropped instead of erroring.
+func test_merge_chunks_returns_null_when_chunk_zero_is_missing() -> void:
+	var chunk1: RaceSnapshot = RaceSnapshot.new()
+	chunk1.tick = 5
+	assert_null(NetRace._merge_chunks({1: chunk1}, 2))
+
+## Review finding 2: `_assemble_chunk` tracked only how many chunks had
+## arrived for a tick, not whether they agreed on `chunk_count` — a chunk
+## from a different count "generation" reaching `chunks.size() >= count` used
+## to misjudge the assembly complete with a corrupt mix. A disagreeing chunk
+## must be dropped (the assembly stays pending, exactly like packet loss),
+## and the real matching chunks must still merge normally once all arrive.
+func test_assemble_chunk_drops_a_count_mismatch_then_assembles_normally() -> void:
+	var race: NetRace = NetRace.new()
+	autofree(race)
+	var first: RaceSnapshot = RaceSnapshot.new()
+	first.tick = 7
+	first.chunk_index = 0
+	first.chunk_count = 3
+	first.karts.append({"slot": 0})
+	assert_null(race._assemble_chunk(first), "still waiting on the other 2 chunks")
+	var mismatched: RaceSnapshot = RaceSnapshot.new()
+	mismatched.tick = 7
+	mismatched.chunk_index = 1
+	mismatched.chunk_count = 2 # Disagrees with the count == 3 the first chunk established.
+	mismatched.karts.append({"slot": 1})
+	assert_null(race._assemble_chunk(mismatched), "a chunk whose count disagrees with the tracked assembly must be dropped")
+	var second: RaceSnapshot = RaceSnapshot.new()
+	second.tick = 7
+	second.chunk_index = 1
+	second.chunk_count = 3
+	second.karts.append({"slot": 1})
+	assert_null(race._assemble_chunk(second), "still waiting on chunk 2")
+	var third: RaceSnapshot = RaceSnapshot.new()
+	third.tick = 7
+	third.chunk_index = 2
+	third.chunk_count = 3
+	third.karts.append({"slot": 2})
+	var merged: RaceSnapshot = race._assemble_chunk(third)
+	assert_not_null(merged, "the real chunks 0/1/2 must still assemble once all three arrive")
+	if merged != null:
+		assert_eq(merged.karts.size(), 3)
