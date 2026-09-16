@@ -99,6 +99,7 @@ func test_merge_chunks_returns_null_when_chunk_zero_is_missing() -> void:
 ## and the real matching chunks must still merge normally once all arrive.
 func test_assemble_chunk_drops_a_count_mismatch_then_assembles_normally() -> void:
 	var race: NetRace = NetRace.new()
+	autofree(race)
 	var first: RaceSnapshot = RaceSnapshot.new()
 	first.tick = 7
 	first.chunk_index = 0
