@@ -27,6 +27,7 @@ func _run() -> void:
 		return
 	var laps: Array = []
 	var files_read: int = 0
+	var corrupt_files: int = 0
 	dir.list_dir_begin()
 	var entry: String = dir.get_next()
 	while entry != "":
@@ -35,17 +36,20 @@ func _run() -> void:
 			if value is Dictionary and value.get("laps") is Array:
 				laps.append_array(value["laps"])
 				files_read += 1
+			else:
+				corrupt_files += 1
+				push_warning("Skipping unreadable telemetry file: %s" % entry)
 		entry = dir.get_next()
 	dir.list_dir_end()
 	if laps.is_empty():
-		print("No telemetry laps found in %s (%d files read)." % [directory, files_read])
+		print("No telemetry laps found in %s (%d files read, corrupt_files=%d)." % [directory, files_read, corrupt_files])
 		quit(0)
 		return
-	_print_summary(laps, files_read)
+	_print_summary(laps, files_read, corrupt_files)
 	quit(0)
 
 
-func _print_summary(laps: Array, files_read: int) -> void:
+func _print_summary(laps: Array, files_read: int, corrupt_files: int) -> void:
 	var tier_counts: Dictionary = {"0": 0, "1": 0, "2": 0, "3": 0}
 	var recovery_seconds: Array[float] = []
 	var wall_impacts_total: int = 0
@@ -62,7 +66,7 @@ func _print_summary(laps: Array, files_read: int) -> void:
 	var total_releases: int = 0
 	for key: String in TIER_KEYS:
 		total_releases += int(tier_counts[key])
-	print("Telemetry summary: %d files, %d laps" % [files_read, laps.size()])
+	print("Telemetry summary: %d files, %d laps, corrupt_files=%d" % [files_read, laps.size(), corrupt_files])
 	print("Drift release tiers:")
 	for key: String in TIER_KEYS:
 		var count: int = int(tier_counts[key])
