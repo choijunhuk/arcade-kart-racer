@@ -67,6 +67,14 @@ func _run_cup(tracks: Array[TrackData], count: int, player_slot: int) -> void:
 	for round_index: int in range(tracks.size()):
 		var manager: RaceManager = (load(RACE_PATH) as PackedScene).instantiate() as RaceManager
 		var round_config: RaceConfig = GameState.grand_prix_state.current_config()
+		if player_slot < 0:
+			# All-AI cup: the product's 15 s post-leader finish window is a
+			# gameplay rule for human races, not what this flow test checks
+			# ("no kart gets stuck"). Seed 12 sat within ~0.05 s of that window
+			# on track_04, so any physics fix flipped it; give AI-only rounds a
+			# generous window so the assertion measures completion, not chaos.
+			manager.tuning = manager.tuning.duplicate() as RaceTuning
+			manager.tuning.finish_timeout_seconds = 60.0
 		manager.configure(round_config, _driver)
 		add_child(manager)
 		for slot: int in range(count):

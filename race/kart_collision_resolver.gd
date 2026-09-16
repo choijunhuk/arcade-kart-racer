@@ -1,8 +1,12 @@
 class_name KartCollisionResolver
 extends Node
 
-## Resolves each overlapping BumpArea pair once per physics tick with a
-## predictable mass-weighted arcade impulse. Kart contact never enters HIT.
+## Resolves each overlapping BumpArea pair with a predictable mass-weighted
+## arcade impulse. The arcade response (side exchange, rear push, yaw nudge,
+## shield push) fires only on the tick a pair first touches — the same
+## contact-edge rule as KartPhysics' wall response — while the plain normal
+## split and separation keep running every tick the pair still overlaps.
+## Kart contact never enters HIT.
 
 class ImpulseResult extends RefCounted:
 	var delta_velocity_a: Vector3 = Vector3.ZERO
@@ -14,25 +18,12 @@ const SHIELD_CONTACT_PUSH_SPEED: float = 1.5
 @export var tuning: PhysicsTuning = preload("res://data/tuning/physics_default.tres")
 
 var _karts: Array[KartController] = []
+## Pairs that overlapped on the previous tick (key = `_pair_key`).
+var _active_pairs: Dictionary[String, bool] = {}
 
 
 func _physics_process(_delta: float) -> void:
-	var resolved_pairs: Dictionary[int, bool] = {}
-	for kart_a: KartController in _karts:
-		if not is_instance_valid(kart_a):
-			continue
-		var bump_area: Area3D = kart_a.get_node_or_null("BumpArea") as Area3D
-		if bump_area == null:
-			continue
-		for other_area: Area3D in bump_area.get_overlapping_areas():
-			var kart_b: KartController = other_area.get_parent() as KartController
-			if kart_b == null or kart_b == kart_a or not _karts.has(kart_b):
-				continue
-			var pair_key: int = _pair_key(kart_a.get_instance_id(), kart_b.get_instance_id())
-			if resolved_pairs.has(pair_key):
-				continue
-			resolved_pairs[pair_key] = true
-			_resolve_pair(kart_a, kart_b)
+	_resolve_contacts(_collect_overlapping_pairs())
 
 
 ## Registers a kart for pair collection. Re-registering is idempotent.
@@ -41,7 +32,8 @@ func register_kart(kart: KartController) -> void:
 		_karts.append(kart)
 
 
-## Stops resolving contacts for a kart.
+## Stops resolving contacts for a kart. Its `_active_pairs` entries drop out
+## on the next tick because the set is rebuilt from live overlaps.
 func unregister_kart(kart: KartController) -> void:
 	_karts.erase(kart)
 
@@ -49,6 +41,7 @@ func unregister_kart(kart: KartController) -> void:
 ## Clears all kart registrations for an in-place race restart.
 func clear_karts() -> void:
 	_karts.clear()
+	_active_pairs.clear()
 
 
 ## Pure normal impulse split. The kart receiving the larger opposing mass
@@ -71,12 +64,66 @@ static func compute_impulse(
 	return result
 
 
-func _resolve_pair(kart_a: KartController, kart_b: KartController) -> void:
+## Maps `_pair_key` -> [kart_a, kart_b] for every registered pair whose
+## BumpAreas currently overlap (each pair listed once).
+func _collect_overlapping_pairs() -> Dictionary[String, Array]:
+	var pairs: Dictionary[String, Array] = {}
+	for kart_a: KartController in _karts:
+		if not is_instance_valid(kart_a):
+			continue
+		var bump_area: Area3D = kart_a.get_node_or_null("BumpArea") as Area3D
+		if bump_area == null:
+			continue
+		for other_area: Area3D in bump_area.get_overlapping_areas():
+			var kart_b: KartController = other_area.get_parent() as KartController
+			if kart_b == null or kart_b == kart_a or not _karts.has(kart_b):
+				continue
+			var pair_key: String = _pair_key(kart_a.get_instance_id(), kart_b.get_instance_id())
+			if not pairs.has(pair_key):
+				pairs[pair_key] = [kart_a, kart_b]
+	return pairs
+
+
+## Contact-edge step: a pair absent from the previous tick's set is a new
+## contact and receives impulses; every overlapping pair is separated.
+func _resolve_contacts(pairs: Dictionary[String, Array]) -> void:
+	for pair_key: String in pairs:
+		var pair: Array = pairs[pair_key]
+		_resolve_pair(pair[0] as KartController, pair[1] as KartController, not _active_pairs.has(pair_key))
+	_active_pairs = {}
+	for pair_key: String in pairs:
+		_active_pairs[pair_key] = true
+
+
+func _resolve_pair(kart_a: KartController, kart_b: KartController, is_new_contact: bool) -> void:
 	kart_a.notify_contact()
 	kart_b.notify_contact()
 	var offset: Vector3 = kart_b.global_position - kart_a.global_position
 	offset.y = 0.0
 	var normal: Vector3 = offset.normalized() if offset.length() > 0.001 else kart_a.get_forward()
+	if is_new_contact:
+		_apply_contact_impulse(kart_a, kart_b, normal)
+		_apply_shield_contact_push(kart_a, kart_b, normal)
+	else:
+		_apply_normal_resolution(kart_a, kart_b, normal)
+	_apply_separation(kart_a, kart_b, normal)
+
+
+## Every further tick a pair keeps overlapping, cancel the closing speed it
+## still has. `compute_impulse` is self-limiting (zero once the pair stops
+## closing) so unlike the arcade response it cannot accumulate; without it the
+## pair re-touches every tick and each re-touch is a fresh contact edge. Same
+## split kart/kart_physics.gd uses for walls: push-out every tick, response once.
+func _apply_normal_resolution(kart_a: KartController, kart_b: KartController, normal: Vector3) -> void:
+	var result: ImpulseResult = compute_impulse(
+		kart_a.velocity, kart_b.velocity, normal, kart_a.get_mass(),
+		kart_b.get_mass(), tuning.kart_collision_restitution,
+	)
+	kart_a.apply_impulse_arcade(result.delta_velocity_a, 0.0)
+	kart_b.apply_impulse_arcade(result.delta_velocity_b, 0.0)
+
+
+func _apply_contact_impulse(kart_a: KartController, kart_b: KartController, normal: Vector3) -> void:
 	var result: ImpulseResult = compute_impulse(
 		kart_a.velocity, kart_b.velocity, normal, kart_a.get_mass(),
 		kart_b.get_mass(), tuning.kart_collision_restitution,
@@ -103,8 +150,6 @@ func _resolve_pair(kart_a: KartController, kart_b: KartController) -> void:
 		result.delta_velocity_b -= rear_push_b * (kart_a.get_mass() / maxf(kart_b.get_mass(), 0.001))
 	kart_a.apply_impulse_arcade(result.delta_velocity_a, yaw_a)
 	kart_b.apply_impulse_arcade(result.delta_velocity_b, yaw_b)
-	_apply_shield_contact_push(kart_a, kart_b, normal)
-	_apply_separation(kart_a, kart_b, normal)
 
 
 func _apply_shield_contact_push(kart_a: KartController, kart_b: KartController, normal: Vector3) -> void:
@@ -120,7 +165,7 @@ func _apply_separation(kart_a: KartController, kart_b: KartController, normal: V
 	kart_b.global_position += normal * tuning.separation_push * (kart_a.get_mass() / total_mass)
 
 
-func _pair_key(id_a: int, id_b: int) -> int:
-	var low: int = mini(id_a, id_b)
-	var high: int = maxi(id_a, id_b)
-	return hash("%d:%d" % [low, high])
+## Order-independent exact pair identity. Instance ids exceed int32, so a
+## Vector2i would truncate them; the formatted string carries both in full.
+func _pair_key(id_a: int, id_b: int) -> String:
+	return "%d:%d" % [mini(id_a, id_b), maxi(id_a, id_b)]

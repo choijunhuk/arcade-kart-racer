@@ -238,15 +238,23 @@ func _compute_target_speed(kart: KartController, profile: AIDifficultyProfile, n
 	return _last_target_speed
 
 
+## Gap to the leading human in laps, clamped to ±1 (spec §13.7). Falls back
+## to `player_kart` when `human_karts` is empty; 0 without any human.
 func _rubber_band_gap(kart: KartController, context: AIRaceContext) -> float:
-	if context == null or context.player_kart == null or context.position_tracker == null or context.racing_line == null:
+	if context == null or context.position_tracker == null or context.racing_line == null:
 		return 0.0
 	var lap_length: float = context.racing_line.length()
 	if lap_length <= 0.0:
 		return 0.0
-	var player_progress: float = context.position_tracker.get_progress(context.player_kart)
+	var lead_progress: float = -INF
+	for human: KartController in context.human_karts:
+		lead_progress = maxf(lead_progress, context.position_tracker.get_progress(human))
+	if context.human_karts.is_empty():
+		if context.player_kart == null:
+			return 0.0
+		lead_progress = context.position_tracker.get_progress(context.player_kart)
 	var ai_progress: float = context.position_tracker.get_progress(kart)
-	return clampf((player_progress - ai_progress) / lap_length, -1.0, 1.0)
+	return clampf((lead_progress - ai_progress) / lap_length, -1.0, 1.0)
 
 
 func _drive_throttle_brake(frame: InputFrame, kart: KartController, target_speed: float, dt: float, profile: AIDifficultyProfile) -> void:
