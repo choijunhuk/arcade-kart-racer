@@ -160,6 +160,7 @@ func reject_peer(id: int, message: String) -> void:
 	_session._deliver_reject(id, message)
 	remove(id)
 	_session._input_limiter.remove(id)
+	_session._input_last_tick.erase(id)
 	_session._selection_limiter.remove(id)
 	_session._ping_limiter.remove(id)
 	_session._loss.remove(id)

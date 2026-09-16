@@ -31,13 +31,11 @@ var difficulty_id: String = ""
 ## SHA-256 of the session password ("" = none); plaintext is never stored or logged (spec item 6).
 var password_hash: String = ""
 var _password_attempt_hash: String = ""
-var _input_limiter: NetRateLimiter = NetRateLimiter.new()
-## Guards `_selection` (backlog item 6): much lower-frequency than race input,
-## since it is only ever a lobby UI action, not a per-physics-tick send.
-var _selection_limiter: NetRateLimiter = NetRateLimiter.new(10.0, 5.0)
-## Guards `_ping` (review finding 3): it used to answer every call with an
-## unbounded reliable `_pong`. Sized well above the real per-client cadence
-## (one ping every `CLOCK_INTERVAL` ticks) so legitimate traffic never trips it.
+var _input_limiter: NetRateLimiter = NetRateLimiter.new(3.0 * NetTuning.TICK_RATE, 1.5 * NetTuning.TICK_RATE) # Holds/refills a legit client's up-to-INPUT_BATCH_TICKS new ticks per call at TICK_RATE (review RED-2).
+var _input_last_tick: Dictionary[int, int] = {} # _receive_input's last-charged tick per sender (review RED-2); see NetSessionTransport.input_batch_cost().
+var _selection_limiter: NetRateLimiter = NetRateLimiter.new(10.0, 5.0) # Guards `_selection` (backlog item 6): a lobby UI action, not a per-physics-tick send.
+## Guards `_ping` (review finding 3): unbounded reliable `_pong` per call
+## otherwise. Sized above the real per-client cadence (one ping every `CLOCK_INTERVAL` ticks) so legitimate traffic never trips it.
 var _ping_limiter: NetRateLimiter = NetRateLimiter.new(10.0, float(NetTuning.TICK_RATE) / float(NetTuning.CLOCK_INTERVAL) * 4.0)
 var _gate: NetPeerGate = NetPeerGate.new()
 var _loss: NetLossEstimator = NetLossEstimator.new()
@@ -303,7 +301,7 @@ func _receive_input(data: Dictionary) -> void:
 	var frames: Variant = data.get("frames", [data])
 	if not frames is Array or (frames as Array).is_empty() or (frames as Array).size() > NetTuning.INPUT_BATCH_TICKS:
 		return
-	if not _input_limiter.allow(sender, now(), float((frames as Array).size())): # One token per batched frame, not per RPC call (review finding 5).
+	if not _input_limiter.allow(sender, now(), _transport.input_batch_cost(sender, frames as Array)): # One token per NEW tick only — a resend is free (review RED-2).
 		return
 	_loss.observe(sender, NetLossEstimator.batch_tick(data), now())
 	race.receive_input(sender, data)
@@ -339,6 +337,7 @@ func _peer_disconnected(id: int) -> void:
 	if not multiplayer.is_server():
 		return
 	_input_limiter.remove(id)
+	_input_last_tick.erase(id)
 	_selection_limiter.remove(id)
 	_ping_limiter.remove(id)
 	_loss.remove(id)
