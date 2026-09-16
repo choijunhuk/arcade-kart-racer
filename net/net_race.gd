@@ -114,6 +114,16 @@ func _receive_input_frame(sender: int, data: Dictionary) -> void:
 	for key: String in ["drift", "drift_pressed", "item", "look_back"]:
 		if not data.get(key) is bool:
 			return
+	# Review finding 1: a single client corrupting the whole server-run
+	# simulation with NaN/Inf, or an out-of-range value NetInputBuffer.insert()
+	# would otherwise silently clamp, is rejected outright here instead.
+	var throttle: float = float(data["throttle"])
+	var brake: float = float(data["brake"])
+	var steer: float = float(data["steer"])
+	if not is_finite(throttle) or not is_finite(brake) or not is_finite(steer):
+		return
+	if throttle < 0.0 or throttle > 1.0 or brake < 0.0 or brake > 1.0 or steer < -1.0 or steer > 1.0:
+		return
 	var frame: InputFrame = InputFrame.from_dict(data)
 	for index: int in range(session.players.size()):
 		if int(session.players[index]["peer"]) == sender:
