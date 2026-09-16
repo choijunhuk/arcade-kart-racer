@@ -4,6 +4,8 @@ extends Node
 ## Race composition adapter for persistent GP state and race-local time trials.
 
 var time_trial: TimeTrialGhost
+## Rule keys first satisfied by the saved final cup result (spec 18e-3).
+var newly_unlocked: Array[String] = []
 var _config: RaceConfig
 
 
@@ -40,6 +42,7 @@ func finalize(entries: Array[RaceResults.Entry]) -> void:
 			var error: Error = SaveManager.record_grand_prix(gp.record_key(), index + 1, standings[index].points)
 			if error != OK:
 				push_warning("GP best could not be saved: %s" % error_string(error))
+			newly_unlocked = UnlockRules.claim_new(SaveManager)
 
 
 ## Installs the next round in GameState; the results button replaces the scene.

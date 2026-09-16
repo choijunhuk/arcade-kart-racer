@@ -30,6 +30,8 @@ var _best_laps: Dictionary[int, float] = {}
 var _hit_counts: Dictionary[int, int] = {}
 var _item_counts: Dictionary[int, int] = {}
 var _entries: Array[Entry] = []
+## Rule keys (`kind:id`) first satisfied by this race's saved results (spec 18e-3).
+var newly_unlocked: Array[String] = []
 
 
 ## Registers race participants and the save boundary used at finalization.
@@ -99,6 +101,9 @@ func finalize(ranking: Array[KartController], finish_times: Dictionary) -> Array
 		entry.item_use_count = int(_item_counts.get(id, 0))
 		_entries.append(entry)
 	_persist_player_results()
+	newly_unlocked.clear()
+	if not _player_karts.is_empty():
+		newly_unlocked = UnlockRules.claim_new(_save_manager)
 	return _entries.duplicate()
 
 

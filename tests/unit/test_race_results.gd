@@ -80,6 +80,41 @@ func test_results_include_driver_kart_display_and_new_record_status() -> void:
 	assert_true(bool(entry.get("is_new_record")))
 
 
+func test_finalize_announces_newly_earned_unlocks_once() -> void:
+	var results: Node = _make_results()
+	if results == null:
+		return
+	var player: KartController = _make_kart("Player")
+	var save: SaveManagerService = SaveManagerService.new(SAVE_PATH)
+	add_child_autofree(save)
+	var karts: Array[KartController] = [player]
+	results.call("setup", &"track_02_lumen_underpass", karts, player, save)
+	EventBus.lap_completed.emit(player, 1, 8.75)
+	results.call("finalize", karts, {player.get_instance_id(): 8.75})
+
+	assert_eq(results.get("newly_unlocked"), ["track:track_03_glacier_crown"], "top 3 on track_02 opens track_03")
+	assert_true(save.is_unlock_stored("track:track_03_glacier_crown"))
+	assert_eq(int(save.load_data()["stats"]["wins"]), 1)
+
+	results.call("setup", &"track_02_lumen_underpass", karts, player, save)
+	results.call("finalize", karts, {player.get_instance_id(): 9.0})
+	assert_eq(results.get("newly_unlocked"), [], "an already announced unlock is not repeated")
+
+
+func test_ai_only_finalize_evaluates_no_unlocks() -> void:
+	var results: Node = _make_results()
+	if results == null:
+		return
+	var bot: KartController = _make_kart("Bot")
+	var save: SaveManagerService = SaveManagerService.new(SAVE_PATH)
+	add_child_autofree(save)
+	var karts: Array[KartController] = [bot]
+	results.call("setup", &"track_02_lumen_underpass", karts, null, save)
+	results.call("finalize", karts, {bot.get_instance_id(): 8.0})
+	assert_eq(results.get("newly_unlocked"), [])
+	assert_false(save.is_unlock_stored("track:track_03_glacier_crown"))
+
+
 func _make_results() -> Node:
 	var exists: bool = ResourceLoader.exists(RESULTS_PATH)
 	assert_true(exists, "RaceResults script must exist")
