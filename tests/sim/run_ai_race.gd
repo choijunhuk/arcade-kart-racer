@@ -45,7 +45,8 @@ const KART_CLASSES: Array[KartData] = [
 var _kart_names_by_id: Dictionary[int, String] = {}
 var _respawns: Dictionary[String, int] = {}
 var _wall_head_on_counts: Dictionary[String, int] = {}
-var _wall_head_on_count: int = 0; var _kart_contact_events: int = 0
+var _wall_head_on_count: int = 0
+var _kart_contact_events: int = 0
 var _drift_started_count: int = 0
 var _tier3_release_count: int = 0
 var _shortcut_take_count: int = 0

@@ -70,6 +70,29 @@ func test_net_race_setup_never_sets_mirror_so_it_stays_false() -> void:
 	assert_false(config.mirror, "online races must never mirror")
 
 
+## Stand-in menu so TutorialLauncher.start() can run without a scene change.
+class StubMenu extends MenuScreen:
+	var went_to: String = ""
+	func go_to(scene_path: String) -> void:
+		went_to = scene_path
+
+
+func test_tutorial_launcher_never_sets_mirror_even_when_setting_is_on() -> void:
+	var previous: Variant = SettingsManager.get_setting(&"gameplay", &"mirror", false)
+	SettingsManager.set_setting(&"gameplay", &"mirror", true)
+	var menu: StubMenu = StubMenu.new()
+	TutorialLauncher.start(menu)
+	var config: RaceConfig = GameState.pending_race_config
+	var went_to: String = menu.went_to
+	SettingsManager.set_setting(&"gameplay", &"mirror", previous)
+	GameState.pending_race_config = null
+	GameState.tutorial_active = false
+	menu.free()
+	assert_not_null(config)
+	assert_false(config.mirror, "the tutorial must never mirror, whatever gameplay.mirror says")
+	assert_false(went_to.is_empty(), "launcher should still navigate to the tutorial race")
+
+
 func test_settings_default_mirror_is_false() -> void:
 	assert_false(bool(SettingsManager.get_setting(&"gameplay", &"mirror", true)))
 
