@@ -4,8 +4,21 @@ extends GutTest
 
 const MAIN_MENU_PATH: String = "res://ui/menus/main_menu.tscn"
 
+# Settings touched by the drift-tier-icons and speedometer tests are captured
+# here and restored in after_each so a failed assert cannot leak a value into
+# later suites of the single-process gate run.
+var _previous_drift_tier_icons: Variant
+var _previous_speedometer: Variant
+
+
+func before_each() -> void:
+	_previous_drift_tier_icons = SettingsManager.get_setting(&"accessibility", &"drift_tier_icons", true)
+	_previous_speedometer = SettingsManager.get_setting(&"gameplay", &"speedometer", true)
+
 
 func after_each() -> void:
+	SettingsManager.set_setting(&"accessibility", &"drift_tier_icons", _previous_drift_tier_icons)
+	SettingsManager.set_setting(&"gameplay", &"speedometer", _previous_speedometer)
 	GameState.reset_session()
 	# Overlays are parented on the root (outside this test's scene) and would
 	# keep tweening into later tests; free every transition state marker now.
@@ -104,7 +117,6 @@ func test_remap_row_escape_cancels_listening_without_rebinding() -> void:
 ## Item 16: `accessibility.drift_tier_icons` gates the tier label/colour; the
 ## meter must react to the live settings_changed signal, not only at _ready.
 func test_drift_meter_honours_the_tier_icons_accessibility_setting() -> void:
-	var previous: Variant = SettingsManager.get_setting(&"accessibility", &"drift_tier_icons", true)
 	var meter: DriftMeter = (load("res://ui/hud/drift_meter.tscn") as PackedScene).instantiate() as DriftMeter
 	add_child_autofree(meter)
 	var controller: DriftController = DriftController.new()
@@ -120,13 +132,11 @@ func test_drift_meter_honours_the_tier_icons_accessibility_setting() -> void:
 	meter._process(0.0)
 	assert_eq(label.text, "DRIFT", "tier text hidden when icons are off")
 	assert_eq(label.modulate, meter.tuning.drift_tier_cyan, "base colour only when icons are off")
-	SettingsManager.set_setting(&"accessibility", &"drift_tier_icons", previous)
 
 
 ## Item 18: the HUD caches `gameplay.speedometer` and follows live changes
 ## through settings_changed rather than polling SettingsManager per frame.
 func test_hud_speedometer_follows_setting_changes_through_the_cache() -> void:
-	var previous: Variant = SettingsManager.get_setting(&"gameplay", &"speedometer", true)
 	var hud: RaceHud = (load("res://ui/hud/hud.tscn") as PackedScene).instantiate() as RaceHud
 	add_child_autofree(hud)
 	var speedometer: Control = hud.get_node("Speedometer") as Control
@@ -137,7 +147,6 @@ func test_hud_speedometer_follows_setting_changes_through_the_cache() -> void:
 	assert_false(bool(hud.get("_speedometer_enabled")), "cache updated by settings_changed")
 	hud._process(0.0)
 	assert_false(speedometer.visible)
-	SettingsManager.set_setting(&"gameplay", &"speedometer", previous)
 
 
 ## Item 19: the online lobby wires an explicit wraparound focus chain across
