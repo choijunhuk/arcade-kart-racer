@@ -229,7 +229,7 @@ func _spawn_karts() -> void:
 		_item_manager.register_kart(kart)
 		_respawn_system.register_kart(kart, _get_respawn_transform, GameState.is_networked and is_player and not network_replica)
 	_ai_context.player_kart = _player_kart
-	_ai_context.human_karts = _player_karts.duplicate()
+	_ai_context.human_karts = _player_karts # Shared on purpose: remove_network_player() must drop the kart here too.
 func _player_name(player_index: int) -> String:
 	return "PlayerKart" if _config.human_count() == 1 else "PlayerKart%d" % (player_index + 1)
 func _make_ai_context() -> AIRaceContext:
