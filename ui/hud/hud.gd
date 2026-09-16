@@ -31,10 +31,7 @@ const COMPACT_MAX_HEIGHT: float = 520.0
 @onready var _net_quality_label: Label = $NetQualityLabel
 @onready var _reconnecting_overlay: Control = $ReconnectingOverlay
 
-const RECONNECT_GAP_SECONDS: float = 2.0
-
-var _net_session: NetSession
-var _last_snapshot_time: float = -1.0
+var _net_quality: RaceHudNetQuality = RaceHudNetQuality.new()
 var _player_kart: KartController
 var _lap_tracker: LapTracker
 var _position_tracker: PositionTracker
@@ -52,8 +49,7 @@ var _time_trial: TimeTrialGhost
 var _time_label: Label
 var _compact_layout: bool = false
 var _mirrored: bool = false
-## Cached `gameplay.speedometer`; refreshed from settings_changed instead of
-## re-reading SettingsManager every _process frame.
+## Cached `gameplay.speedometer`; refreshed from settings_changed instead of re-reading SettingsManager every _process frame.
 var _speedometer_enabled: bool = true
 
 
@@ -97,35 +93,17 @@ func _process(delta: float) -> void:
 		var best: String = "--" if _time_trial.best_seconds() < 0.0 else "%.3f" % _time_trial.best_seconds()
 		var ghost_delta: String = "--" if _time_trial.best == null else "%+.3f" % _time_trial.delta_seconds()
 		_time_label.text = "TIME %.3f\nBEST %s\nGHOST %s" % [_time_trial.current_seconds(), best, ghost_delta]
-	if _net_session != null:
-		_update_net_quality()
+	if _net_quality.is_bound():
+		_net_quality.update()
 
 
-## Shows ping/loss and a "reconnecting" overlay for a networked client
-## (spec item 5); never bound for the host/dedicated server or offline play.
+## Shows ping/loss and a "reconnecting" overlay for a networked client (spec item 5).
 func bind_network(session: NetSession) -> void:
-	_net_session = session
-	_last_snapshot_time = NetSession.now()
-	_net_quality_label.visible = true
-	session.snapshot_received.connect(_on_snapshot_received)
+	_net_quality.bind(session, _net_quality_label, _reconnecting_overlay)
 
 
-func _on_snapshot_received(_snapshot: RaceSnapshot) -> void:
-	_last_snapshot_time = NetSession.now()
-
-
-func _update_net_quality() -> void:
-	var rtt_ms: int = roundi(_net_session.clock.rtt_seconds * 1000.0)
-	# Real measured loss (snapshot sequence gaps), not the synthetic harness
-	# drop counter this process injected itself (spec item 5).
-	_net_quality_label.text = "PING %dms  LOSS %.1f%%" % [rtt_ms, _net_session.get_loss_estimate() * 100.0]
-	var gap: float = NetSession.now() - _last_snapshot_time
-	_reconnecting_overlay.visible = gap > RECONNECT_GAP_SECONDS
-
-
-## Binds the HUD to read-only race participants and tracker APIs. `player_kart`
-## is null when `RaceConfig.player_slot == -1` (spec §14.2: an AI-only race,
-## e.g. the headless sim), in which case the HUD simply shows nothing player-specific.
+## Binds the HUD to read-only race participants and tracker APIs. `player_kart` is null when `RaceConfig.player_slot == -1` (spec §14.2: an AI-only
+## race, e.g. the headless sim), in which case the HUD simply shows nothing player-specific.
 func bind(
 	player_kart: KartController, lap_tracker: LapTracker,
 	position_tracker: PositionTracker, kart_count: int, total_laps: int,
@@ -149,8 +127,7 @@ func set_minimap_visible(minimap_visible: bool) -> void:
 	_minimap.visible = minimap_visible
 
 
-## Re-flips the minimap so it reads mirrored with the world while
-## SplitScreen's own counter-flip keeps everything else legible (spec §18e).
+## Re-flips the minimap so it reads mirrored with the world while SplitScreen's own counter-flip keeps everything else legible (spec §18e).
 func set_mirrored(mirrored: bool) -> void:
 	_mirrored = mirrored
 	_minimap.scale = Vector2(-1.0, 1.0) if _mirrored else Vector2.ONE
@@ -300,8 +277,7 @@ func _exit_tree() -> void:
 		EventBus.threat_warning.disconnect(_on_threat_warning)
 	if EventBus.position_changed.is_connected(_on_position_changed):
 		EventBus.position_changed.disconnect(_on_position_changed)
-	if _net_session != null and _net_session.snapshot_received.is_connected(_on_snapshot_received):
-		_net_session.snapshot_received.disconnect(_on_snapshot_received)
+	_net_quality.unbind()
 
 
 func _on_countdown_tick(value: int) -> void:
