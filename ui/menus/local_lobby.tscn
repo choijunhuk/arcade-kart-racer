@@ -51,6 +51,10 @@ layout_mode = 2
 text = "JOIN: A / ENTER  •  UP/DOWN: DRIVER/KART  •  LEFT/RIGHT: SELECT  •  B/ESC: LEAVE"
 horizontal_alignment = 1
 
+[node name="MirrorToggle" type="CheckButton" parent="Panel/VBox"]
+layout_mode = 2
+text = "MIRROR"
+
 [node name="Players" type="GridContainer" parent="Panel/VBox"]
 layout_mode = 2
 size_flags_vertical = 3

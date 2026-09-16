@@ -134,7 +134,8 @@ func _show_speed_class() -> void:
 		$Panel/VBox.move_child(_class_label, 1)
 	_class_label.visible = config != null
 	if config != null:
-		_class_label.text = "CLASS: %s" % SpeedClassStats.display_name(config.speed_class)
+		var text: String = "CLASS: %s" % SpeedClassStats.display_name(config.speed_class)
+		_class_label.text = "%s • MIRROR" % text if config.mirror else text
 
 
 func _wire_action_focus() -> void:
