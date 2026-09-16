@@ -68,7 +68,8 @@ else
 fi
 
 step "file size (.gd <= 400 lines)"
-big=$(find . -name '*.gd' -not -path './addons/*' -not -path './.godot/*' | xargs wc -l | awk '$1>400 && $2!="total"{print}')
+# -print0/-0 keeps paths with spaces intact; BSD xargs skips the command on empty input.
+big=$(find . -name '*.gd' -not -path './addons/*' -not -path './.godot/*' -print0 | xargs -0 wc -l | awk '$1>400 && $2!="total"{print}')
 if [ -n "$big" ]; then echo "FAIL:"; echo "$big"; fail=1; else echo "ok"; fi
 
 step "project.godot hygiene"
