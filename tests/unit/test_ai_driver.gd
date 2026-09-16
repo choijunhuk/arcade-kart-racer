@@ -175,6 +175,39 @@ func test_target_speed_never_exceeds_kart_max_speed_with_max_rubber_band_gap_on_
 	assert_lte(target_speed, kart.get_kart_data().max_speed, "AI target speed must never exceed the kart's own max_speed")
 
 
+## Local multiplayer: the rubber band measures the gap to the *leading* human
+## kart in `human_karts`, not just the compatibility `player_kart` (P1).
+func test_rubber_band_gap_uses_the_leading_human_of_several() -> void:
+	var kart: KartController = KART_SCENE.instantiate() as KartController
+	add_child_autofree(kart)
+	var trailing_human: KartController = KART_SCENE.instantiate() as KartController
+	add_child_autofree(trailing_human)
+	var leading_human: KartController = KART_SCENE.instantiate() as KartController
+	add_child_autofree(leading_human)
+	var racing_line: RacingLine = RacingLine.new()
+	add_child_autofree(racing_line)
+	var tracker: PositionTracker = PositionTracker.new()
+	add_child_autofree(tracker)
+	tracker.register_kart(kart)
+	tracker.register_kart(trailing_human)
+	tracker.register_kart(leading_human)
+	var lap_length: float = racing_line.length()
+	tracker._records[kart.get_instance_id()].progress = 0.0
+	tracker._records[trailing_human.get_instance_id()].progress = 0.25 * lap_length
+	tracker._records[leading_human.get_instance_id()].progress = 0.5 * lap_length
+	var context: AIRaceContext = AIRaceContext.new()
+	context.racing_line = racing_line
+	context.position_tracker = tracker
+	context.player_kart = trailing_human # P1 trails; P2 leads.
+	context.human_karts = [trailing_human, leading_human]
+	var driver: AIDriver = AIDriver.new(RandomNumberGenerator.new())
+	assert_almost_eq(driver._rubber_band_gap(kart, context), 0.5, 0.0001, "gap must be measured against the leading human")
+	tracker._records[kart.get_instance_id()].progress = 0.75 * lap_length
+	assert_almost_eq(driver._rubber_band_gap(kart, context), -0.25, 0.0001, "an AI ahead of every human sees a negative gap to the leader")
+	context.human_karts = []
+	assert_almost_eq(driver._rubber_band_gap(kart, context), -0.5, 0.0001, "without human_karts the gap falls back to player_kart")
+
+
 func test_active_boost_raises_straight_target_without_raising_corner_limit() -> void:
 	var kart: KartController = KART_SCENE.instantiate() as KartController
 	add_child_autofree(kart)

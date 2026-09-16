@@ -14,7 +14,11 @@ var position_tracker: PositionTracker
 ## Race-local item registry used by sensors and the real slot view.
 var item_manager: ItemManager
 ## Null when there is no human participant (spec §13.7: gap is 0 without one).
+## Kept for compatibility; the rubber band prefers `human_karts` when filled.
 var player_kart: KartController
+## Every human kart (RaceManager fills it); the rubber band gap is measured
+## against the leading human so local P2-P4 are not ignored.
+var human_karts: Array[KartController] = []
 ## `(KartController) -> void`; forwards to RespawnSystem.request_respawn().
 var request_respawn: Callable = Callable()
 ## `() -> float`; forwards to Countdown.get_phase_seconds() while frozen.
