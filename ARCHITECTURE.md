@@ -64,6 +64,11 @@ against default types before numeric conversion/application. Invalid remap entri
 cannot erase the existing action bindings. ConfigFile syntax errors produce an
 engine diagnostic and a recovery warning, then load defaults.
 
+`GameState.selected_speed_class` and the orphan `gameplay.camera_shake` /
+`gameplay.fov_effect` settings keys are kept for compatibility (18k item 17,
+deferred): existing tests pin them (`tests/integration/test_phase18e_speed_class_menu.gd:71`,
+`tests/unit/test_settings_manager.gd:24`), so removal needs a coordinated test change.
+
 Neither project nor tools introduce a network/TLS project setting. macOS sandbox
 certificate and Dummy-renderer shutdown diagnostics are retained in verification
 logs, not hidden by the soak gate.
