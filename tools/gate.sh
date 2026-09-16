@@ -63,6 +63,8 @@ if run_stage tracks '^TRACK VALIDATION PASSED:' tools/validate_tracks.sh; then e
 step "sim smoke"
 if [ -x tools/run_sim.sh ]; then
   if run_stage sim '"success":true' tools/run_sim.sh --races 1 --karts 8 --laps 1; then echo "ok"; fi
+else
+  echo "FAIL: tools/run_sim.sh missing or not executable"; fail=1
 fi
 
 step "file size (.gd <= 400 lines)"
