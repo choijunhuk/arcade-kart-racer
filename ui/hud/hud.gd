@@ -52,9 +52,14 @@ var _time_trial: TimeTrialGhost
 var _time_label: Label
 var _compact_layout: bool = false
 var _mirrored: bool = false
+## Cached `gameplay.speedometer`; refreshed from settings_changed instead of
+## re-reading SettingsManager every _process frame.
+var _speedometer_enabled: bool = true
 
 
 func _ready() -> void:
+	_refresh_speedometer_setting(&"gameplay")
+	SettingsManager.settings_changed.connect(_refresh_speedometer_setting)
 	EventBus.countdown_tick.connect(_on_countdown_tick)
 	EventBus.race_started.connect(_on_race_started)
 	EventBus.wrong_way.connect(_on_wrong_way)
@@ -78,7 +83,7 @@ func _process(delta: float) -> void:
 		_position_count_label.text = "/%d" % _kart_count
 		_lap_label.text = "LAP %d/%d" % [lap, _total_laps]
 		_speed_label.text = "%03d km/h" % roundi(absf(_player_kart.get_speed()) * METRES_PER_SECOND_TO_KPH)
-	_speedometer.visible = not _compact_layout and bool(SettingsManager.get_setting(&"gameplay", &"speedometer", true))
+	_speedometer.visible = not _compact_layout and _speedometer_enabled
 	if _go_display_remaining > 0.0:
 		_go_display_remaining = maxf(0.0, _go_display_remaining - delta)
 		if _go_display_remaining <= 0.0:
@@ -193,7 +198,7 @@ func apply_viewport_layout(viewport_size: Vector2) -> void:
 	_set_rect(_speedometer, regions["speedometer"])
 	_apply_text_layout(viewport_size)
 	_apply_panel_contents()
-	_speedometer.visible = not _compact_layout and bool(SettingsManager.get_setting(&"gameplay", &"speedometer", true))
+	_speedometer.visible = not _compact_layout and _speedometer_enabled
 	_lap_base_position = _lap_label.position
 	_position_label.pivot_offset = _position_label.size * 0.5
 	_minimap.refresh_layout()
@@ -273,7 +278,14 @@ func bind_time_trial(trial: TimeTrialGhost) -> void:
 	_position_count_label.visible = trial == null
 
 
+func _refresh_speedometer_setting(section: StringName) -> void:
+	if section == &"gameplay":
+		_speedometer_enabled = bool(SettingsManager.get_setting(&"gameplay", &"speedometer", true))
+
+
 func _exit_tree() -> void:
+	if SettingsManager.settings_changed.is_connected(_refresh_speedometer_setting):
+		SettingsManager.settings_changed.disconnect(_refresh_speedometer_setting)
 	if EventBus.countdown_tick.is_connected(_on_countdown_tick):
 		EventBus.countdown_tick.disconnect(_on_countdown_tick)
 	if EventBus.race_started.is_connected(_on_race_started):

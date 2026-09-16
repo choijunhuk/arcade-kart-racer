@@ -123,6 +123,23 @@ func test_drift_meter_honours_the_tier_icons_accessibility_setting() -> void:
 	SettingsManager.set_setting(&"accessibility", &"drift_tier_icons", previous)
 
 
+## Item 18: the HUD caches `gameplay.speedometer` and follows live changes
+## through settings_changed rather than polling SettingsManager per frame.
+func test_hud_speedometer_follows_setting_changes_through_the_cache() -> void:
+	var previous: Variant = SettingsManager.get_setting(&"gameplay", &"speedometer", true)
+	var hud: RaceHud = (load("res://ui/hud/hud.tscn") as PackedScene).instantiate() as RaceHud
+	add_child_autofree(hud)
+	var speedometer: Control = hud.get_node("Speedometer") as Control
+	SettingsManager.set_setting(&"gameplay", &"speedometer", true)
+	hud._process(0.0)
+	assert_true(speedometer.visible)
+	SettingsManager.set_setting(&"gameplay", &"speedometer", false)
+	assert_false(bool(hud.get("_speedometer_enabled")), "cache updated by settings_changed")
+	hud._process(0.0)
+	assert_false(speedometer.visible)
+	SettingsManager.set_setting(&"gameplay", &"speedometer", previous)
+
+
 ## Item 13: a request refused with ERR_BUSY must not be announced either.
 func test_busy_change_scene_does_not_emit_scene_change_requested() -> void:
 	var root: Window = get_tree().root
