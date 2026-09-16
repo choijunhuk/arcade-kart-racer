@@ -157,11 +157,20 @@ func record_player_race_result(
 
 ## Caches an announced unlock key (`kind:id`); the truth stays rule evaluation.
 func add_unlock(key: String) -> Error:
+	return add_unlocks([key])
+
+
+## Caches every missing key with a single load/save; already stored keys are skipped.
+func add_unlocks(keys: Array[String]) -> Error:
 	var data: Dictionary = load_data()
 	var unlocks: Array = data.get("unlocks", []) as Array
-	if unlocks.has(key):
+	var missing: bool = false
+	for key: String in keys:
+		if not unlocks.has(key):
+			unlocks.append(key)
+			missing = true
+	if not missing:
 		return OK
-	unlocks.append(key)
 	data["unlocks"] = unlocks
 	return save_data(data)
 

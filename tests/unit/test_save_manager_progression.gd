@@ -111,6 +111,20 @@ func test_add_unlock_stores_each_key_once() -> void:
 	assert_eq(manager.load_data()["unlocks"], ["kart:zephyr_needle", "track:track_03_glacier_crown"])
 
 
+func test_add_unlocks_stores_every_missing_key_in_one_write() -> void:
+	var manager: SaveManagerService = SaveManagerService.new(SAVE_PATH, GHOST_DIRECTORY)
+	autofree(manager)
+	assert_eq(manager.add_unlock("kart:zephyr_needle"), OK)
+	var keys: Array[String] = ["kart:zephyr_needle", "driver:nyx_calder", "mode:mirror", "driver:nyx_calder"]
+	assert_eq(manager.add_unlocks(keys), OK)
+	assert_eq(manager.load_data()["unlocks"], ["kart:zephyr_needle", "driver:nyx_calder", "mode:mirror"])
+	var before: String = FileAccess.get_file_as_string(SAVE_PATH)
+	var stored: Array[String] = ["mode:mirror", "kart:zephyr_needle"]
+	assert_eq(manager.add_unlocks(stored), OK)
+	assert_eq(FileAccess.get_file_as_string(SAVE_PATH), before, "nothing missing means no write")
+	assert_eq(manager.add_unlocks([]), OK)
+
+
 func test_a_non_dictionary_stats_section_is_treated_as_corrupt() -> void:
 	var manager: SaveManagerService = SaveManagerService.new(SAVE_PATH, GHOST_DIRECTORY)
 	autofree(manager)

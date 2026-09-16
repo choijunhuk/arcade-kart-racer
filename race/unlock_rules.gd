@@ -101,8 +101,8 @@ static func claim_new(save_manager: SaveManagerService) -> Array[String]:
 		return []
 	var data: Dictionary = save_manager.load_data()
 	var fresh: Array[String] = evaluate_new(data, data.get("unlocks", []))
-	for key: String in fresh:
-		save_manager.add_unlock(key)
+	if not fresh.is_empty():
+		save_manager.add_unlocks(fresh)
 	return fresh
 
 
