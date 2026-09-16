@@ -33,6 +33,22 @@ static func wire_rows_focus(screen: MenuScreen, rows: Array[Array]) -> void:
 		chain.append_array(controls)
 	screen.wire_vertical_focus(chain)
 
+
+## Disables locked entries of a local content picker (spec 18e-3) and moves the
+## selection off a locked default. Remote players' picks still resolve through
+## `display_name`, since the resource list itself is left intact.
+static func lock_options(option: OptionButton, resources: Array[Resource], kind: String, save_data: Dictionary) -> void:
+	for index: int in range(resources.size()):
+		if UnlockRules.is_unlocked(kind, String(resources[index].get("id")), save_data):
+			continue
+		option.set_item_disabled(index, true)
+		option.set_item_text(index, option.get_item_text(index) + "  LOCKED")
+	if option.selected >= 0 and option.is_item_disabled(option.selected):
+		for index: int in range(option.item_count):
+			if not option.is_item_disabled(index):
+				option.select(index)
+				return
+
 static func row_label(parent: Control, text: String) -> void:
 	var label: Label = Label.new()
 	label.text = text

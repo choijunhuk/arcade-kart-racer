@@ -14,11 +14,15 @@ var _last_scene_path: String = ""
 func before_each() -> void:
 	_last_scene_path = ""
 	GameState.reset_session()
+	# Menu-flow coverage picks the first card of each grid; the 18e-3 unlock
+	# bypass keeps ruled content (basalt_crown, turbo) selectable here.
+	GameState.automation_mode = true
 	if not GameState.scene_change_requested.is_connected(_on_scene_change_requested):
 		GameState.scene_change_requested.connect(_on_scene_change_requested)
 
 
 func after_each() -> void:
+	GameState.automation_mode = false
 	_cancel_transition_overlays()
 	if GameState.scene_change_requested.is_connected(_on_scene_change_requested):
 		GameState.scene_change_requested.disconnect(_on_scene_change_requested)
