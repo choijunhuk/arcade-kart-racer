@@ -66,6 +66,8 @@ func test_close_request_removes_a_permanent_mapping_before_quitting() -> void:
 	GameState.add_child(_upnp)
 	_upnp._mapped_port = 40100
 	_upnp._lease_expires_at = -1.0 # Permanent (NetUpnp._finish()'s own sentinel).
+	var quit_calls: Array = [0] # Array, not a plain int: a lambda captures outer locals by value.
+	_upnp._quit_waiter.quit_override = func() -> void: quit_calls[0] += 1 # Review RED-1: never let this reach the real engine quit mid-suite.
 	get_tree().auto_accept_quit = true
 	_upnp._notification(NOTIFICATION_WM_CLOSE_REQUEST)
 	assert_eq(_upnp._mapped_port, -1, "the permanent mapping must be cleared synchronously before the removal worker starts")
@@ -83,6 +85,7 @@ func test_close_request_removes_a_permanent_mapping_before_quitting() -> void:
 	while is_instance_valid(_upnp) and Time.get_ticks_msec() < deadline_ms:
 		await get_tree().process_frame
 	assert_false(is_instance_valid(_upnp), "the removal worker finishing must free the node, same as a normal release_and_free()")
+	assert_eq(quit_calls[0], 1, "the injected quit hook must fire exactly once the removal worker reports back")
 	_upnp = null
 
 
