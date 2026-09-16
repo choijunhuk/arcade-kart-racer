@@ -143,6 +143,24 @@ func test_a_non_dictionary_stats_section_is_treated_as_corrupt() -> void:
 	assert_eq(int(recovered["stats"]["wins"]), 7)
 
 
+func test_non_numeric_or_negative_stats_values_are_treated_as_corrupt() -> void:
+	var manager: SaveManagerService = SaveManagerService.new(SAVE_PATH, GHOST_DIRECTORY)
+	autofree(manager)
+	for bad: Variant in [-1, "5", null, [3], -0.5]:
+		_remove_test_files()
+		var primary: Dictionary = manager.default_data()
+		primary["stats"] = {"wins": bad, "races": 2}
+		primary["best_laps"] = {"test_loop": 1_000}
+		var backup: Dictionary = manager.default_data()
+		backup["stats"] = {"wins": 0, "races": 2.0}
+		backup["best_laps"] = {"test_loop": 2_000}
+		_write_text(SAVE_PATH, JSON.stringify(primary))
+		_write_text(BACKUP_PATH, JSON.stringify(backup))
+		var recovered: Dictionary = manager.load_data()
+		assert_eq(int(recovered["best_laps"]["test_loop"]), 2_000, "the valid backup wins over wins=%s" % str(bad))
+		assert_eq(int(recovered["stats"]["races"]), 2, "0 and whole floats stay legal")
+
+
 func _write_text(path: String, text: String) -> void:
 	var file: FileAccess = FileAccess.open(path, FileAccess.WRITE)
 	file.store_string(text)
