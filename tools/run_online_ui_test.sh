@@ -18,7 +18,9 @@ export HOME="$PROJECT_ROOT/.tmp-home"
 SCENARIO=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --scenario) SCENARIO=${2:-}; shift 2 ;;
+    --scenario)
+      if [ $# -lt 2 ] || [ -z "$2" ]; then echo "--scenario requires a value" >&2; exit 2; fi
+      SCENARIO=$2; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
