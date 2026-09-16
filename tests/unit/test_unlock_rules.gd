@@ -132,6 +132,29 @@ func test_bypass_switches_open_everything_but_never_leak_into_evaluate_new() -> 
 	assert_false(UnlockRules.is_unlocked("track", TRACK_03, data))
 
 
+func test_claim_new_announces_nothing_when_the_cache_write_fails() -> void:
+	var save: FailingSave = FailingSave.new()
+	autofree(save)
+	assert_eq(UnlockRules.claim_new(save), [], "an unsaved unlock is not announced")
+	assert_push_warning("driver:nyx_calder")
+	assert_push_warning_count(1)
+	assert_eq(save.requested, ["driver:nyx_calder"], "the batch was still attempted once")
+
+
+## Save boundary whose data earns nyx_calder but whose disk refuses every write.
+class FailingSave extends SaveManagerService:
+	var requested: Array[String] = []
+
+	func load_data() -> Dictionary:
+		var data: Dictionary = default_data()
+		data["stats"] = {"wins": 5, "races": 5}
+		return data
+
+	func add_unlocks(keys: Array[String]) -> Error:
+		requested = keys.duplicate()
+		return ERR_FILE_CANT_WRITE
+
+
 func test_default_settings_carry_unlock_all_off() -> void:
 	assert_false(bool(SettingsManager.default_settings()["gameplay"]["unlock_all"]))
 	assert_false(bool(SettingsManager.get_setting(&"gameplay", &"unlock_all", true)))

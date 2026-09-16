@@ -96,13 +96,19 @@ static func evaluate_new(save_data: Dictionary, already: Array) -> Array[String]
 
 
 ## Evaluates against `save_manager`'s data, stores new keys, returns them.
+## Keys that could not be cached are not announced either: the next successful
+## claim re-evaluates and announces them then, instead of never.
 static func claim_new(save_manager: SaveManagerService) -> Array[String]:
 	if save_manager == null:
 		return []
 	var data: Dictionary = save_manager.load_data()
 	var fresh: Array[String] = evaluate_new(data, data.get("unlocks", []))
-	if not fresh.is_empty():
-		save_manager.add_unlocks(fresh)
+	if fresh.is_empty():
+		return fresh
+	var error: Error = save_manager.add_unlocks(fresh)
+	if error != OK:
+		push_warning("Unlocks %s could not be saved: %s" % [", ".join(fresh), error_string(error)])
+		return []
 	return fresh
 
 
