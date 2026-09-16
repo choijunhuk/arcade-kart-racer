@@ -26,7 +26,7 @@ static func configure(
 	observer_camera.current = false
 	observer_hud.visible = false
 	observer_speed_lines.visible = false
-	split_screen.configure(world, players, lap_tracker, position_tracker, karts.size(), config.laps, item_manager, track.get_racing_line(), karts)
+	split_screen.configure(world, players, lap_tracker, position_tracker, karts.size(), config.laps, item_manager, track.get_racing_line(), karts, config.mirror)
 	particle_budget.configure_cameras(karts, split_screen.get_cameras())
 	return split_screen.get_huds()[0]
 
