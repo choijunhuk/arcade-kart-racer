@@ -38,6 +38,9 @@ var tutorial_active: bool = false
 var is_networked: bool = false
 var net_session: NetSession
 var network_message: String = ""
+## Test seam: when valid, `request_quit()` calls this instead of the real
+## `SceneTree.quit()`. Left invalid (the default) in production.
+var quit_override: Callable = Callable()
 
 
 ## Stores the content identifiers selected for the next race session.
@@ -62,6 +65,22 @@ func reset_session() -> void:
 	grand_prix_state = null
 	is_networked = false
 	tutorial_active = false
+
+
+## Requests the app quit through the normal WM close path (spec item 2: an
+## in-app QUIT press used to call `SceneTree.quit()` directly, bypassing
+## `NetUpnp`'s own `NOTIFICATION_WM_CLOSE_REQUEST` handler and its wait for a
+## live UPnP worker/permanent-lease removal). Propagating the notification
+## first lets that handler veto `auto_accept_quit` exactly as it would for a
+## real window-close click; only an untouched `auto_accept_quit` means quit now.
+func request_quit() -> void:
+	var tree: SceneTree = get_tree()
+	tree.root.propagate_notification(NOTIFICATION_WM_CLOSE_REQUEST)
+	if tree.auto_accept_quit:
+		if quit_override.is_valid():
+			quit_override.call()
+		else:
+			tree.quit()
 
 
 ## Announces a validated scene transition request for the bootstrap coordinator.
