@@ -78,6 +78,29 @@ func test_results_focus_chain_skips_hidden_back_to_lobby() -> void:
 	assert_same(restart.get_node(restart.focus_neighbor_left), main_menu, "RESTART ui_left wraps to MAIN MENU")
 
 
+## Item 15: while a RemapRow listens, Escape cancels the capture instead of
+## being written as the new binding.
+func test_remap_row_escape_cancels_listening_without_rebinding() -> void:
+	var row: RemapRow = (load("res://ui/menus/remap_row.tscn") as PackedScene).instantiate() as RemapRow
+	add_child_autofree(row)
+	row.configure(&"drift", "Drift")
+	var before: Array[InputEvent] = InputMap.action_get_events(&"drift")
+	var requested: Array = []
+	row.remap_requested.connect(func(action: StringName, event: InputEvent) -> void: requested.append([action, event]))
+	row._start_listening()
+	assert_true(row.is_listening())
+	var escape: InputEventKey = InputEventKey.new()
+	escape.keycode = KEY_ESCAPE
+	escape.physical_keycode = KEY_ESCAPE
+	escape.pressed = true
+	assert_true(escape.is_action_pressed(&"ui_cancel"), "Escape must map to ui_cancel in this project")
+	row._input(escape)
+	assert_false(row.is_listening(), "Escape leaves listening mode")
+	assert_eq(requested.size(), 0, "no remap is requested for Escape")
+	assert_eq(InputMap.action_get_events(&"drift"), before, "binding untouched")
+	assert_eq((row.get_node("BindButton") as Button).text, before[0].as_text(), "label shows the current binding again")
+
+
 ## Item 13: a request refused with ERR_BUSY must not be announced either.
 func test_busy_change_scene_does_not_emit_scene_change_requested() -> void:
 	var root: Window = get_tree().root
