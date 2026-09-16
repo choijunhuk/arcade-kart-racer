@@ -18,7 +18,7 @@ const SHIELD_CONTACT_PUSH_SPEED: float = 1.5
 
 var _karts: Array[KartController] = []
 ## Pairs that overlapped on the previous tick (key = `_pair_key`).
-var _active_pairs: Dictionary[int, bool] = {}
+var _active_pairs: Dictionary[String, bool] = {}
 
 
 func _physics_process(_delta: float) -> void:
@@ -65,8 +65,8 @@ static func compute_impulse(
 
 ## Maps `_pair_key` -> [kart_a, kart_b] for every registered pair whose
 ## BumpAreas currently overlap (each pair listed once).
-func _collect_overlapping_pairs() -> Dictionary[int, Array]:
-	var pairs: Dictionary[int, Array] = {}
+func _collect_overlapping_pairs() -> Dictionary[String, Array]:
+	var pairs: Dictionary[String, Array] = {}
 	for kart_a: KartController in _karts:
 		if not is_instance_valid(kart_a):
 			continue
@@ -77,7 +77,7 @@ func _collect_overlapping_pairs() -> Dictionary[int, Array]:
 			var kart_b: KartController = other_area.get_parent() as KartController
 			if kart_b == null or kart_b == kart_a or not _karts.has(kart_b):
 				continue
-			var pair_key: int = _pair_key(kart_a.get_instance_id(), kart_b.get_instance_id())
+			var pair_key: String = _pair_key(kart_a.get_instance_id(), kart_b.get_instance_id())
 			if not pairs.has(pair_key):
 				pairs[pair_key] = [kart_a, kart_b]
 	return pairs
@@ -85,12 +85,12 @@ func _collect_overlapping_pairs() -> Dictionary[int, Array]:
 
 ## Contact-edge step: a pair absent from the previous tick's set is a new
 ## contact and receives impulses; every overlapping pair is separated.
-func _resolve_contacts(pairs: Dictionary[int, Array]) -> void:
-	for pair_key: int in pairs:
+func _resolve_contacts(pairs: Dictionary[String, Array]) -> void:
+	for pair_key: String in pairs:
 		var pair: Array = pairs[pair_key]
 		_resolve_pair(pair[0] as KartController, pair[1] as KartController, not _active_pairs.has(pair_key))
 	_active_pairs = {}
-	for pair_key: int in pairs:
+	for pair_key: String in pairs:
 		_active_pairs[pair_key] = true
 
 
@@ -148,7 +148,7 @@ func _apply_separation(kart_a: KartController, kart_b: KartController, normal: V
 	kart_b.global_position += normal * tuning.separation_push * (kart_a.get_mass() / total_mass)
 
 
-func _pair_key(id_a: int, id_b: int) -> int:
-	var low: int = mini(id_a, id_b)
-	var high: int = maxi(id_a, id_b)
-	return hash("%d:%d" % [low, high])
+## Order-independent exact pair identity. Instance ids exceed int32, so a
+## Vector2i would truncate them; the formatted string carries both in full.
+func _pair_key(id_a: int, id_b: int) -> String:
+	return "%d:%d" % [mini(id_a, id_b), maxi(id_a, id_b)]

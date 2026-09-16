@@ -5,7 +5,7 @@ extends GutTest
 ## first touches, while separation keeps running every tick it overlaps.
 
 const KART_SCENE: PackedScene = preload("res://kart/kart.tscn")
-const PAIR_KEY: int = 1
+const PAIR_KEY: String = "1:2"
 
 class _CountingResolver extends KartCollisionResolver:
 	var impulse_calls: int = 0
@@ -48,14 +48,14 @@ func _spawn_kart(position: Vector3) -> KartController:
 	return kart
 
 
-func _overlapping() -> Dictionary[int, Array]:
-	var pairs: Dictionary[int, Array] = {}
+func _overlapping() -> Dictionary[String, Array]:
+	var pairs: Dictionary[String, Array] = {}
 	pairs[PAIR_KEY] = [_kart_a, _kart_b]
 	return pairs
 
 
-func _separated() -> Dictionary[int, Array]:
-	var pairs: Dictionary[int, Array] = {}
+func _separated() -> Dictionary[String, Array]:
+	var pairs: Dictionary[String, Array] = {}
 	return pairs
 
 
@@ -85,6 +85,16 @@ func test_rear_push_does_not_accumulate_while_bumpers_stay_in_contact() -> void:
 	_resolver._resolve_contacts(_overlapping())
 	_resolver._resolve_contacts(_overlapping())
 	assert_almost_eq(_kart_b.get_speed(), pushed_speed, 0.0001, "sustained contact must not keep adding rear push")
+
+
+func test_pair_key_is_order_independent_and_exact_for_64_bit_instance_ids() -> void:
+	var id_a: int = _kart_a.get_instance_id()
+	var id_b: int = _kart_b.get_instance_id()
+	assert_eq(_resolver._pair_key(id_a, id_b), _resolver._pair_key(id_b, id_a))
+	# Ids differing only above bit 31 must still map to distinct keys.
+	var high_bit: int = 1 << 40
+	assert_ne(_resolver._pair_key(id_a, id_b), _resolver._pair_key(id_a + high_bit, id_b))
+	assert_ne(_resolver._pair_key(id_a, id_b), _resolver._pair_key(id_a, id_b + high_bit))
 
 
 func test_clear_karts_forgets_active_pairs_so_a_restart_contact_impulses_again() -> void:
