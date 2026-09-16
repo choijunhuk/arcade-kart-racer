@@ -31,6 +31,16 @@ func is_armed() -> bool:
 	return deadline_at >= 0.0
 
 
+## Backlog item 3: a PERMANENT lease (`lease_expires_at < 0.0`, the same
+## sentinel `NetUpnp._finish()` uses for "never expires") never clears itself
+## the way a finite one does within its hour, so a normal close would abandon
+## it on the router forever. Returns the port `NetUpnp._notification()` must
+## remove before quitting, or -1 when there is nothing to do (no mapping, or
+## a finite one left to expire on its own with no close-time delay).
+func permanent_mapping_port_to_remove_on_close(mapped_port: int, lease_expires_at: float) -> int:
+	return mapped_port if mapped_port >= 0 and lease_expires_at < 0.0 else -1
+
+
 ## Polls the wait: fires exactly once `worker_done` is true or `now` has
 ## reached the deadline, then disarms so a later call this same tick (or
 ## the next tick) is a no-op. A no-op while unarmed, so `NetUpnp._process()`

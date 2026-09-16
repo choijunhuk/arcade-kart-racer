@@ -688,14 +688,19 @@ sits entirely outside `NetSession`/`NetRace`.
   **Known limitations**: the quit wait is bounded, but a no-router discovery
   can itself take ~11s (well past `TIMEOUT_MS`'s 3s SSDP round trip once
   retries are counted), so the exit-crash window is narrowed, not closed.
-  The in-app QUIT button (`ui/menus/main_menu.gd`) calls `get_tree().quit()`
-  directly and bypasses this deferral entirely. On a router that only
-  allows permanent leases, a normal close while hosting leaves a permanent
-  forward on the router until it reboots — the lease does not expire on its
-  own there, unlike the finite-lease case. A crash or kill (skipping
-  `release_and_free()` outright) leaves at most a 1h forward otherwise. A
-  hostile device on the LAN can stall SSDP discovery indefinitely; this is
-  LAN-only exposure, and the quit wait still bounds it.
+  The in-app QUIT button (`ui/menus/main_menu.gd`) routes through
+  `GameState.request_quit()`, which raises the same
+  `NOTIFICATION_WM_CLOSE_REQUEST` a real window-close does (backlog item 2) —
+  a live worker defers it exactly as for a real close, instead of bypassing
+  the deferral entirely. On a router that only allows permanent leases,
+  `_notification()` now removes that lease for real before quitting (backlog
+  item 3), on the same bounded wait as a live discovery worker, instead of
+  leaving a permanent forward on the router until it reboots. A crash or
+  kill (skipping `release_and_free()` and the close-request path outright)
+  still leaves at most a 1h forward for a finite lease, or a permanent one
+  until the router reboots. A hostile device on the LAN can stall SSDP
+  discovery indefinitely; this is LAN-only exposure, and the quit wait still
+  bounds it.
 - **Join code** (`net/join_code.gd`, `NetJoinCode`): packs 4 IPv4 octets + a
   16-bit port into 48 payload bits plus a 2-bit checksum (50 bits, zero
   padding), rendered as exactly 10 Crockford base32 characters. Decoding
