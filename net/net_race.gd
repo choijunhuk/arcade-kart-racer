@@ -214,6 +214,8 @@ func _assemble_chunk(snapshot: RaceSnapshot) -> RaceSnapshot:
 	if snapshot.chunk_count <= 1:
 		return snapshot
 	var entry: Dictionary = _chunk_assemblies.get(snapshot.tick, {"chunks": {}, "count": snapshot.chunk_count})
+	if int(entry["count"]) != snapshot.chunk_count:
+		return null # Review finding 2: a chunk whose count disagrees with this tick's in-progress assembly is dropped, never counted toward it.
 	(entry["chunks"] as Dictionary)[snapshot.chunk_index] = snapshot
 	_chunk_assemblies[snapshot.tick] = entry
 	for stale_tick: int in _chunk_assemblies.keys():
@@ -226,6 +228,8 @@ func _assemble_chunk(snapshot: RaceSnapshot) -> RaceSnapshot:
 	return _merge_chunks(chunks, int(entry["count"]))
 
 static func _merge_chunks(chunks: Dictionary, count: int) -> RaceSnapshot:
+	if not chunks.has(0):
+		return null # Review finding 2: chunk 0 carries the shared tick/state fields every merge needs.
 	var first: RaceSnapshot = chunks[0]
 	var merged: RaceSnapshot = RaceSnapshot.new()
 	merged.tick = first.tick
