@@ -25,6 +25,12 @@ var _partners: Dictionary[String, String] = {}
 var _rooms: Dictionary[String, String] = {}
 var _pending_since: Dictionary[String, float] = {}
 var _peer_seen: Dictionary[String, float] = {}
+## Peer keys `_evict_oldest_pending()` has dropped since the last
+## `take_evicted()` call (review YELLOW): eviction cleans this table's own
+## bookkeeping via `remove()`, after which the peer never shows up in
+## `expire()`'s returned stale list — so without this, NetRelayServer's
+## PacketPeerUDP for it leaked in `_peers` forever.
+var _evicted: Array[String] = []
 
 
 ## Registers `peer_key` (e.g. "ip:port") under `room_code` at time `now`.
@@ -125,6 +131,17 @@ func pending_count() -> int:
 	return _pending.size()
 
 
+## Returns and clears the peer keys `_evict_oldest_pending()` has dropped
+## since the last call, so the caller can close their sockets the same way
+## it already does for `expire()`'s own stale list.
+func take_evicted() -> Array[String]:
+	var evicted: Array[String] = _evicted
+	_evicted = []
+	return evicted
+
+
+## Drops the oldest half-open room once the pending table is full, recording
+## its peer in `_evicted` for `take_evicted()`.
 func _evict_oldest_pending() -> void:
 	if _pending.size() < MAX_PENDING_ROOMS:
 		return
@@ -136,6 +153,9 @@ func _evict_oldest_pending() -> void:
 			oldest_room = room_code
 	if oldest_room == "":
 		return
-	remove(_pending.get(oldest_room, ""))
+	var evicted_key: String = String(_pending.get(oldest_room, ""))
+	remove(evicted_key)
 	_pending.erase(oldest_room)
 	_pending_since.erase(oldest_room)
+	if evicted_key != "":
+		_evicted.append(evicted_key)
