@@ -28,6 +28,7 @@ func default_data() -> Dictionary:
 		"player_profiles": _default_player_profiles(),
 		"last_selection": {"driver": "", "kart": "medium", "track": "test_loop"},
 		"unlocks": [],
+		"stats": {"wins": 0, "races": 0},
 	}
 
 
@@ -144,7 +145,28 @@ func record_player_race_result(
 	if profile_index == 0:
 		(data["best_laps"] as Dictionary).merge(best_laps, true)
 		(data["best_positions"] as Dictionary).merge(best_positions, true)
+		# Progression counters (spec 18e-3) follow the primary profile only.
+		var stats: Dictionary = data.get("stats", {}) as Dictionary
+		stats["races"] = int(stats.get("races", 0)) + 1
+		stats["wins"] = int(stats.get("wins", 0)) + (1 if position == 1 else 0)
+		data["stats"] = stats
 	return save_data(data)
+
+
+## Caches an announced unlock key (`kind:id`); the truth stays rule evaluation.
+func add_unlock(key: String) -> Error:
+	var data: Dictionary = load_data()
+	var unlocks: Array = data.get("unlocks", []) as Array
+	if unlocks.has(key):
+		return OK
+	unlocks.append(key)
+	data["unlocks"] = unlocks
+	return save_data(data)
+
+
+## True when `key` was already announced (stored in the unlocks cache).
+func is_unlock_stored(key: String) -> bool:
+	return (load_data().get("unlocks", []) as Array).has(key)
 
 
 ## Returns the saved best lap in milliseconds, or -1 when no record exists.
@@ -211,7 +233,7 @@ func _read_valid_data(path: String) -> Dictionary:
 	if version < 0 or version > CURRENT_VERSION:
 		return {}
 	# Syntactically valid JSON can still violate the types consumed by menus/results.
-	for key: String in ["best_laps", "best_positions", "last_selection", "grand_prix_bests", "player_profiles"]:
+	for key: String in ["best_laps", "best_positions", "last_selection", "grand_prix_bests", "player_profiles", "stats"]:
 		if data.has(key) and not data[key] is Dictionary:
 			return {}
 	for key: String in ["best_laps", "best_positions"]:
