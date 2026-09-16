@@ -52,8 +52,7 @@ func _init() -> void:
 	_transport.attach(self)
 
 func _ready() -> void:
-	# Pausing the tree (pause menu, settings) must never stall the deferred
-	# lobby broadcast or _service_peers() (review finding 5).
+	# Pausing the tree (pause menu, settings) must never stall the deferred lobby broadcast or _service_peers() (review finding 5).
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	multiplayer.peer_connected.connect(_peer_connected)
 	multiplayer.peer_disconnected.connect(_peer_disconnected)
@@ -75,8 +74,7 @@ func host(port: int = NetTuning.PORT, max_players_value: int = NetTuning.MAX_PLA
 	lobby_changed.emit()
 	return OK
 
-## Connects to the supplied address; completion arrives through lobby_changed.
-## `password` is hashed locally, never sent or logged in cleartext (spec 6).
+## Connects to the supplied address; completion arrives through lobby_changed. `password` is hashed locally, never sent or logged in cleartext (spec 6).
 func join(ip: String, port: int = NetTuning.PORT, password: String = "") -> Error:
 	peer = ENetMultiplayerPeer.new()
 	var error: Error = peer.create_client(ip, port, NetTuning.CHANNEL_COUNT)
@@ -87,8 +85,7 @@ func join(ip: String, port: int = NetTuning.PORT, password: String = "") -> Erro
 		_password_attempt_hash = password.sha256_text() if not password.is_empty() else ""
 	return error
 
-## Sets the session password as its hash only (spec item 6: hashed compare,
-## never logged). Pass "" to clear (no password required).
+## Sets the session password as its hash only (spec item 6: hashed compare, never logged). Pass "" to clear (no password required).
 func set_password(plain: String) -> void:
 	password_hash = plain.sha256_text() if not plain.is_empty() else ""
 
@@ -303,7 +300,10 @@ func _receive_input(data: Dictionary) -> void:
 	var sender: int = _verified_sender()
 	if sender < 0 or not running or race == null:
 		return
-	if not _input_limiter.allow(sender, now()):
+	var frames: Variant = data.get("frames", [data])
+	if not frames is Array or (frames as Array).is_empty() or (frames as Array).size() > NetTuning.INPUT_BATCH_TICKS:
+		return
+	if not _input_limiter.allow(sender, now(), float((frames as Array).size())): # One token per batched frame, not per RPC call (review finding 5).
 		return
 	_loss.observe(sender, NetLossEstimator.batch_tick(data), now())
 	race.receive_input(sender, data)
