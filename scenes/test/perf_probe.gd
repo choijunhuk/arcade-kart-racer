@@ -140,6 +140,11 @@ func _finish() -> void:
 	var mean_fps: float = float(_measured_frames) / maxf(_measured_real, 0.001)
 	var target_fps: float = QUAD_PLAYER_TARGET_FPS if _player_count >= 3 else TWO_PLAYER_TARGET_FPS
 	var gpu_measurement: bool = DisplayServer.get_name() != "headless"
+	var fps_pass: bool = mean_fps >= target_fps
+	var post_load_pass: bool = _worst_frame_seconds <= 0.1
+	# Headless runs have no GPU and no meaningful frame timing, so only a real
+	# windowed measurement can fail; there both budgets must hold.
+	var passed: bool = not gpu_measurement or (fps_pass and post_load_pass)
 	var result: Dictionary = {
 		"karts": _kart_count,
 		"players": _player_count,
@@ -148,8 +153,9 @@ func _finish() -> void:
 		"vsync": DisplayServer.window_get_vsync_mode() != DisplayServer.VSYNC_DISABLED,
 		"gpu_measurement": gpu_measurement,
 		"target_fps": target_fps,
-		"fps_pass": mean_fps >= target_fps,
-		"post_load_100ms_pass": _worst_frame_seconds <= 0.1,
+		"fps_pass": fps_pass,
+		"post_load_100ms_pass": post_load_pass,
+		"passed": passed,
 		"warmup_seconds": WARMUP_SECONDS,
 		"frames_over_33ms": _over_budget_frames,
 		"worst_frame_monitors": _worst_frame_monitors,
@@ -160,7 +166,7 @@ func _finish() -> void:
 		"renderer": RenderingServer.get_video_adapter_name(),
 	}
 	print("PERF_PROBE ", JSON.stringify(result))
-	get_tree().quit(0 if not gpu_measurement or mean_fps >= target_fps else 1)
+	get_tree().quit(0 if passed else 1)
 
 
 func _scripted_provider(kart: KartController, line: RacingLine) -> InputProvider:
