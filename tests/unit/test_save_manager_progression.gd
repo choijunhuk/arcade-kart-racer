@@ -146,7 +146,7 @@ func test_a_non_dictionary_stats_section_is_treated_as_corrupt() -> void:
 func test_non_numeric_or_negative_stats_values_are_treated_as_corrupt() -> void:
 	var manager: SaveManagerService = SaveManagerService.new(SAVE_PATH, GHOST_DIRECTORY)
 	autofree(manager)
-	for bad: Variant in [-1, "5", null, [3], -0.5]:
+	for bad: Variant in [-1, "5", null, [3], -0.5, 5.5]:
 		_remove_test_files()
 		var primary: Dictionary = manager.default_data()
 		primary["stats"] = {"wins": bad, "races": 2}

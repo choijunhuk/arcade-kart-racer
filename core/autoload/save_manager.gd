@@ -274,7 +274,9 @@ func _read_valid_data(path: String) -> Dictionary:
 		if not value is String:
 			return {}
 	for value: Variant in (data.get("stats", {}) as Dictionary).values():
-		if not (value is int or value is float) or not is_finite(float(value)) or float(value) < 0.0:
+		if not (value is int or value is float) or not is_finite(float(value)):
+			return {}
+		if float(value) < 0.0 or float(value) != floorf(float(value)):
 			return {}
 	if data.has("unlocks") and not data["unlocks"] is Array:
 		return {}
