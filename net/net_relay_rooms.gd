@@ -64,11 +64,21 @@ func touch(peer_key: String, now: float) -> void:
 
 
 ## Drops a peer (disconnect/timeout), clearing its pairing and any pending
-## room slot it was occupying.
-func remove(peer_key: String) -> void:
+## room slot it was occupying. If the peer had a live partner, that partner
+## is queued back into the same room's pending slot instead of being left a
+## permanent orphan (review finding 3) — a later `announce()` under the same
+## code (e.g. the host reconnecting) can still re-pair it, and `expire()`
+## sweeps it on its own if nothing does before ROOM_IDLE_SECONDS elapses.
+## `now` seeds that pending slot's own idle clock; omitted only by direct
+## test callers that do not care about its later expiry.
+func remove(peer_key: String, now: float = 0.0) -> void:
 	var partner: String = _partners.get(peer_key, "")
 	if partner != "":
 		_partners.erase(partner)
+		var partner_room: String = _rooms.get(partner, "")
+		if partner_room != "" and not _pending.has(partner_room):
+			_pending[partner_room] = partner
+			_pending_since[partner_room] = now
 	_partners.erase(peer_key)
 	var room: String = _rooms.get(peer_key, "")
 	if room != "" and _pending.get(room, "") == peer_key:
@@ -92,7 +102,7 @@ func expire(now: float) -> Array[String]:
 			if waiting != "" and not stale.has(waiting):
 				stale.append(waiting)
 	for peer_key: String in stale:
-		remove(peer_key)
+		remove(peer_key, now)
 	return stale
 
 
