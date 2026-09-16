@@ -123,8 +123,10 @@ keep running.
 open from the start, and the truth of "unlocked" is always re-evaluated from
 SaveManager data (so rule changes apply retroactively to existing records). The
 save's `unlocks` array is only the already-announced cache; `stats.wins/races`
-count the primary profile's finishes and are back-filled into old saves by default
-merging (no version bump, no record loss).
+count the primary profile's finishes in competitive races only (kart_count > 1 and
+not time trial — a solo time trial writes its best lap but no position, no stats
+and no unlock claim) and are back-filled into old saves by default merging (no
+version bump, no record loss).
 
 | kind:id | condition (SaveManager data only) |
 |---|---|
