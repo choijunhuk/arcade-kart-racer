@@ -117,6 +117,39 @@ focus does not resume automatically. Any joined device can pause the shared tree
 navigation and resume remain owned by that device. All-AI observer/profiling races
 keep running.
 
+### Unlocks / progression (Phase 18e-3)
+
+`race/unlock_rules.gd` is the single static rule table; content without a rule is
+open from the start, and the truth of "unlocked" is always re-evaluated from
+SaveManager data (so rule changes apply retroactively to existing records). The
+save's `unlocks` array is only the already-announced cache; `stats.wins/races`
+count the primary profile's finishes and are back-filled into old saves by default
+merging (no version bump, no record loss).
+
+| kind:id | condition (SaveManager data only) |
+|---|---|
+| track:track_03_glacier_crown | best position <= 3 on track_02 (top-level or P1) |
+| track:track_04_ochre_rift | best position <= 3 on track_03 |
+| kart:basalt_crown | any `grand_prix_bests` position <= 3 |
+| kart:zephyr_needle | any `grand_prix_bests` position == 1 |
+| driver:nyx_calder | `stats.wins` >= 5 |
+| driver:echo_meridian | `best_laps` present for all four content tracks |
+| speed_class:turbo | STANDARD cup (`horizon_cup/<difficulty>`) position <= 3 |
+| mode:mirror | any cup position == 1 |
+
+Evaluation point: `RaceResults.finalize()` after the player bests are saved, and
+`RaceModes.finalize()` after the final cup result is saved (`UnlockRules.claim_new`
+stores new keys and returns them); `ResultsScreen` shows "UNLOCKED: A, B" from both.
+Pickers (`track_select`, `driver_select`, `kart_select`, `difficulty_select` TURBO/
+mirror toggle, `local_lobby`, online lobby dropdowns) call
+`UnlockRules.is_unlocked(kind, id, data)`: locked buttons are disabled, marked
+LOCKED with the hint as tooltip/line, and set to FOCUS_NONE so the wired focus
+chains step over them; a remembered locked pick falls back to the default
+(`UnlockRules.sanitized_selection`). Bypass switch: `GameState.automation_mode` or
+settings `gameplay.unlock_all` (settings.cfg only, no menu) opens everything for
+tests/sim/tools without writing to the unlock cache. Tutorial, GP rounds and
+online config builders never pass through pickers, so locks never block them.
+
 ## Race composition and state
 
 ```text
