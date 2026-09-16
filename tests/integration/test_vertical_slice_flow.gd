@@ -74,10 +74,10 @@ func test_vertical_slice_flow_three_consecutive_runs() -> void:
 		_drifts = 0
 		_race_states.clear()
 		for path: String in MENU_PATHS:
-			# Six sorted kart cards: medium is row 2/column 2; difficulty: easy, hard, normal.
+			# Kart cards are targeted by id (locked cards shift the focus walk);
+			# difficulty: easy, hard, normal.
 			if path.ends_with("track_select.tscn"):
-				await _press_action(&"ui_right")
-				await _press_action(&"ui_down")
+				assert_true(_focus_card(&"medium"), "kart select must offer the medium card")
 			elif path.ends_with("race.tscn"):
 				await _press_action(&"ui_down")
 				await _press_action(&"ui_down")
@@ -169,6 +169,18 @@ func _wait_for_scene(path: String) -> bool:
 			return true
 		await get_tree().process_frame
 	fail_test("Scene transition timed out: %s" % path)
+	return false
+
+
+## Focuses the picker card bound to the resource with `id` (cards bind their
+## data to `pressed`), so the walk does not depend on which cards are locked.
+func _focus_card(id: StringName) -> bool:
+	for node: Node in get_tree().current_scene.find_children("", "Button", true, false):
+		for connection: Dictionary in (node as Button).pressed.get_connections():
+			var bound: Array = (connection["callable"] as Callable).get_bound_arguments()
+			if bound.size() == 1 and bound[0] is Resource and (bound[0] as Resource).get("id") == id:
+				(node as Button).grab_focus()
+				return true
 	return false
 
 
