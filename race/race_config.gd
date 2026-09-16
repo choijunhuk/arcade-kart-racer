@@ -9,6 +9,9 @@ enum SpeedClass { CRUISE, STANDARD, TURBO }
 @export var race_mode: RaceMode = RaceMode.SINGLE_RACE
 @export var gp_round: int = 0
 @export var speed_class: SpeedClass = SpeedClass.STANDARD
+## Phase 18e-2: mirrors the presented view and human steering; track geometry,
+## collision, AI and checkpoints stay untouched (spec §18e).
+@export var mirror: bool = false
 
 @export var track: TrackData
 @export var laps: int = 3
@@ -62,3 +65,9 @@ func player_device_ids() -> PackedInt32Array:
 	if result.is_empty() and player_slot >= 0:
 		result.append(PlayerSlot.KEYBOARD_DEVICE_ID)
 	return result
+
+
+## Returns the track id used for saved bests/ghosts; mirror keeps its own
+## suffixed identity so records never mix with the non-mirror track (spec §18e).
+func record_track_id() -> StringName:
+	return StringName("%s_mirror" % track.id) if mirror else track.id

@@ -147,7 +147,7 @@ func _begin_loading(is_restart: bool) -> void:
 	_spawn_karts()
 	if not network_replica:
 		_register_track_elements()
-	_race_results.setup_players(_config.track.id, _karts, _player_karts)
+	_race_results.setup_players(_config.record_track_id(), _karts, _player_karts)
 	var local_players: Array[KartController] = get_local_human_karts()
 	_audio.configure(local_players[0] if not local_players.is_empty() else null, _config.laps, _config.track.bgm_id)
 	_countdown.setup(tuning, _karts)
@@ -258,7 +258,9 @@ func _make_player_provider(kart: KartController, player: PlayerSlot) -> InputPro
 		if candidate is InputProvider:
 			return candidate as InputProvider
 		push_error("RaceManager player provider factory must return InputProvider")
-	return PlayerInputProvider.new(player.device_id)
+	var provider: PlayerInputProvider = PlayerInputProvider.new(player.device_id)
+	provider.mirrored = _config.mirror
+	return provider
 func _register_track_elements() -> void:
 	for hazard: Node in _track.get_node("Hazards").get_children():
 		if hazard is Hazard:

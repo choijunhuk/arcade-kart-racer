@@ -13,6 +13,9 @@ const MIN_STEERING_SENSITIVITY: float = 0.5
 const MAX_STEERING_SENSITIVITY: float = 2.0
 
 var device_id: int = DEVICE_ANY
+## Phase 18e-2: negates recorded steer for a mirrored view; world-space AI,
+## ghost and network providers are untouched and never set this.
+var mirrored: bool = false
 
 var _strength_override: Callable = Callable()
 var _smoothed_steer: float = 0.0
@@ -48,7 +51,7 @@ func get_frame() -> InputFrame:
 		MAX_STEERING_SENSITIVITY,
 	)
 	_smoothed_steer = move_toward(_smoothed_steer, steer_target, STEER_STEP * sensitivity)
-	frame.steer = _smoothed_steer
+	frame.steer = -_smoothed_steer if mirrored else _smoothed_steer
 	frame.drift = _get_strength(InputActions.DRIFT) > BUTTON_THRESHOLD
 	frame.drift_pressed = frame.drift and not _previous_drift
 	var item_held: bool = _get_strength(InputActions.USE_ITEM) > BUTTON_THRESHOLD
