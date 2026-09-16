@@ -57,6 +57,9 @@ func transition_to(scene_path: String) -> void:
 ## Reveals the previous scene while keeping recovery available above it.
 func _show_failure(loading: Control, message: String) -> void:
 	push_error(message)
+	# Release the busy marker: GameState.change_scene() refuses while a node
+	# named SceneTransition exists, so a failed load must stop claiming it.
+	name = GameState.LOAD_ERROR_NODE_NAME
 	loading.queue_free()
 	var panel: PanelContainer = PanelContainer.new()
 	panel.name = "LoadError"
@@ -83,7 +86,7 @@ func _show_failure(loading: Control, message: String) -> void:
 
 
 func _back_to_menu() -> void:
-	# GameState rejects requests while SceneTransition remains under the root.
-	get_parent().remove_child(self)
+	# Renamed to LoadErrorOverlay in _show_failure, so change_scene() both
+	# accepts the request and frees this stale overlay itself.
 	GameState.change_scene("res://ui/menus/main_menu.tscn")
 	queue_free()

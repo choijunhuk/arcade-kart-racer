@@ -5,6 +5,9 @@ signal scene_change_requested(scene_path: String)
 
 const TRANSITION_SCENE: PackedScene = preload("res://ui/components/transition_overlay.tscn")
 const TRANSITION_NODE_NAME: StringName = &"SceneTransition"
+## A TransitionOverlay renames itself to this once its load failed, so it no
+## longer counts as the busy marker and the next change_scene() can replace it.
+const LOAD_ERROR_NODE_NAME: StringName = &"LoadErrorOverlay"
 
 enum Mode {
 	BOOT,
@@ -74,10 +77,15 @@ func change_scene(scene_path: String) -> Error:
 	if not ResourceLoader.exists(scene_path, "PackedScene"):
 		push_error("Cannot change to missing scene: %s" % scene_path)
 		return ERR_FILE_NOT_FOUND
-	scene_change_requested.emit(scene_path)
 	var root: Window = get_tree().root
 	if root.get_node_or_null(NodePath(String(TRANSITION_NODE_NAME))) != null:
 		return ERR_BUSY
+	# Only announce a request that is actually going to run.
+	scene_change_requested.emit(scene_path)
+	var stale_error: Node = root.get_node_or_null(NodePath(String(LOAD_ERROR_NODE_NAME)))
+	if stale_error != null:
+		root.remove_child(stale_error)
+		stale_error.queue_free()
 	var overlay: TransitionOverlay = TRANSITION_SCENE.instantiate() as TransitionOverlay
 	overlay.name = TRANSITION_NODE_NAME
 	root.add_child(overlay)
