@@ -2,10 +2,11 @@ class_name KartCollisionResolver
 extends Node
 
 ## Resolves each overlapping BumpArea pair with a predictable mass-weighted
-## arcade impulse. Impulses (normal split, side exchange, rear push, shield
-## push) fire only on the tick a pair first touches — the same contact-edge
-## rule as KartPhysics' wall response — while separation keeps pushing every
-## tick the pair still overlaps. Kart contact never enters HIT.
+## arcade impulse. The arcade response (side exchange, rear push, yaw nudge,
+## shield push) fires only on the tick a pair first touches — the same
+## contact-edge rule as KartPhysics' wall response — while the plain normal
+## split and separation keep running every tick the pair still overlaps.
+## Kart contact never enters HIT.
 
 class ImpulseResult extends RefCounted:
 	var delta_velocity_a: Vector3 = Vector3.ZERO
@@ -103,7 +104,23 @@ func _resolve_pair(kart_a: KartController, kart_b: KartController, is_new_contac
 	if is_new_contact:
 		_apply_contact_impulse(kart_a, kart_b, normal)
 		_apply_shield_contact_push(kart_a, kart_b, normal)
+	else:
+		_apply_normal_resolution(kart_a, kart_b, normal)
 	_apply_separation(kart_a, kart_b, normal)
+
+
+## Every further tick a pair keeps overlapping, cancel the closing speed it
+## still has. `compute_impulse` is self-limiting (zero once the pair stops
+## closing) so unlike the arcade response it cannot accumulate; without it the
+## pair re-touches every tick and each re-touch is a fresh contact edge. Same
+## split kart/kart_physics.gd uses for walls: push-out every tick, response once.
+func _apply_normal_resolution(kart_a: KartController, kart_b: KartController, normal: Vector3) -> void:
+	var result: ImpulseResult = compute_impulse(
+		kart_a.velocity, kart_b.velocity, normal, kart_a.get_mass(),
+		kart_b.get_mass(), tuning.kart_collision_restitution,
+	)
+	kart_a.apply_impulse_arcade(result.delta_velocity_a, 0.0)
+	kart_b.apply_impulse_arcade(result.delta_velocity_b, 0.0)
 
 
 func _apply_contact_impulse(kart_a: KartController, kart_b: KartController, normal: Vector3) -> void:

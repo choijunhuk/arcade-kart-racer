@@ -1,8 +1,9 @@
 extends GutTest
 
-## Contact-edge rule of KartCollisionResolver: a pair receives its impulses
-## (normal split, side exchange, rear push, shield push) only on the tick it
-## first touches, while separation keeps running every tick it overlaps.
+## Contact-edge rule of KartCollisionResolver: a pair receives its arcade
+## response (side exchange, rear push, shield push) only on the tick it first
+## touches, while the normal split and separation keep running every tick it
+## overlaps.
 
 const KART_SCENE: PackedScene = preload("res://kart/kart.tscn")
 const PAIR_KEY: String = "1:2"
@@ -59,6 +60,23 @@ func _separated() -> Dictionary[String, Array]:
 	return pairs
 
 
+## World velocity as KartPhysics publishes it to `velocity` each physics tick.
+func _world_velocity(kart: KartController) -> Vector3:
+	return kart.get_forward() * kart.get_speed() + kart.global_transform.basis.x * kart.get_lateral_speed()
+
+
+## No physics frame runs between synchronous resolver ticks, so the fixture
+## republishes `velocity` (what `compute_impulse` reads) from local speed.
+func _publish_velocities() -> void:
+	_kart_a.velocity = _world_velocity(_kart_a)
+	_kart_b.velocity = _world_velocity(_kart_b)
+
+
+func _closing_speed() -> float:
+	var normal: Vector3 = (_kart_b.global_position - _kart_a.global_position).normalized()
+	return (_world_velocity(_kart_a) - _world_velocity(_kart_b)).dot(normal)
+
+
 func test_three_consecutive_overlapping_ticks_apply_impulse_once_and_separation_thrice() -> void:
 	for _tick: int in range(3):
 		_resolver._resolve_contacts(_overlapping())
@@ -85,6 +103,19 @@ func test_rear_push_does_not_accumulate_while_bumpers_stay_in_contact() -> void:
 	_resolver._resolve_contacts(_overlapping())
 	_resolver._resolve_contacts(_overlapping())
 	assert_almost_eq(_kart_b.get_speed(), pushed_speed, 0.0001, "sustained contact must not keep adding rear push")
+
+
+func test_sustained_closing_contact_cancels_closing_speed_on_tick_two_with_one_arcade_impulse() -> void:
+	_kart_a.apply_impulse_arcade(_kart_a.get_forward() * 10.0, 0.0)
+	_publish_velocities()
+	_resolver._resolve_contacts(_overlapping())
+	# Tick 2: kart_a's throttle closed the gap again while the bumpers never parted.
+	_kart_a.apply_impulse_arcade(_kart_a.get_forward() * (_kart_b.get_speed() + 6.0 - _kart_a.get_speed()), 0.0)
+	_publish_velocities()
+	assert_almost_eq(_closing_speed(), 6.0, 0.0001, "fixture must still be closing before tick 2")
+	_resolver._resolve_contacts(_overlapping())
+	assert_almost_eq(_closing_speed(), 0.0, 0.0001, "tick 2 must cancel the remaining closing speed")
+	assert_eq(_resolver.impulse_calls, 1, "the arcade response must still fire only on the contact edge")
 
 
 func test_pair_key_is_order_independent_and_exact_for_64_bit_instance_ids() -> void:

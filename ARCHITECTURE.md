@@ -173,9 +173,11 @@ callable resolving the last checkpoint's RespawnPoint, facing the racing line an
 stepping back in 3 m increments to avoid occupied positions. KillZone signals and
 stuck detection request this same recovery path. `KartCollisionResolver` applies
 mass-dependent arcade impulses; kart bodies do not physically collide with each
-other. Impulses (normal, side exchange, rear push, shield push) fire once per new
-contact — a pair that stays overlapped keeps only the per-tick separation push —
-so bumper-to-bumper traffic no longer compounds speed every tick (18j). Decision
+other. The arcade response (side exchange, rear push, yaw nudge, shield push)
+fires once per new contact, while the self-limiting normal split and the
+separation push both run every tick a pair stays overlapped — so bumper-to-bumper
+traffic neither compounds speed every tick nor keeps its closing speed and
+re-touches as a fresh contact edge each tick (18j). Decision
 (18j item 4): `RaceManager` keeps `kart.free()` on restart and network departure;
 every service unregisters the kart first and no same-frame holder remains, while
 `queue_free()` would leave KartAudio's EventBus handlers alive out of tree for the
