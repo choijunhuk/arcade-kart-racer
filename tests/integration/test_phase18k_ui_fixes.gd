@@ -140,6 +140,33 @@ func test_hud_speedometer_follows_setting_changes_through_the_cache() -> void:
 	SettingsManager.set_setting(&"gameplay", &"speedometer", previous)
 
 
+## Item 19: the online lobby wires an explicit wraparound focus chain across
+## all of its runtime-built rows, so gamepad-only navigation reaches every
+## control and never dead-ends.
+func test_online_lobby_focus_chain_covers_every_control_and_wraps() -> void:
+	var lobby: OnlineLobby = (load("res://ui/menus/online_lobby.tscn") as PackedScene).instantiate() as OnlineLobby
+	add_child_autofree(lobby)
+	await wait_process_frames(2)
+	var host: Control = lobby.get("_host") as Control
+	var join: Control = lobby.get("_join") as Control
+	var ip: Control = lobby.get("_ip") as Control
+	var difficulty: Control = lobby.get("_difficulty") as Control
+	var back: Control = lobby.get("_back") as Control
+	assert_same(host.get_node(host.focus_neighbor_bottom), join, "ui_down steps to the next control in reading order")
+	assert_same(host.get_node(host.focus_neighbor_right), join, "ui_right steps within the row")
+	assert_same(ip.get_node(ip.focus_neighbor_left), back, "ui_left wraps within the first row")
+	assert_same(difficulty.get_node(difficulty.focus_neighbor_bottom), ip, "last control wraps back to the first")
+	assert_same(ip.get_node(ip.focus_neighbor_top), difficulty, "first control wraps up to the last")
+	var visited: Array[Control] = []
+	var cursor: Control = ip
+	while not visited.has(cursor) and visited.size() <= 32:
+		assert_false(cursor.focus_neighbor_bottom.is_empty(), "%s has an explicit ui_down neighbour" % cursor.name)
+		visited.append(cursor)
+		cursor = cursor.get_node(cursor.focus_neighbor_bottom) as Control
+	assert_same(cursor, ip, "walking ui_down returns to the start without a dead end")
+	assert_eq(visited.size(), 17, "chain covers all 17 lobby controls")
+
+
 ## Item 13: a request refused with ERR_BUSY must not be announced either.
 func test_busy_change_scene_does_not_emit_scene_change_requested() -> void:
 	var root: Window = get_tree().root

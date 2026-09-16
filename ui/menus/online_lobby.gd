@@ -21,6 +21,7 @@ var _relay_target: LineEdit
 var _room_code: LineEdit
 var _host_code_label: Label
 var _copy_button: Button
+var _back: Button
 var _upnp_status: Label
 var _upnp: NetUpnp
 var _relay_client: NetRelayClient
@@ -68,12 +69,13 @@ func _ready() -> void:
 	_kart = OnlineLobbyWidgets.options(controls, _karts)
 	_ready_button = OnlineLobbyWidgets.button(controls, "READY", _toggle_ready)
 	_start = OnlineLobbyWidgets.button(controls, "START", _start_race)
-	OnlineLobbyWidgets.button(controls, "BACK", go_back)
+	_back = OnlineLobbyWidgets.button(controls, "BACK", go_back)
 	_driver.item_selected.connect(_selection_changed)
 	_kart.item_selected.connect(_selection_changed)
 	_build_relay_row()
 	_build_status_row()
 	_build_race_options_row()
+	_wire_focus()
 	for index: int in range(NetTuning.MAX_PLAYERS):
 		var panel: LocalLobby.PanelView = LocalLobby.create_panel(index)
 		panel.panel.custom_minimum_size.y = 220.0
@@ -136,6 +138,14 @@ func _build_race_options_row() -> void:
 	_difficulties = ResourceScanner.scan_tres(NetContentCatalog.AI_DIRECTORY)
 	_difficulty = OnlineLobbyWidgets.options(row, _difficulties)
 	_difficulty.item_selected.connect(_on_race_options_changed)
+
+## Explicit gamepad focus: up/down walks every row in reading order (wrapping),
+## left/right wraps within a row, so no control is a dead end (Phase 18k item 19).
+func _wire_focus() -> void:
+	OnlineLobbyWidgets.wire_rows_focus(self, [
+		[_ip, _port, _password, _host, _join, _driver, _kart, _ready_button, _start, _back],
+		[_relay_target, _room_code], [_copy_button], [_laps, _ai_count_box, _track, _difficulty],
+	])
 
 ## Host-only: pushes the current controls onto the (now server) session and rebroadcasts the lobby; a no-op on a client or before a session exists.
 func _on_race_options_changed(_value: Variant = null) -> void:
