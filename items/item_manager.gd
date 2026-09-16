@@ -230,6 +230,8 @@ func spawn_impact(world_position: Vector3) -> void:
 
 
 ## Clears live registries and participant state for in-place race restart.
+## `_pools` and `_items_by_id` are intentionally kept: released items return
+## to their pools for reuse across restarts; `_exit_tree` frees them.
 func reset() -> void:
 	for item: ItemBase in _live_items.duplicate():
 		_release_item(item)
