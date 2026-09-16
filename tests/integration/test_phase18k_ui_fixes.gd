@@ -101,6 +101,28 @@ func test_remap_row_escape_cancels_listening_without_rebinding() -> void:
 	assert_eq((row.get_node("BindButton") as Button).text, before[0].as_text(), "label shows the current binding again")
 
 
+## Item 16: `accessibility.drift_tier_icons` gates the tier label/colour; the
+## meter must react to the live settings_changed signal, not only at _ready.
+func test_drift_meter_honours_the_tier_icons_accessibility_setting() -> void:
+	var previous: Variant = SettingsManager.get_setting(&"accessibility", &"drift_tier_icons", true)
+	var meter: DriftMeter = (load("res://ui/hud/drift_meter.tscn") as PackedScene).instantiate() as DriftMeter
+	add_child_autofree(meter)
+	var controller: DriftController = DriftController.new()
+	add_child_autofree(controller)
+	controller._tier = 3
+	meter.set_controller(controller)
+	var label: Label = meter.get_node("Panel/TierLabel") as Label
+	SettingsManager.set_setting(&"accessibility", &"drift_tier_icons", true)
+	meter._process(0.0)
+	assert_eq(label.text, "DRIFT T3")
+	assert_eq(label.modulate, meter.tuning.drift_tier_magenta)
+	SettingsManager.set_setting(&"accessibility", &"drift_tier_icons", false)
+	meter._process(0.0)
+	assert_eq(label.text, "DRIFT", "tier text hidden when icons are off")
+	assert_eq(label.modulate, meter.tuning.drift_tier_cyan, "base colour only when icons are off")
+	SettingsManager.set_setting(&"accessibility", &"drift_tier_icons", previous)
+
+
 ## Item 13: a request refused with ERR_BUSY must not be announced either.
 func test_busy_change_scene_does_not_emit_scene_change_requested() -> void:
 	var root: Window = get_tree().root
