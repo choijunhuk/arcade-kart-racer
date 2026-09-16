@@ -44,6 +44,40 @@ func test_change_scene_is_not_busy_after_a_failed_transition() -> void:
 	assert_not_null(root.get_node_or_null(NodePath(String(GameState.TRANSITION_NODE_NAME))))
 
 
+## Item 14: the networked pause overlay hides RESTART/SETTINGS, so ui_down
+## from RESUME must land on the next *visible* button (LEAVE RACE), not on a
+## hidden one that swallows focus.
+func test_network_pause_focus_chain_skips_hidden_buttons() -> void:
+	var menu: PauseMenu = (load("res://ui/menus/pause_menu.tscn") as PackedScene).instantiate() as PauseMenu
+	add_child_autofree(menu)
+	var resume: Button = menu.get_node("Panel/VBox/ContinueButton") as Button
+	var leave: Button = menu.get_node("Panel/VBox/MenuButton") as Button
+	var restart: Button = menu.get_node("Panel/VBox/RestartButton") as Button
+	menu._configure_network_buttons(true)
+	assert_false(restart.visible)
+	assert_same(resume.get_node(resume.focus_neighbor_bottom), leave, "RESUME ui_down -> LEAVE RACE")
+	assert_same(leave.get_node(leave.focus_neighbor_bottom), resume, "LEAVE RACE ui_down wraps to RESUME")
+	assert_same(leave.get_node(leave.focus_neighbor_top), resume)
+	menu._configure_network_buttons(false)
+	assert_same(resume.get_node(resume.focus_neighbor_bottom), restart, "local pause restores the full chain")
+
+
+## Item 14: offline results hide BACK TO LOBBY, so the left/right wrap must
+## run MAIN MENU -> RESTART instead of into the hidden button.
+func test_results_focus_chain_skips_hidden_back_to_lobby() -> void:
+	var screen: ResultsScreen = (load("res://ui/results/results_screen.tscn") as PackedScene).instantiate() as ResultsScreen
+	add_child_autofree(screen)
+	var manager: RaceManager = RaceManager.new()
+	autofree(manager)
+	screen.show_results([], manager)
+	var restart: Button = screen.get_node("Panel/VBox/Actions/RestartButton") as Button
+	var main_menu: Button = screen.get_node("Panel/VBox/Actions/MenuButton") as Button
+	var lobby: Button = screen.get_node("Panel/VBox/Actions/BackToLobbyButton") as Button
+	assert_false(lobby.visible)
+	assert_same(main_menu.get_node(main_menu.focus_neighbor_right), restart, "MAIN MENU ui_right wraps to RESTART")
+	assert_same(restart.get_node(restart.focus_neighbor_left), main_menu, "RESTART ui_left wraps to MAIN MENU")
+
+
 ## Item 13: a request refused with ERR_BUSY must not be announced either.
 func test_busy_change_scene_does_not_emit_scene_change_requested() -> void:
 	var root: Window = get_tree().root

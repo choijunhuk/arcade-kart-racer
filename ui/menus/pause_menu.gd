@@ -104,6 +104,7 @@ func _configure_network_buttons(active: bool) -> void:
 	_settings_button.visible = not active
 	_continue_button.text = "RESUME" if active else "Continue"
 	_pending_end_session_confirm = false
+	_wire_focus()
 	if not active:
 		_menu_button.text = "Quit to Menu"
 	elif _ends_session_for_everyone():
@@ -198,8 +199,13 @@ func _on_settings_closed() -> void:
 	_continue_button.call_deferred("grab_focus")
 
 
+## Wraps up/down focus over the buttons that are actually shown, so the
+## networked overlay (RESTART/SETTINGS hidden) steps RESUME -> LEAVE directly.
 func _wire_focus() -> void:
-	var buttons: Array[Button] = [_continue_button, _restart_button, _settings_button, _menu_button]
+	var buttons: Array[Button] = []
+	for button: Button in [_continue_button, _restart_button, _settings_button, _menu_button]:
+		if button.visible:
+			buttons.append(button)
 	for index: int in range(buttons.size()):
 		var previous: Button = buttons[(index - 1 + buttons.size()) % buttons.size()]
 		var next: Button = buttons[(index + 1) % buttons.size()]
