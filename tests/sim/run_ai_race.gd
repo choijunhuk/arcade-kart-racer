@@ -54,9 +54,8 @@ var _items_used: Dictionary[String, int] = {}
 var _item_hits: Dictionary[String, int] = {}
 var _rank_one_hits: int = 0
 var _current_position_tracker: PositionTracker
-## Tracks each kart's first lap-1 completion so the last kart to complete lap
-## 1 (i.e. rank 8 by race position, not grid slot) can be identified for the
-## lap1-rank8 balance control comparison.
+## Tracks each kart's first lap-1 completion so the last kart to finish lap 1
+## (rank 8 by race position, not grid slot) feeds the lap1-rank8 balance check.
 var _lap_times: Dictionary[String, Array] = {}
 var _last_lap_totals: Dictionary[String, float] = {}
 var _launches: Dictionary[String, int] = {}
