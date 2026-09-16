@@ -52,13 +52,18 @@ func permanent_mapping_port_to_remove_on_close(mapped_port: int, lease_expires_a
 ## to consume a finished box (review item 1) — never derived from `box.done`
 ## alone before `Thread.is_alive()` has confirmed the worker actually
 ## returned, or this could fire (and disarm) a tick before the result is
-## really safe to read.
+## really safe to read. Restores `auto_accept_quit` before firing, exactly
+## like `fire_on_exit()` (review YELLOW): the arming close request cleared
+## it, and nothing else ever sets it back — so a quit intercepted by
+## `quit_override` (or any later close request in a build that cancels one)
+## would otherwise leave every subsequent window close silently vetoed.
 func poll(now: float, worker_done: bool, tree: SceneTree) -> void:
 	if not is_armed():
 		return
 	if not (worker_done or now >= deadline_at):
 		return
 	deadline_at = -1.0
+	tree.auto_accept_quit = true
 	if quit_override.is_valid():
 		quit_override.call()
 	else:
