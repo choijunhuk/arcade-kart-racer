@@ -163,11 +163,16 @@ func shortcut(node_name: String, entry: float, exit: float, points: Array[Vector
 	route.alt_curve = make_path("Shortcuts/%s" % node_name, "AltCurve", points)
 	if build_surface:
 		TrackBuilder.build_road_segments(geometry, route.alt_curve, 8.0, ROAD_HEIGHT, wall_material)
-	# Both routes must pass the same ordered gates: move a bypassed gate past rejoin.
+	# Both routes must pass the same ordered gates: move a bypassed gate past
+	# rejoin. Each bypassed gate gets its own slot (exit + margin * n) so two or
+	# more of them keep strictly increasing offsets instead of collapsing onto
+	# one point, which the validator's child-order check rejects.
+	var bypassed: int = 0
 	for gate: Checkpoint in get_checkpoints():
 		var offset: float = line.offset_at(gate.global_position)
 		if offset > entry and offset < exit:
-			var rejoin: float = exit + SHORTCUT_GATE_MARGIN
+			bypassed += 1
+			var rejoin: float = exit + SHORTCUT_GATE_MARGIN * float(bypassed)
 			gate.global_transform = Transform3D(Basis.looking_at(line.tangent_at(rejoin)), line.sample(rejoin) + Vector3.UP)
 	return route
 

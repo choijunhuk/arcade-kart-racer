@@ -9,6 +9,8 @@ const MIN_ITEM_BOXES: int = 6
 const MAX_ITEM_LINE_DISTANCE: float = 8.0
 const KILL_ZONE_SAMPLE_STEP: float = 5.0
 const MIN_KILL_DEPTH: float = 32.0
+const REJOIN_SLOT_TOLERANCE: float = 1.0
+const REJOIN_GATE_MARGIN: float = 18.0
 
 
 func _init() -> void:
@@ -54,6 +56,7 @@ func _collect_errors(track: Node) -> PackedStringArray:
 	_validate_grid_contract(start_grid, racing_line, errors)
 	_validate_racing_line(racing_line, errors)
 	_validate_checkpoint_offsets(checkpoints, racing_line, errors)
+	errors.append_array(shortcut_errors(track))
 	_validate_respawn_ground(checkpoints, track, errors)
 	_validate_item_boxes(item_boxes, racing_line, errors)
 	_validate_kill_zone_coverage(kill_zones, track, errors)
@@ -109,15 +112,64 @@ func _validate_checkpoint_offsets(checkpoints: Node, racing_line: Path3D, errors
 	for checkpoint: Node in checkpoints.get_children():
 		if not checkpoint is Node3D:
 			continue
-		var offset: float = 0.0
-		if checkpoint is Checkpoint:
-			offset = (checkpoint as Checkpoint).offset
-		else:
-			var local_position: Vector3 = racing_line.to_local((checkpoint as Node3D).global_position)
-			offset = racing_line.curve.get_closest_offset(local_position)
+		var offset: float = _checkpoint_offset(checkpoint as Node3D, racing_line)
 		if offset <= previous_offset:
-			errors.append("Checkpoint offsets must increase in child order at %s" % checkpoint.name)
+			errors.append("Checkpoint offsets must increase in child order at %s (offset %.1f after %.1f)" % [checkpoint.name, offset, previous_offset])
 		previous_offset = offset
+
+
+static func _checkpoint_offset(checkpoint: Node3D, racing_line: Path3D) -> float:
+	if checkpoint is Checkpoint:
+		return (checkpoint as Checkpoint).offset
+	return racing_line.curve.get_closest_offset(racing_line.to_local(checkpoint.global_position))
+
+
+## Shortcut invariants (Phase 18k): entry precedes exit, relocated rejoin gates
+## do not collapse onto one offset, and the last rejoin gate still sits before
+## the next main-line checkpoint so child-order offsets stay strictly
+## increasing. Static so tests can call it on a live track without running the
+## whole CLI validator.
+static func shortcut_errors(track: Node) -> PackedStringArray:
+	var errors: PackedStringArray = PackedStringArray()
+	var shortcuts: Node = track.get_node_or_null("Shortcuts")
+	var checkpoints: Node = track.get_node_or_null("Checkpoints")
+	var racing_line: Path3D = track.get_node_or_null("RacingLine") as Path3D
+	if shortcuts == null or checkpoints == null or racing_line == null or racing_line.curve == null:
+		return errors
+	var offsets: Array[float] = []
+	var names: PackedStringArray = PackedStringArray()
+	for checkpoint: Node in checkpoints.get_children():
+		if checkpoint is Node3D:
+			offsets.append(_checkpoint_offset(checkpoint as Node3D, racing_line))
+			names.append(checkpoint.name)
+	for child: Node in shortcuts.get_children():
+		if not child is TrackShortcut:
+			continue
+		var route: TrackShortcut = child as TrackShortcut
+		if route.entry_offset >= route.exit_offset:
+			errors.append("Shortcut %s entry_offset %.1f must be before exit_offset %.1f" % [route.name, route.entry_offset, route.exit_offset])
+			continue
+		var last_rejoin: int = -1
+		for index: int in range(offsets.size()):
+			var offset: float = offsets[index]
+			if not _is_rejoin_slot(offset, route.exit_offset):
+				continue
+			if last_rejoin == index - 1 and last_rejoin >= 0 and offset <= offsets[last_rejoin]:
+				errors.append("Shortcut %s rejoin gates %s and %s collapsed onto the same offset %.1f" % [route.name, names[last_rejoin], names[index], offset])
+			last_rejoin = index
+		if last_rejoin >= 0 and last_rejoin + 1 < offsets.size() and offsets[last_rejoin + 1] <= offsets[last_rejoin]:
+			errors.append("Shortcut %s rejoin gate %s (offset %.1f) lands at or after the next checkpoint %s (%.1f)" % [route.name, names[last_rejoin], offsets[last_rejoin], names[last_rejoin + 1], offsets[last_rejoin + 1]])
+	return errors
+
+
+## True when `offset` sits on one of ContentTrack.shortcut()'s rejoin slots
+## (exit + REJOIN_GATE_MARGIN * n, n >= 1), within reprojection tolerance.
+## REJOIN_GATE_MARGIN mirrors ContentTrack.SHORTCUT_GATE_MARGIN (asserted by
+## tests/unit/test_shortcut_rejoin_gates.gd) because this script runs under
+## `godot -s` without autoloads, where loading ContentTrack fails to compile.
+static func _is_rejoin_slot(offset: float, exit_offset: float) -> bool:
+	var steps: float = (offset - exit_offset) / REJOIN_GATE_MARGIN
+	return steps >= 0.9 and absf(steps - roundf(steps)) * REJOIN_GATE_MARGIN <= REJOIN_SLOT_TOLERANCE
 
 
 func _validate_respawn_ground(checkpoints: Node, track: Node, errors: PackedStringArray) -> void:
