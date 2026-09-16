@@ -19,6 +19,7 @@ func configure(owner_session: NetSession, roster: Array[KartController]) -> void
 	if not multiplayer.is_server():
 		session.event_received.connect(_receive)
 		return
+	var mismatched: Array[String] = [] # Review finding 6: an EVENTS entry EventBus's own signal list no longer matches.
 	for event: StringName in EVENTS:
 		var count: int = 0
 		for info: Dictionary in EventBus.get_signal_list():
@@ -29,8 +30,13 @@ func configure(owner_session: NetSession, roster: Array[KartController]) -> void
 			1: callback = func(a: Variant) -> void: _send(event, [a])
 			2: callback = func(a: Variant, b: Variant) -> void: _send(event, [a, b])
 			3: callback = func(a: Variant, b: Variant, c: Variant) -> void: _send(event, [a, b, c])
+			_:
+				mismatched.append(String(event))
+				continue
 		_connections[event] = callback
 		EventBus.connect(event, callback)
+	if not mismatched.is_empty():
+		push_warning("NetEvents: EventBus signal list diverges from EVENTS (missing, or arg count outside 1-3): %s" % ", ".join(mismatched))
 
 func _exit_tree() -> void:
 	for event: StringName in _connections:
