@@ -13,6 +13,9 @@ var _settings_path: String
 
 func before_each() -> void:
 	GameState.reset_session()
+	# Mirror mode is gated by the 18e-3 unlock rules; this file covers the
+	# toggle itself, so the automation bypass keeps it enabled and pressable.
+	GameState.automation_mode = true
 	_settings_path = SettingsManager.settings_path
 	SettingsManager.settings_path = TEST_SETTINGS_PATH
 	SettingsManager.load_settings()
@@ -23,6 +26,7 @@ func after_each() -> void:
 	SettingsManager.load_settings()
 	DirAccess.remove_absolute(TEST_SETTINGS_PATH)
 	GameState.reset_session()
+	GameState.automation_mode = false
 	_cancel_leaked_scene_transition()
 
 
