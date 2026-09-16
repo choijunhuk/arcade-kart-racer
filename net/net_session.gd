@@ -236,6 +236,8 @@ func _selection(driver: String, kart: String, ready: bool) -> void:
 
 @rpc("authority", "call_remote", "reliable")
 func _lobby(roster: Array, lobby_laps: int = 1, lobby_ai_count: int = 6, lobby_track_id: String = "", lobby_difficulty_id: String = "") -> void:
+	if race != null and not multiplayer.is_server(): # Backlog item 5: a stray lobby broadcast reaching a racing client would desync its roster; lobby return uses _return_to_lobby instead.
+		return
 	_roster.apply_lobby(roster, lobby_laps, lobby_ai_count, lobby_track_id, lobby_difficulty_id)
 	lobby_changed.emit()
 
