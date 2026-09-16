@@ -68,6 +68,16 @@ func test_gp_position_rule_honours_the_optional_speed_class_suffix() -> void:
 	assert_true(UnlockRules.condition_met("speed_class", "turbo", data))
 
 
+func test_gp_position_rule_counts_mirror_runs_of_the_same_speed_class() -> void:
+	var data: Dictionary = SaveManager.default_data()
+	data["grand_prix_bests"]["horizon_cup_mirror/normal"] = {"position": 2, "points": 50}
+	assert_true(UnlockRules.condition_met("speed_class", "turbo", data), "a STANDARD mirror cup is still a STANDARD cup")
+	data["grand_prix_bests"].clear()
+	data["grand_prix_bests"]["horizon_cup_turbo_mirror/normal"] = {"position": 1, "points": 60}
+	assert_false(UnlockRules.condition_met("speed_class", "turbo", data), "TURBO mirror is not STANDARD")
+	assert_true(UnlockRules.condition_met("mode", "mirror", data))
+
+
 func test_wins_rule_counts_stats_and_best_laps_all_needs_every_track() -> void:
 	var data: Dictionary = SaveManager.default_data()
 	data["stats"]["wins"] = 4

@@ -185,7 +185,10 @@ static func _best_gp_position(data: Dictionary, speed_class: String) -> int:
 	var best: int = 1_000_000
 	var bests: Dictionary = data.get("grand_prix_bests", {}) as Dictionary
 	for key: Variant in bests:
-		if not speed_class.is_empty() and String(key).get_slice("/", 0) != expected_cup:
+		# Mirror runs of a class count for that class: "horizon_cup_mirror" and
+		# "horizon_cup_turbo_mirror" are still STANDARD / TURBO cup results.
+		var cup: String = String(key).get_slice("/", 0).trim_suffix("_mirror")
+		if not speed_class.is_empty() and cup != expected_cup:
 			continue
 		var position: int = int((bests[key] as Dictionary).get("position", 0))
 		if position > 0:
