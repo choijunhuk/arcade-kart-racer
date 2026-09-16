@@ -84,6 +84,8 @@ if git rev-parse --verify origin/main >/dev/null 2>&1; then
       echo "approved via .omc/sensitive_approval.md (two reviews recorded for $head_sha)"
     else echo "FAIL: sensitive paths lack two recorded cross-reviews for $head_sha"; fail=1; fi
   else echo "ok"; fi
+else
+  echo "FAIL: cannot resolve origin/main to check sensitive paths"; fail=1
 fi
 
 printf '\n== RESULT: %s\n' "$([ $fail -eq 0 ] && echo PASS || echo FAIL)"
