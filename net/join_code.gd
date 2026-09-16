@@ -52,7 +52,7 @@ static func decode(code: String) -> Dictionary:
 
 ## Returns true when `text` looks like a join code rather than a raw ip[:port].
 static func looks_like_code(text: String) -> bool:
-	var normalized: String = text.strip_edges().to_upper().replace("-", "")
+	var normalized: String = text.strip_edges().to_upper().replace("-", "").replace(" ", "") # Same normalization as decode() (review finding 4).
 	if normalized.length() != CODE_LENGTH:
 		return false
 	for symbol: String in normalized:
