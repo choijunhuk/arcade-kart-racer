@@ -45,6 +45,21 @@ func test_other_local_players_do_not_touch_the_primary_stats() -> void:
 	assert_eq(int(data["player_profiles"]["P2"]["best_positions"]["test_loop"]), 1, "P2 record still saved")
 
 
+func test_position_zero_keeps_the_lap_but_neither_a_position_nor_a_race() -> void:
+	var manager: SaveManagerService = SaveManagerService.new(SAVE_PATH, GHOST_DIRECTORY)
+	autofree(manager)
+	assert_eq(manager.record_race_result(&"test_loop", 12_000, 3), OK)
+	assert_eq(manager.record_race_result(&"test_loop", 11_000, 0), OK, "a time trial / solo lap")
+	assert_eq(manager.record_race_result(&"test_hairpin", 9_000, 0), OK)
+	var data: Dictionary = manager.load_data()
+	assert_eq(int(data["best_laps"]["test_loop"]), 11_000)
+	assert_eq(int(data["best_laps"]["test_hairpin"]), 9_000)
+	assert_eq(int(data["best_positions"]["test_loop"]), 3, "the real 3rd place survives")
+	assert_false(data["best_positions"].has("test_hairpin"))
+	assert_eq(int(data["stats"]["wins"]), 0)
+	assert_eq(int(data["stats"]["races"]), 1, "solo laps are not races")
+
+
 func test_v3_save_without_stats_keeps_records_and_gains_the_section() -> void:
 	var v3_save: Dictionary = {
 		"version": 3,

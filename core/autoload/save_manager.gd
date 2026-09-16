@@ -145,11 +145,13 @@ func record_player_race_result(
 	if profile_index == 0:
 		(data["best_laps"] as Dictionary).merge(best_laps, true)
 		(data["best_positions"] as Dictionary).merge(best_positions, true)
-		# Progression counters (spec 18e-3) follow the primary profile only.
-		var stats: Dictionary = data.get("stats", {}) as Dictionary
-		stats["races"] = int(stats.get("races", 0)) + 1
-		stats["wins"] = int(stats.get("wins", 0)) + (1 if position == 1 else 0)
-		data["stats"] = stats
+		# Progression counters (spec 18e-3) follow the primary profile only;
+		# position 0 (time trial / solo race) records a lap but not a race.
+		if position > 0:
+			var stats: Dictionary = data.get("stats", {}) as Dictionary
+			stats["races"] = int(stats.get("races", 0)) + 1
+			stats["wins"] = int(stats.get("wins", 0)) + (1 if position == 1 else 0)
+			data["stats"] = stats
 	return save_data(data)
 
 

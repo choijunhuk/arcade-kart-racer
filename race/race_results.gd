@@ -30,6 +30,9 @@ var _best_laps: Dictionary[int, float] = {}
 var _hit_counts: Dictionary[int, int] = {}
 var _item_counts: Dictionary[int, int] = {}
 var _entries: Array[Entry] = []
+## False for time trials and solo races: they keep best laps but never a
+## position, a race/win count, or an unlock claim (review finding, 18e-3).
+var _competitive: bool = true
 ## Rule keys (`kind:id`) first satisfied by this race's saved results (spec 18e-3).
 var newly_unlocked: Array[String] = []
 
@@ -46,11 +49,13 @@ func setup(
 
 
 ## Registers all local humans so results and saves retain P1-P4 identity.
+## `config` decides whether the race is competitive; null (unit tests) means yes.
 func setup_players(
 	track_id: StringName, karts: Array[KartController], player_karts: Array[KartController],
-	save_manager: SaveManagerService = null,
+	save_manager: SaveManagerService = null, config: RaceConfig = null,
 ) -> void:
 	_track_id = track_id
+	_competitive = config == null or is_competitive(config)
 	_player_karts = player_karts.duplicate()
 	_save_manager = save_manager if save_manager != null else SaveManager
 	_registered_ids.clear()
@@ -102,9 +107,15 @@ func finalize(ranking: Array[KartController], finish_times: Dictionary) -> Array
 		_entries.append(entry)
 	_persist_player_results()
 	newly_unlocked.clear()
-	if not _player_karts.is_empty():
+	if _competitive and not _player_karts.is_empty():
 		newly_unlocked = UnlockRules.claim_new(_save_manager)
 	return _entries.duplicate()
+
+
+## A finishing position only means something against other karts: time trials
+## and single-kart races always rank 1, so they must not feed positions or wins.
+static func is_competitive(config: RaceConfig) -> bool:
+	return config.kart_count > 1 and config.race_mode != RaceConfig.RaceMode.TIME_TRIAL
 
 
 ## Returns the finalized entries in rank order.
@@ -161,7 +172,8 @@ func _persist_player_results() -> void:
 			continue
 		var player_id: int = entry.kart.get_instance_id()
 		var best_lap_ms: int = roundi(float(_best_laps.get(player_id, -1.0)) * 1000.0)
-		_save_manager.record_player_race_result(entry.player_number - 1, _track_id, best_lap_ms, entry.rank)
+		var position: int = entry.rank if _competitive else 0
+		_save_manager.record_player_race_result(entry.player_number - 1, _track_id, best_lap_ms, position)
 
 ## Releases a departed kart's records while preserving survivors' original grid slots.
 func unregister_kart(kart: KartController) -> void:
