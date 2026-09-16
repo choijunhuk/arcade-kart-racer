@@ -45,8 +45,7 @@ const KART_CLASSES: Array[KartData] = [
 var _kart_names_by_id: Dictionary[int, String] = {}
 var _respawns: Dictionary[String, int] = {}
 var _wall_head_on_counts: Dictionary[String, int] = {}
-var _wall_head_on_count: int = 0
-var _kart_contact_events: int = 0
+var _wall_head_on_count: int = 0; var _kart_contact_events: int = 0
 var _drift_started_count: int = 0
 var _tier3_release_count: int = 0
 var _shortcut_take_count: int = 0
@@ -90,7 +89,7 @@ func _run() -> void:
 		var race_output: Dictionary = await _run_one_race(
 			int(options["laps"]), int(options["karts"]), int(options["seed"]) + race_index,
 			difficulty, track_scene, bool(options["items"]), bool(options["mixed_karts"]),
-			options["speed_class"] as RaceConfig.SpeedClass,
+			options["speed_class"] as RaceConfig.SpeedClass, bool(options["mirror"]),
 		)
 		race_outputs.append(race_output)
 		failed = _race_failed(race_output, int(options["laps"])) or failed
@@ -98,7 +97,7 @@ func _run() -> void:
 			var control: Dictionary = await _run_one_race(
 				int(options["laps"]), int(options["karts"]), int(options["seed"]) + race_index,
 				difficulty, track_scene, false, bool(options["mixed_karts"]),
-				options["speed_class"] as RaceConfig.SpeedClass,
+				options["speed_class"] as RaceConfig.SpeedClass, bool(options["mirror"]),
 			)
 			control_outputs.append(control)
 			failed = _race_failed(control, int(options["laps"])) or failed
@@ -120,7 +119,7 @@ func _run() -> void:
 		"track": String(options["track"]),
 		"laps": int(options["laps"]),
 		"karts": int(options["karts"]), "speed_class": SimSpeedClass.name_for(options["speed_class"] as RaceConfig.SpeedClass),
-		"items": bool(options["items"]),
+		"mirror": bool(options["mirror"]), "items": bool(options["items"]),
 		"balance_gate_evaluated": balance_evaluated,
 		"balance_gate_pass": balance_pass if balance_evaluated else true,
 		"races": race_outputs,
@@ -146,7 +145,7 @@ static func parse_options(args: PackedStringArray) -> Dictionary:
 		"difficulty": DEFAULT_DIFFICULTY,
 		"track": DEFAULT_TRACK,
 		"items": DEFAULT_ITEMS_ENABLED,
-		"speed_class": RaceConfig.SpeedClass.STANDARD,
+		"speed_class": RaceConfig.SpeedClass.STANDARD, "mirror": false,
 		"strict_balance": false,
 		"mixed_karts": false,
 	}
@@ -178,6 +177,7 @@ static func parse_options(args: PackedStringArray) -> Dictionary:
 				elif raw_value == "off":
 					options["items"] = false
 			"--class": options["speed_class"] = SimSpeedClass.parse(raw_value)
+			"--mirror": options["mirror"] = raw_value == "on"
 			"--mixed-karts":
 				options["mixed_karts"] = raw_value == "on"
 			"--strict-balance":
@@ -225,7 +225,7 @@ static func should_evaluate_item_balance(options: Dictionary) -> bool:
 func _run_one_race(
 	laps: int, kart_count: int, race_number: int, difficulty: AIDifficultyProfile,
 	track_scene: PackedScene, items_enabled: bool, mixed_karts: bool = false,
-	speed_class: RaceConfig.SpeedClass = RaceConfig.SpeedClass.STANDARD,
+	speed_class: RaceConfig.SpeedClass = RaceConfig.SpeedClass.STANDARD, mirror: bool = false,
 ) -> Dictionary:
 	_reset_metrics()
 	_current_kart_count = kart_count
@@ -239,7 +239,7 @@ func _run_one_race(
 	config.player_kart = MEDIUM_KART
 	config.player_slot = -1
 	config.ai_difficulty = difficulty
-	config.items_enabled = items_enabled; config.speed_class = speed_class
+	config.items_enabled = items_enabled; config.speed_class = speed_class; config.mirror = mirror
 	config.seed = race_number # vary each race's AI rolls instead of repeating race 1
 	if mixed_karts:
 		for slot: int in range(kart_count):
