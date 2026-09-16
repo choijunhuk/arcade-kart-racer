@@ -51,6 +51,7 @@ var _threat_remaining: float = 0.0
 var _time_trial: TimeTrialGhost
 var _time_label: Label
 var _compact_layout: bool = false
+var _mirrored: bool = false
 
 
 func _ready() -> void:
@@ -143,6 +144,14 @@ func set_minimap_visible(minimap_visible: bool) -> void:
 	_minimap.visible = minimap_visible
 
 
+## Re-flips the minimap so it reads mirrored with the world while
+## SplitScreen's own counter-flip keeps everything else legible (spec §18e).
+func set_mirrored(mirrored: bool) -> void:
+	_mirrored = mirrored
+	_minimap.scale = Vector2(-1.0, 1.0) if _mirrored else Vector2.ONE
+	_minimap.pivot_offset = _minimap.size * 0.5
+
+
 ## Pure viewport-local geometry used by split-screen and headless tests.
 static func layout_for_viewport(viewport_size: Vector2) -> Dictionary:
 	var compact: bool = viewport_size.x <= COMPACT_MAX_WIDTH or viewport_size.y <= COMPACT_MAX_HEIGHT
@@ -188,6 +197,7 @@ func apply_viewport_layout(viewport_size: Vector2) -> void:
 	_lap_base_position = _lap_label.position
 	_position_label.pivot_offset = _position_label.size * 0.5
 	_minimap.refresh_layout()
+	set_mirrored(_mirrored)
 
 
 func _apply_text_layout(viewport_size: Vector2) -> void:

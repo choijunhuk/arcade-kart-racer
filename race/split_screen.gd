@@ -20,6 +20,7 @@ const QUAD_RENDER_SCALE: float = 0.70
 
 var _views: Array[PlayerView] = []
 var _normalized_rects: Array[Rect2] = []
+var _mirror: bool = false
 
 
 func _ready() -> void:
@@ -35,12 +36,14 @@ func configure(
 	lap_tracker: LapTracker, position_tracker: PositionTracker,
 	kart_count: int, total_laps: int, item_manager: ItemManager,
 	racing_line: RacingLine, karts: Array[KartController],
+	mirror: bool = false,
 ) -> void:
 	clear_views()
 	if players.is_empty():
 		visible = false
 		return
 	visible = true
+	_mirror = mirror
 	_normalized_rects = layout_rects(players.size())
 	var minimap_all: bool = bool(SettingsManager.get_setting(&"accessibility", &"multiplayer_minimap_all", false))
 	for index: int in range(players.size()):
@@ -51,6 +54,7 @@ func configure(
 			item_manager, racing_line, karts,
 		)
 		view.hud.set_minimap_visible(index == 0 or minimap_all)
+		view.hud.set_mirrored(_mirror)
 		view.speed_lines.set_target(players[index])
 		_views.append(view)
 	_on_settings_changed(&"video")
@@ -149,6 +153,23 @@ func _resize_views() -> void:
 		view.container.position = rect.position * output
 		view.container.size = rect.size * output
 		view.hud.apply_viewport_layout(view.container.size)
+		_apply_mirror(view)
+
+
+## Flips the whole rendered view (world + HUD) horizontally, then flips the
+## HUD's own canvas back so its text stays legible while the world and the
+## minimap (re-flipped again in RaceHud) both read as mirrored (spec §18e).
+func _apply_mirror(view: PlayerView) -> void:
+	if _mirror:
+		view.container.scale = Vector2(-1.0, 1.0)
+		view.container.pivot_offset = view.container.size * 0.5
+		view.hud.scale = Vector2(-1.0, 1.0)
+		view.hud.offset = Vector2(view.container.size.x, 0.0)
+	else:
+		view.container.scale = Vector2.ONE
+		view.container.pivot_offset = Vector2.ZERO
+		view.hud.scale = Vector2.ONE
+		view.hud.offset = Vector2.ZERO
 
 
 func _on_settings_changed(section: StringName) -> void:

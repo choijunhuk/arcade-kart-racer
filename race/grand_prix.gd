@@ -112,14 +112,17 @@ func player_slot() -> int:
 	return _base.player_slot if _base != null else -1
 
 
-## Separates saved championship bests by difficulty and speed class; STANDARD
-## keeps the pre-18e key exactly so existing bests stay valid (spec §18e).
+## Separates saved championship bests by difficulty, speed class and mirror;
+## STANDARD non-mirror keeps the pre-18e key exactly so existing bests stay
+## valid (spec §18e).
 func record_key() -> StringName:
 	var suffix: String = ""
 	if _base.speed_class == RaceConfig.SpeedClass.CRUISE:
 		suffix = "_cruise"
 	elif _base.speed_class == RaceConfig.SpeedClass.TURBO:
 		suffix = "_turbo"
+	if _base.mirror:
+		suffix += "_mirror"
 	return StringName("%s%s/%s" % [CUP_ID, suffix, _base.ai_difficulty.id])
 
 

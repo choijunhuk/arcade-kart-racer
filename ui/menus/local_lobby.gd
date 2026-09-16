@@ -23,6 +23,7 @@ const SELECT_DRIVER: int = 0
 const SELECT_KART: int = 1
 
 @onready var _grid: GridContainer = $Panel/VBox/Players
+@onready var _mirror_toggle: CheckButton = $Panel/VBox/MirrorToggle
 
 var _drivers: Array[DriverData] = []
 var _karts: Array[KartData] = []
@@ -39,6 +40,7 @@ func _ready() -> void:
 		var panel: PanelView = create_panel(player_index)
 		_panels.append(panel)
 		_grid.add_child(panel.panel)
+	_mirror_toggle.button_pressed = bool(SettingsManager.get_setting(&"gameplay", &"mirror", false))
 	_refresh_panels()
 
 
@@ -169,6 +171,8 @@ func _cycle_selection(device_id: int, direction: int) -> void:
 func _start_race() -> void:
 	var slots: Array[PlayerSlot] = _state.players()
 	var config: RaceConfig = RaceConfigBuilder.build_local(slots, DEFAULT_TRACK, DEFAULT_DIFFICULTY, DEFAULT_KART_COUNT)
+	config.mirror = _mirror_toggle.button_pressed
+	SettingsManager.update_setting(&"gameplay", &"mirror", config.mirror)
 	GameState.pending_race_config = config
 	GameState.selected_race_mode = RaceConfig.RaceMode.LOCAL_MULTIPLAYER
 	GameState.selected_driver_id = slots[0].driver_id

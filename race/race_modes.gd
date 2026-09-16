@@ -16,7 +16,7 @@ func setup(config: RaceConfig, player: KartController, track: TrackRoot, hud: Ra
 	if config.race_mode == RaceConfig.RaceMode.TIME_TRIAL:
 		time_trial = TimeTrialGhost.new()
 		add_child(time_trial)
-		time_trial.setup(player, track, config.track.id, config.laps)
+		time_trial.setup(player, track, config.record_track_id(), config.laps)
 		track.get_node("ItemBoxes").hide()
 	hud.bind_time_trial(time_trial)
 

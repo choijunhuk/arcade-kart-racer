@@ -342,6 +342,28 @@ ghost remains input-driven; these are environment poses, not kart pose correctio
 Physics/content changes must bump/invalidate the ghost format before claiming
 old ghosts compatible; cross-build deterministic replay is not claimed.
 
+## Mirror mode
+
+`RaceConfig.mirror` (spec §18e) mirrors the presented view and inverts human
+steering without touching track geometry, collision, checkpoints or AI, so
+results stay fair and reproducible. `RaceConfig.record_track_id()` returns
+`"<track_id>_mirror"` when mirrored, else the exact non-mirror id; `RaceManager`
+and `RaceModes` use it for saved best laps and time-trial ghosts, so mirrored
+runs never mix with non-mirror bests. `GrandPrix.record_key()` appends the same
+`_mirror` suffix after the speed-class suffix; non-mirror STANDARD keeps
+today's exact key.
+
+The view flip is purely presentational: `SplitScreen` scales each player's
+`SubViewportContainer` by `(-1, 1)` about its own center, mirroring the whole
+rendered viewport (3D world plus the HUD canvas drawn inside it). `RaceHud`
+then counter-scales its own canvas by `(-1, 1)` (with a matching `offset`) so
+after the container's flip its text and panels read normally again; the
+minimap is flipped once more on top of that so it alone still reads mirrored
+with the world. `PlayerInputProvider.mirrored` negates only the smoothed human
+steer value at the point it is packed into `InputFrame`, so a mirrored ghost
+recording (and its later playback) stays self-consistent. AI, ghost and
+network input providers are untouched, since they already act in world space.
+
 ## Content authoring checklist
 
 1. Add typed `.tres` resources with unique original ids, names and colors. Driver
