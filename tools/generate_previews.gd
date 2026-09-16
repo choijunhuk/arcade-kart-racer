@@ -20,7 +20,12 @@ func _run() -> void:
 		_viewport.add_child(track)
 		await process_frame
 		var line: RacingLine = track.get_racing_line()
-		var points: PackedVector3Array = line.curve.get_baked_points()
+		var points: PackedVector3Array = line.curve.get_baked_points() if line != null and line.curve != null else PackedVector3Array()
+		if points.is_empty():
+			push_warning("PREVIEW skipped %s: racing line has no baked points" % data.id)
+			_viewport.queue_free()
+			await process_frame
+			continue
 		var image: Image
 		if DisplayServer.get_name() == "headless":
 			image = _map(points, data.preview_color)

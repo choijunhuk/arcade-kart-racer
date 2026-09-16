@@ -19,6 +19,11 @@ func _ready() -> void:
 func _input(event: InputEvent) -> void:
 	if not _listening:
 		return
+	# Escape (ui_cancel) backs out of the capture rather than becoming the binding.
+	if event.is_action_pressed(&"ui_cancel"):
+		cancel_listening()
+		get_viewport().set_input_as_handled()
+		return
 	var captured: InputEvent = _normalized_capture(event)
 	if captured == null:
 		return
@@ -45,6 +50,13 @@ func refresh_binding() -> void:
 ## Returns whether this row currently owns raw input capture.
 func is_listening() -> bool:
 	return _listening
+
+
+## Stops capturing without changing the binding and restores the label.
+func cancel_listening() -> void:
+	_listening = false
+	set_process_input(false)
+	refresh_binding()
 
 
 func _start_listening() -> void:

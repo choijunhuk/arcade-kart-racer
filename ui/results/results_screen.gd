@@ -60,6 +60,7 @@ func show_results(entries: Array[RaceResults.Entry], manager: RaceManager) -> vo
 	_back_to_lobby_button.visible = is_instance_valid(GameState.net_session)
 	_pending_end_session_confirm = false
 	_menu_button.text = "END SESSION" if _ends_session_for_everyone() else "MAIN MENU"
+	_wire_action_focus()
 	visible = true
 	_restart_button.call_deferred("grab_focus")
 
@@ -138,8 +139,13 @@ func _show_speed_class() -> void:
 		_class_label.text = "%s • MIRROR" % text if config.mirror else text
 
 
+## Wraps left/right focus over the buttons that are actually shown; a hidden
+## BACK TO LOBBY in the chain would otherwise dead-end gamepad navigation.
 func _wire_action_focus() -> void:
-	var buttons: Array[Button] = [_restart_button, _track_select_button, _menu_button, _back_to_lobby_button]
+	var buttons: Array[Button] = []
+	for button: Button in [_restart_button, _track_select_button, _menu_button, _back_to_lobby_button]:
+		if button.visible:
+			buttons.append(button)
 	for index: int in range(buttons.size()):
 		var previous: Button = buttons[(index - 1 + buttons.size()) % buttons.size()]
 		var next: Button = buttons[(index + 1) % buttons.size()]

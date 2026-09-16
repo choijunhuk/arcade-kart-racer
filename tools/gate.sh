@@ -63,10 +63,13 @@ if run_stage tracks '^TRACK VALIDATION PASSED:' tools/validate_tracks.sh; then e
 step "sim smoke"
 if [ -x tools/run_sim.sh ]; then
   if run_stage sim '"success":true' tools/run_sim.sh --races 1 --karts 8 --laps 1; then echo "ok"; fi
+else
+  echo "FAIL: tools/run_sim.sh missing or not executable"; fail=1
 fi
 
 step "file size (.gd <= 400 lines)"
-big=$(find . -name '*.gd' -not -path './addons/*' -not -path './.godot/*' | xargs wc -l | awk '$1>400 && $2!="total"{print}')
+# -print0/-0 keeps paths with spaces intact; BSD xargs skips the command on empty input.
+big=$(find . -name '*.gd' -not -path './addons/*' -not -path './.godot/*' -print0 | xargs -0 wc -l | awk '$1>400 && $2!="total"{print}')
 if [ -n "$big" ]; then echo "FAIL:"; echo "$big"; fail=1; else echo "ok"; fi
 
 step "project.godot hygiene"
@@ -84,6 +87,8 @@ if git rev-parse --verify origin/main >/dev/null 2>&1; then
       echo "approved via .omc/sensitive_approval.md (two reviews recorded for $head_sha)"
     else echo "FAIL: sensitive paths lack two recorded cross-reviews for $head_sha"; fail=1; fi
   else echo "ok"; fi
+else
+  echo "FAIL: cannot resolve origin/main to check sensitive paths"; fail=1
 fi
 
 printf '\n== RESULT: %s\n' "$([ $fail -eq 0 ] && echo PASS || echo FAIL)"

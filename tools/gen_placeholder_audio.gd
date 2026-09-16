@@ -313,5 +313,10 @@ func _write_library(file_name: String, ids: Array[StringName]) -> void:
 		var variance: float = IMPACT_PITCH_VARIANCE if String(ids[index]).begins_with("impact_") else 0.0
 		text += '&"%s": %s%s\n' % [ids[index], variance, ',' if index < ids.size() - 1 else '']
 	text += '})\n'
-	var file: FileAccess = FileAccess.open("res://data/audio/" + file_name + ".tres", FileAccess.WRITE)
+	var library_path: String = "res://data/audio/" + file_name + ".tres"
+	var file: FileAccess = FileAccess.open(library_path, FileAccess.WRITE)
+	if file == null:
+		push_error("Cannot write audio library %s: %s" % [library_path, error_string(FileAccess.get_open_error())])
+		_failed = true
+		return
 	file.store_string(text)

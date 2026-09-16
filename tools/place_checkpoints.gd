@@ -9,6 +9,7 @@ extends SceneTree
 ## Usage: godot --headless --path . -s tools/place_checkpoints.gd -- <track.tscn> [count]
 
 const CHECKPOINT_SCENE: String = "res://track/elements/checkpoint.tscn"
+const VALIDATOR: GDScript = preload("res://track/track_validator.gd")
 const DEFAULT_COUNT: int = 8
 
 
@@ -23,7 +24,17 @@ func _run() -> void:
 		quit(1)
 		return
 	var track_path: String = arguments[0]
-	var count: int = int(arguments[1]) if arguments.size() > 1 else DEFAULT_COUNT
+	var count: int = DEFAULT_COUNT
+	if arguments.size() > 1:
+		if not arguments[1].is_valid_int():
+			print("count must be an integer, got '%s'" % arguments[1])
+			quit(1)
+			return
+		count = arguments[1].to_int()
+	if count < VALIDATOR.MIN_CHECKPOINTS:
+		print("count must be at least %d (track_validator MIN_CHECKPOINTS), got %d" % [VALIDATOR.MIN_CHECKPOINTS, count])
+		quit(1)
+		return
 	var scene: PackedScene = load(track_path) as PackedScene
 	if scene == null:
 		print("Could not load %s" % track_path)
