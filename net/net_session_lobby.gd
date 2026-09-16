@@ -312,11 +312,17 @@ func set_race_options(new_laps: int, new_ai_count: int, new_track_id: String, ne
 ## joiner's post-replace roster is what gets evaluated, never a stale
 ## pre-replace count that could let `slots + ai_count` exceed
 ## `RaceSnapshot.MAX_KARTS` and desync that peer for the whole race.
+## Also normalizes track/difficulty (backlog item 4): an id absent from
+## `NetContentCatalog` (a stale build's track, or a hostile payload) falls
+## back to the same default `resolve_track()`/`resolve_difficulty()` already
+## use when building the actual `RaceConfig` — so the id this call stores (and
+## re-broadcasts) always names the content that will really be raced on,
+## identically on host and client since both run this one function.
 func apply_race_settings(new_laps: int, new_ai_count: int, new_track_id: String, new_difficulty_id: String) -> void:
 	_session.laps = clampi(new_laps, 1, 9)
 	_session.ai_count = clampi(new_ai_count, 0, maxi(0, RaceSnapshot.MAX_KARTS - _session.players.size()))
-	_session.track_id = new_track_id
-	_session.difficulty_id = new_difficulty_id
+	_session.track_id = String(NetContentCatalog.resolve_track(new_track_id).id)
+	_session.difficulty_id = String(NetContentCatalog.resolve_difficulty(new_difficulty_id).id)
 
 
 ## `_lobby`'s full body: replaces the roster and applies the host's fields.
