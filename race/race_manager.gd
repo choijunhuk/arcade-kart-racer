@@ -147,7 +147,7 @@ func _begin_loading(is_restart: bool) -> void:
 	_spawn_karts()
 	if not network_replica:
 		_register_track_elements()
-	_race_results.setup_players(_config.record_track_id(), _karts, _player_karts)
+	_race_results.setup_players(_config.record_track_id(), _karts, _player_karts, null, _config)
 	var local_players: Array[KartController] = get_local_human_karts()
 	_audio.configure(local_players[0] if not local_players.is_empty() else null, _config.laps, _config.track.bgm_id)
 	_countdown.setup(tuning, _karts)

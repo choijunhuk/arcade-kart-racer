@@ -27,6 +27,7 @@ func _ready() -> void:
 	_items_toggle.text = "ITEMS OFF • TIME TRIAL" if time_trial else "ITEMS ENABLED"
 	_setup_speed_class_option(time_trial)
 	_mirror_toggle.button_pressed = bool(SettingsManager.get_setting(&"gameplay", &"mirror", false))
+	_apply_mirror_lock()
 	if GameState.selected_race_mode == RaceConfig.RaceMode.GRAND_PRIX:
 		back_scene_path = "res://ui/menus/kart_select.tscn"
 		$Panel/VBox/Title.text = "HORIZON CUP • 4 RACES"
@@ -48,12 +49,32 @@ func _ready() -> void:
 func _setup_speed_class_option(time_trial: bool) -> void:
 	for speed_class: RaceConfig.SpeedClass in SPEED_CLASS_ORDER:
 		_speed_class_option.add_item(SpeedClassStats.display_name(speed_class))
+	var turbo_index: int = SPEED_CLASS_ORDER.find(RaceConfig.SpeedClass.TURBO)
+	if not UnlockRules.is_unlocked("speed_class", "turbo", SaveManager.load_data()):
+		_speed_class_option.set_item_disabled(turbo_index, true)
+		_speed_class_option.set_item_text(turbo_index, _speed_class_option.get_item_text(turbo_index) + "  LOCKED")
+		_speed_class_option.tooltip_text = UnlockRules.locked_hint("speed_class", "turbo")
 	var stored: int = int(SettingsManager.get_setting(&"gameplay", &"speed_class", RaceConfig.SpeedClass.STANDARD))
 	var stored_index: int = SPEED_CLASS_ORDER.find(stored)
-	_speed_class_option.select(stored_index if stored_index >= 0 else SPEED_CLASS_ORDER.find(RaceConfig.SpeedClass.STANDARD))
+	if stored_index < 0 or _speed_class_option.is_item_disabled(stored_index):
+		stored_index = SPEED_CLASS_ORDER.find(RaceConfig.SpeedClass.STANDARD)
+	_speed_class_option.select(stored_index)
 	if time_trial:
 		_speed_class_option.select(SPEED_CLASS_ORDER.find(RaceConfig.SpeedClass.STANDARD))
 	_speed_class_option.disabled = time_trial
+
+
+## Mirror mode is a concurrent 18e branch; when its toggle exists in the scene,
+## lock it behind the `mode:mirror` rule (spec 18e-3) — otherwise a no-op.
+func _apply_mirror_lock() -> void:
+	var mirror_toggle: CheckButton = get_node_or_null(^"Panel/VBox/MirrorToggle") as CheckButton
+	if mirror_toggle == null or UnlockRules.is_unlocked("mode", "mirror", SaveManager.load_data()):
+		return
+	mirror_toggle.button_pressed = false
+	mirror_toggle.disabled = true
+	mirror_toggle.focus_mode = Control.FOCUS_NONE
+	mirror_toggle.text += "  LOCKED"
+	mirror_toggle.tooltip_text = UnlockRules.locked_hint("mode", "mirror")
 
 
 func _build_difficulty_list() -> void:
@@ -76,6 +97,8 @@ func _start_race(difficulty: AIDifficultyProfile) -> void:
 		push_error("Race selections could not be resolved from data directories")
 		return
 	var chosen_class: RaceConfig.SpeedClass = SPEED_CLASS_ORDER[_speed_class_option.selected]
+	if _speed_class_option.is_item_disabled(_speed_class_option.selected):
+		chosen_class = RaceConfig.SpeedClass.STANDARD
 	GameState.pending_race_config = RaceConfigBuilder.build(driver, kart, track, difficulty)
 	GameState.pending_race_config.race_mode = GameState.selected_race_mode
 	GameState.pending_race_config.speed_class = chosen_class

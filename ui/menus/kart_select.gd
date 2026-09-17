@@ -28,15 +28,18 @@ func _ready() -> void:
 	_back_button.pressed.connect(go_back)
 	if not _buttons.is_empty():
 		wire_grid_focus(_buttons, GRID_COLUMNS)
-		focus_initial(_buttons[0])
+		focus_initial(first_focusable(_buttons))
 
 
 func _build_kart_grid() -> void:
+	var save_data: Dictionary = SaveManager.load_data()
 	for resource: Resource in ResourceScanner.scan_tres(KART_DIRECTORY):
 		if not resource is KartData:
 			continue
 		var kart: KartData = resource as KartData
 		var button: Button = _create_kart_card(kart)
+		if lock_if_locked(button, "kart", String(kart.id), save_data):
+			(button.get_node(^"Content/Name") as Label).text += "  LOCKED"
 		button.pressed.connect(_select_kart.bind(kart))
 		_grid.add_child(button)
 		_buttons.append(button)
@@ -59,6 +62,7 @@ func _create_kart_card(kart: KartData) -> Button:
 	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	content.add_child(preview)
 	var name_label: Label = Label.new()
+	name_label.name = "Name"
 	name_label.text = kart.display_name
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE

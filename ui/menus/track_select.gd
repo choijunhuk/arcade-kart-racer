@@ -23,10 +23,11 @@ func _ready() -> void:
 		var focus_controls: Array[Control] = _buttons.duplicate()
 		focus_controls.append(_back_button)
 		wire_vertical_focus(focus_controls)
-		focus_initial(_buttons[0])
+		focus_initial(first_focusable(_buttons))
 
 
 func _build_track_list() -> void:
+	var save_data: Dictionary = SaveManager.load_data()
 	for resource: Resource in ResourceScanner.scan_tres(TRACK_DIRECTORY):
 		if not resource is TrackData:
 			continue
@@ -39,6 +40,8 @@ func _build_track_list() -> void:
 			track.laps_default,
 			_format_milliseconds(best_lap_ms),
 		]
+		if lock_if_locked(button, "track", String(track.id), save_data):
+			button.text = "%s  •  LOCKED\n%s" % [track.display_name, UnlockRules.locked_hint("track", String(track.id))]
 		button.pressed.connect(_select_track.bind(track))
 		button.focus_entered.connect(_preview_track.bind(track))
 		button.mouse_entered.connect(_preview_track.bind(track))

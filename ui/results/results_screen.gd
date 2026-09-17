@@ -22,6 +22,7 @@ const SECONDS_PER_MINUTE: int = 60
 var _manager: RaceManager
 var _gp_label: Label
 var _class_label: Label
+var _unlock_label: Label
 var _is_grand_prix: bool = false
 ## True once MENU has been pressed once as a listen host with other players
 ## present (mirrors PauseMenu's networked overlay): the next press actually
@@ -57,6 +58,7 @@ func show_results(entries: Array[RaceResults.Entry], manager: RaceManager) -> vo
 		_record_badge.visible = _record_badge.visible or entry.is_new_record
 	_show_grand_prix()
 	_show_speed_class()
+	_show_unlocks(manager)
 	_back_to_lobby_button.visible = is_instance_valid(GameState.net_session)
 	_pending_end_session_confirm = false
 	_menu_button.text = "END SESSION" if _ends_session_for_everyone() else "MAIN MENU"
@@ -137,6 +139,30 @@ func _show_speed_class() -> void:
 	if config != null:
 		var text: String = "CLASS: %s" % SpeedClassStats.display_name(config.speed_class)
 		_class_label.text = "%s • MIRROR" % text if config.mirror else text
+
+
+## "UNLOCKED: A, B" for content first earned by this race or by the final cup
+## result (spec 18e-3); hidden when nothing new was earned or no live race
+## owns the screen (network replays, bare test managers).
+func _show_unlocks(manager: RaceManager) -> void:
+	var keys: Array[String] = []
+	if manager != null:
+		var results: RaceResults = manager.get_node_or_null(^"RaceResults") as RaceResults
+		if results != null:
+			keys.append_array(results.newly_unlocked)
+		if manager.modes != null:
+			for key: String in manager.modes.newly_unlocked:
+				if not keys.has(key):
+					keys.append(key)
+	if _unlock_label == null:
+		_unlock_label = Label.new()
+		_unlock_label.name = "UnlockedLabel"
+		_unlock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_unlock_label.modulate = Color(0.55, 1.0, 0.7, 1.0)
+		$Panel/VBox.add_child(_unlock_label)
+		$Panel/VBox.move_child(_unlock_label, _record_badge.get_index() + 1)
+	_unlock_label.text = UnlockRules.announcement(keys)
+	_unlock_label.visible = not keys.is_empty()
 
 
 ## Wraps left/right focus over the buttons that are actually shown; a hidden

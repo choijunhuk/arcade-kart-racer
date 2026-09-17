@@ -80,6 +80,7 @@ func default_settings() -> Dictionary:
 			"telemetry_enabled": true,
 			"speed_class": RaceConfig.SpeedClass.STANDARD,
 			"mirror": false,
+			"unlock_all": false,
 		},
 		"tutorial": {
 			"tutorial_done": false,

@@ -98,12 +98,15 @@ func set_player_ready(device_id: int, ready: bool) -> bool:
 	return true
 
 
+## Loads only unlocked drivers/karts (spec 18e-3), so the cursor defaults and
+## left/right cycling can never land on locked content.
 func _load_content() -> void:
+	var save_data: Dictionary = SaveManager.load_data()
 	for resource: Resource in ResourceScanner.scan_tres(DRIVER_DIRECTORY):
-		if resource is DriverData:
+		if resource is DriverData and UnlockRules.is_unlocked("driver", String(resource.get("id")), save_data):
 			_drivers.append(resource as DriverData)
 	for resource: Resource in ResourceScanner.scan_tres(KART_DIRECTORY):
-		if resource is KartData:
+		if resource is KartData and UnlockRules.is_unlocked("kart", String(resource.get("id")), save_data):
 			_karts.append(resource as KartData)
 	if _drivers.is_empty() or _karts.is_empty():
 		push_error("Local lobby requires at least one driver and kart")

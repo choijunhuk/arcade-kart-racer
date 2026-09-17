@@ -32,7 +32,29 @@ func go_back() -> void:
 
 ## Defers initial focus until Godot has completed Control layout.
 func focus_initial(control: Control) -> void:
-	control.call_deferred("grab_focus")
+	if control != null:
+		control.call_deferred("grab_focus")
+
+
+## Locks a content button when its unlock rule is unmet (spec 18e-3): disabled,
+## removed from the focus chain (Godot's neighbor resolution steps over
+## FOCUS_NONE controls, so wired chains skip it), and carrying the requirement
+## as its tooltip. Returns true when locked so the caller can annotate its label.
+func lock_if_locked(button: Button, kind: String, id: String, save_data: Dictionary) -> bool:
+	if UnlockRules.is_unlocked(kind, id, save_data):
+		return false
+	button.disabled = true
+	button.focus_mode = Control.FOCUS_NONE
+	button.tooltip_text = UnlockRules.locked_hint(kind, id)
+	return true
+
+
+## First control still able to take focus (locked ones are FOCUS_NONE), or null.
+func first_focusable(controls: Array[Control]) -> Control:
+	for control: Control in controls:
+		if control.focus_mode != Control.FOCUS_NONE:
+			return control
+	return null
 
 
 ## Wires a wraparound vertical focus chain for enabled controls.
