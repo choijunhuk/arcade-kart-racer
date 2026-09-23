@@ -29,10 +29,12 @@ void vertex() {
 	local_y = VERTEX.y;
 }
 
-float triplanar(vec3 p, vec3 n, float scale) {
-	vec3 w = pow(abs(n), vec3(4.0));
-	w /= (w.x + w.y + w.z);
-	return wn_fbm(p.zy * scale) * w.x + wn_fbm(p.xz * scale) * w.y + wn_fbm(p.xy * scale) * w.z;
+// Dominant-axis projection: walls are near-vertical, so one fbm lookup
+// instead of a three-way triplanar blend keeps full-screen canyon walls cheap.
+float projected(vec3 p, vec3 n, float scale) {
+	vec3 a = abs(n);
+	vec2 uv = a.y > max(a.x, a.z) ? p.xz : (a.x > a.z ? p.zy : p.xy);
+	return wn_fbm(uv * scale);
 }
 
 void fragment() {
@@ -41,7 +43,7 @@ void fragment() {
 	float h01 = clamp((local_y - wall_bottom) / max(wall_height, 0.01), 0.0, 1.0);
 	float top = smoothstep(0.6, 0.8, n.y);
 	float pixel = max(length(fwidth(world_pos)), 0.002);
-	float detail = triplanar(world_pos, n, 1.3);
+	float detail = projected(world_pos, n, 1.3);
 	vec3 col = color_a;
 	float rough = 0.85;
 	float spec = 0.5;
