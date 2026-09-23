@@ -20,7 +20,6 @@ const TREE_SMALL_TARGET_HEIGHT: float = 3.5
 const LIGHT_POST_TARGET_HEIGHT: float = 4.5
 const GANTRY_TARGET_HEIGHT: float = 6.0
 const FLAG_TARGET_HEIGHT: float = 1.4
-const GRID_TARGET_LENGTH: float = 2.0
 const STAND_TARGET_HEIGHT: float = 2.6
 const STAND_OUTSET: float = 9.5
 const PITS_TARGET_LENGTH: float = 6.0
@@ -91,8 +90,8 @@ static func _guardrails(root: Node3D, track: Node3D, line: RacingLine, width: fl
 	_batch(root, "KenneyGuardrailWhite", white_mesh, white_transforms)
 
 
-## Overhead start/finish gantry sized to the road width, checkered flags at
-## either side of the line, and start-grid decals along the racing surface.
+## Overhead start/finish gantry sized to the road width and checkered flags at
+## either side of the line (grid slots are painted by the road shader).
 static func _start_finish(root: Node3D, line: RacingLine, width: float, theme: int) -> void:
 	var gantry_model: String = "overheadRoundColored" if theme == NIGHT_THEME else "overheadLights"
 	var gantry_mesh: ArrayMesh = _load_prop_mesh(gantry_model, 0.0, true, width)
@@ -112,15 +111,6 @@ static func _start_finish(root: Node3D, line: RacingLine, width: float, theme: i
 			var at: Vector3 = line.sample(0.0) + line.right_at(0.0) * (width * 0.5 + 0.6) * side
 			flag_transforms.append(Transform3D(basis, root.to_local(at)))
 		_batch(root, "KenneyFinishFlags", flag_mesh, flag_transforms)
-	var grid_mesh: ArrayMesh = _load_prop_mesh("roadStartPositions", 0.0, true, width * 0.92, GRID_TARGET_LENGTH)
-	if grid_mesh != null:
-		var node: MeshInstance3D = MeshInstance3D.new()
-		node.name = "KenneyStartGrid"
-		node.mesh = grid_mesh
-		var basis: Basis = Basis.looking_at(line.tangent_at(0.0), Vector3.UP)
-		var at: Vector3 = line.sample(GRID_TARGET_LENGTH * 0.5) + Vector3.UP * 0.03
-		node.transform = Transform3D(basis, root.to_local(at))
-		root.add_child(node)
 
 
 ## A pylon at every sharp corner's outside apex, complementing (not

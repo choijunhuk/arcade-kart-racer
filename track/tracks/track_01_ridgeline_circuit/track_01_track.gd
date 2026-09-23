@@ -18,8 +18,8 @@ const CLIFF_SPAN_FRACTION: float = 0.09
 
 @onready var _geometry: StaticBody3D = $Geometry
 
-var _road_material: StandardMaterial3D = _make_material(Color(0.27, 0.29, 0.33))
-var _wall_material: StandardMaterial3D = _make_material(Color(0.95, 0.35, 0.08))
+var road_material: StandardMaterial3D = _make_material(Color(0.27, 0.29, 0.33))
+var wall_material: StandardMaterial3D = _make_material(Color(0.95, 0.35, 0.08))
 
 
 func _ready() -> void:
@@ -31,7 +31,7 @@ func _build_geometry() -> void:
 	var racing_line: RacingLine = get_racing_line()
 	if racing_line == null:
 		return
-	TrackBuilder.build_road_segments(_geometry, racing_line, ROAD_WIDTH, ROAD_HEIGHT, _road_material)
+	TrackBuilder.build_road_segments(_geometry, racing_line, ROAD_WIDTH, ROAD_HEIGHT, road_material)
 	_build_wall_ribbon(racing_line, WALL_HALF_OFFSET, true)
 	_build_wall_ribbon(racing_line, -WALL_HALF_OFFSET, false)
 	_build_local_curve("MovingObstacles/BarrierPathA", [Vector3(0.0, 0.0, -5.0), Vector3(0.0, 0.0, 5.0)])
@@ -69,7 +69,7 @@ func _build_wall_ribbon(racing_line: RacingLine, lateral_offset: float, skip_cli
 		var end_point: Vector3 = racing_line.sample(end_offset) + racing_line.right_at(end_offset) * lateral_offset
 		TrackBuilder.add_connected_segment(
 			_geometry, start_point, end_point, racing_line.right_at(start_offset), racing_line.right_at(end_offset),
-			WALL_THICKNESS, WALL_HEIGHT, _wall_material,
+			WALL_THICKNESS, WALL_HEIGHT, wall_material,
 		)
 
 

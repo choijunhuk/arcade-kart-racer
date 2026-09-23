@@ -45,14 +45,40 @@ static func build_road_segments(
 		shape_node.shape = shape
 		shape_node.set_meta(&"driveable_surface", true)
 		body.add_child(shape_node)
-		for vertex: Vector3 in [start - ra + up, end - rb + up, end + rb + up, start - ra + up, end + rb + up, start + ra + up]:
-			surface.set_uv(Vector2(vertex.x, vertex.z) * 0.2)
-			surface.add_vertex(body.to_local(vertex))
+		var half: float = width * 0.5
+		var kerb_a: float = _kerb_mask(curve, a)
+		var kerb_b: float = _kerb_mask(curve, b)
+		var corners: Array = [
+			[start - ra + up, Vector2(-half, a), kerb_a], [end - rb + up, Vector2(-half, b), kerb_b],
+			[end + rb + up, Vector2(half, b), kerb_b], [start - ra + up, Vector2(-half, a), kerb_a],
+			[end + rb + up, Vector2(half, b), kerb_b], [start + ra + up, Vector2(half, a), kerb_a],
+		]
+		for corner: Array in corners:
+			# UV: lateral/along metres; UV2: half width + corner kerb mask (road.gdshader).
+			surface.set_uv(corner[1])
+			surface.set_uv2(Vector2(half, corner[2]))
+			surface.add_vertex(body.to_local(corner[0]))
 	surface.generate_normals()
 	var mesh: ArrayMesh = surface.commit()
 	var visual: MeshInstance3D = MeshInstance3D.new()
+	visual.name = "RoadVisual"
 	visual.mesh = mesh
+	visual.add_to_group(&"road_visual")
+	visual.set_meta(&"main_road", path is RacingLine)
 	body.add_child(visual)
+
+
+## Road-shader kerb mask from the heading change over +-2 m of the curve.
+static func _kerb_mask(curve: Curve3D, offset: float) -> float:
+	var length: float = curve.get_baked_length()
+	var before: Vector3 = curve.sample_baked(clampf(offset - 2.0, 0.0, length))
+	var here: Vector3 = curve.sample_baked(clampf(offset, 0.0, length))
+	var after: Vector3 = curve.sample_baked(clampf(offset + 2.0, 0.0, length))
+	var first: Vector3 = Vector3(here.x - before.x, 0.0, here.z - before.z)
+	var second: Vector3 = Vector3(after.x - here.x, 0.0, after.z - here.z)
+	if first.length() < 0.01 or second.length() < 0.01:
+		return 0.0
+	return 1.0 if first.angle_to(second) / 2.0 >= RoadRibbon.KERB_CURVATURE_MIN else 0.0
 
 
 

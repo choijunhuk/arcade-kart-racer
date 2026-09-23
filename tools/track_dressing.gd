@@ -1,15 +1,11 @@
 class_name TrackDressing
 extends RefCounted
 
-## Phase 17 "v3" trackside dressing layered on top of TrackArt's sky/props/
-## markings: tyre-line curbs, crowd, hairpin signage, finish checker, item-box
-## markers, a countdown-lit start gantry and the ground beyond the road.
+## Phase 17 "v3" trackside dressing layered on top of TrackArt's sky/props:
+## crowd, hairpin signage, item-box markers, a countdown-lit start gantry and
+## the ground beyond the road (kerbs/checker are painted by road.gdshader).
 ## Visual only — never adds or edits collision shapes.
 
-const CURB_STEP: float = 2.0
-const CURB_CURVATURE_MIN: float = 0.0111
-const CURB_OUTSET: float = 0.5
-const CURB_HEIGHT: float = 0.16
 const SIGN_STEP: float = 12.0
 const SIGN_CURVATURE_MIN: float = 0.033
 const SIGN_OUTSET: float = 2.4
@@ -30,10 +26,8 @@ static func install(root: Node3D, track: Node3D, line: RacingLine, theme: int) -
 	_terrain(root, line, theme)
 	if track.has_method("is_gap"):
 		_cliffs(root, track, line)
-	_curbs(root, track, line, width)
 	_hairpin_signs(root, track, line, width)
 	_crowd(root, line, width)
-	_finish_checker(root, line, width)
 	_item_box_markers(root, track)
 	_gantry(root, line, width)
 
@@ -53,32 +47,6 @@ static func _batch(root: Node3D, node_name: String, mesh: Mesh, paint: Material,
 	node.material_override = paint
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(node)
-
-
-## Raised alternating red/white rumble strips along the outer road edge
-## wherever the racing line's curvature says "corner", not "straight".
-static func _curbs(root: Node3D, track: Node3D, line: RacingLine, width: float) -> void:
-	var shape: BoxMesh = BoxMesh.new()
-	shape.size = Vector3(CURB_OUTSET * 1.8, CURB_HEIGHT, CURB_STEP * 0.92)
-	var white: Array[Transform3D] = []
-	var red: Array[Transform3D] = []
-	var count: int = ceili(line.length() / CURB_STEP)
-	var stripe: int = 0
-	for index: int in range(count):
-		var offset: float = float(index) * CURB_STEP
-		var at_center: Vector3 = line.sample(offset)
-		if track.has_method("is_gap") and bool(track.call("is_gap", at_center)):
-			continue
-		if absf(line.curvature_at(offset)) < CURB_CURVATURE_MIN:
-			continue
-		stripe += 1
-		var basis: Basis = Basis.looking_at(line.tangent_at(offset), Vector3.UP)
-		for side: float in [-1.0, 1.0]:
-			var at: Vector3 = at_center + line.right_at(offset) * (side * (width * 0.5 + CURB_OUTSET)) + Vector3.UP * (CURB_HEIGHT * 0.5)
-			var xf: Transform3D = Transform3D(basis, root.to_local(at))
-			(white if stripe % 2 == 0 else red).append(xf)
-	_batch(root, "CurbWhite", shape, PrimitiveArt.material(Color(0.92, 0.94, 0.98)), white)
-	_batch(root, "CurbRed", shape, PrimitiveArt.material(Color(0.82, 0.09, 0.07)), red)
 
 
 ## Trackside hazard boards on the outside apex of every hairpin-tight corner,
@@ -157,37 +125,6 @@ static func _longest_straight(line: RacingLine) -> Vector2:
 	return Vector2(best_start, best_len)
 
 
-## A black/white checker patch across the full road width at the start line.
-static func _finish_checker(root: Node3D, line: RacingLine, width: float) -> void:
-	var surface: SurfaceTool = SurfaceTool.new()
-	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	surface.set_material(PrimitiveArt.material(Color(0.95, 0.95, 0.95), true))
-	var columns: int = maxi(4, int(width / 1.4))
-	var up: Vector3 = Vector3.UP * 0.24
-	for row: int in range(2):
-		var a: float = float(row) - 1.0
-		var b: float = float(row)
-		for column: int in range(columns):
-			if (row + column) % 2 == 0:
-				continue
-			var lateral_a: float = -width * 0.5 + width * float(column) / float(columns)
-			var lateral_b: float = -width * 0.5 + width * float(column + 1) / float(columns)
-			var ra: Vector3 = line.right_at(a)
-			var rb: Vector3 = line.right_at(b)
-			var p1: Vector3 = line.sample(a) + ra * lateral_a + up
-			var p2: Vector3 = line.sample(b) + rb * lateral_a + up
-			var p3: Vector3 = line.sample(b) + rb * lateral_b + up
-			var p4: Vector3 = line.sample(a) + ra * lateral_b + up
-			for vertex: Vector3 in [p1, p2, p3, p1, p3, p4]:
-				surface.add_vertex(root.to_local(vertex))
-	surface.generate_normals()
-	var node: MeshInstance3D = MeshInstance3D.new()
-	node.name = "FinishChecker"
-	node.mesh = surface.commit()
-	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	root.add_child(node)
-
-
 ## A small floating diamond marker above every item box, batched in one draw.
 static func _item_box_markers(root: Node3D, track: Node3D) -> void:
 	var container: Node = track.get_node_or_null("ItemBoxes")
@@ -240,7 +177,7 @@ static func _terrain(root: Node3D, line: RacingLine, theme: int) -> void:
 	noise.frequency = 0.01
 	var surface: SurfaceTool = SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	surface.set_material(TrackArt.surface(TrackArt.THEMES[theme].darkened(0.15), true))
+	surface.set_material(WorldMaterials.terrain(theme))
 	var grid: Array = []
 	for row: int in range(TERRAIN_DIVISIONS + 1):
 		var line_row: Array[Vector3] = []

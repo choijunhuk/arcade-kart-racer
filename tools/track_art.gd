@@ -62,8 +62,7 @@ static func install(track: Node3D) -> void:
 	track.add_child(root)
 	_sky(root, theme)
 	_props(root, line, theme)
-	_markings(root, track, line)
-	_posts(root, line)
+	WorldMaterials.apply(track, theme)
 	if theme == NIGHT_THEME:
 		_lamps(root, line)
 	TrackDressing.install(root, track, line, theme)
@@ -193,63 +192,3 @@ static func _props(root: Node3D, line: RacingLine, theme: int) -> void:
 			var offset: float = float(batch * 8 + index) * PROP_SPACING
 			var at: Vector3 = line.sample(offset) + line.right_at(offset) * PROP_OFFSET + Vector3.UP * shape.height * 0.5
 			mesh.set_instance_transform(index, Transform3D(Basis.IDENTITY, at - origin))
-
-
-static func _markings(root: Node3D, track: Node3D, line: RacingLine) -> void:
-	var width: float = float(track.get("road_width")) if track.has_method("bank_at") else 14.0
-	var white: SurfaceTool = SurfaceTool.new()
-	var red: SurfaceTool = SurfaceTool.new()
-	white.begin(Mesh.PRIMITIVE_TRIANGLES)
-	red.begin(Mesh.PRIMITIVE_TRIANGLES)
-	white.set_material(PrimitiveArt.material(Color(0.9, 0.95, 1), true))
-	red.set_material(PrimitiveArt.material(Color(0.9, 0.12, 0.06)))
-	var count: int = ceili(line.length() / 4.0)
-	for index: int in range(count):
-		var a: float = line.length() * float(index) / float(count)
-		var b: float = line.length() * float(index + 1) / float(count)
-		if track.has_method("bank_at") and bool(track.call("is_gap", (line.sample(a) + line.sample(b)) * 0.5)):
-			continue
-		for side: float in [-1.0, 1.0]:
-			_strip(white, root, track, line, a, b, side * (width * 0.5 - 0.3), 0.12)
-			_strip(white if index % 2 == 0 else red, root, track, line, a, b, side * width * 0.5, 0.25)
-	for lane: int in range(int(width)):
-		for row: int in range(2):
-			_strip(white if (lane + row) % 2 == 0 else red, root, track, line, float(row), float(row + 1), float(lane) - width * 0.5 + 0.5, 0.5)
-	for surface_tool: SurfaceTool in [white, red]:
-		surface_tool.generate_normals()
-		var node: MeshInstance3D = MeshInstance3D.new()
-		node.mesh = surface_tool.commit()
-		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		root.add_child(node)
-
-static func _strip(surface_tool: SurfaceTool, root: Node3D, track: Node3D, line: RacingLine, a: float, b: float, lateral: float, half: float) -> void:
-	var ra: Vector3 = line.right_at(a)
-	var rb: Vector3 = line.right_at(b)
-	if track.has_method("bank_at"):
-		ra = ra.rotated(line.tangent_at(a), float(track.call("bank_at", a)))
-		rb = rb.rotated(line.tangent_at(b), float(track.call("bank_at", b)))
-	var up: Vector3 = Vector3.UP * 0.23
-	var start: Vector3 = line.sample(a) + up
-	var end: Vector3 = line.sample(b) + up
-	for vertex: Vector3 in [start + ra * (lateral - half), end + rb * (lateral - half), end + rb * (lateral + half), start + ra * (lateral - half), end + rb * (lateral + half), start + ra * (lateral + half)]:
-		surface_tool.add_vertex(root.to_local(vertex))
-
-
-static func _posts(root: Node3D, line: RacingLine) -> void:
-	var shape: BoxMesh = BoxMesh.new()
-	shape.size = Vector3(0.15, 1.4, 0.15)
-	shape.material = PrimitiveArt.material(Color(0.5, 0.55, 0.6))
-	var count: int = ceili(line.length() / 8.0)
-	var mesh: MultiMesh = MultiMesh.new()
-	mesh.transform_format = MultiMesh.TRANSFORM_3D
-	mesh.mesh = shape
-	mesh.instance_count = count * 2
-	var node: MultiMeshInstance3D = MultiMeshInstance3D.new()
-	node.multimesh = mesh
-	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	root.add_child(node)
-	for index: int in range(count):
-		var offset: float = line.length() * float(index) / float(count)
-		for side: int in range(2):
-			var at: Vector3 = line.sample(offset) + line.right_at(offset) * (7.5 if side == 0 else -7.5) + Vector3.UP * 0.7
-			mesh.set_instance_transform(index * 2 + side, Transform3D(Basis.IDENTITY, root.to_local(at)))
