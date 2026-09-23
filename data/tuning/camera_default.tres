@@ -28,3 +28,7 @@ landing_shake_max_speed = 18.0
 kart_hit_trauma = 0.6
 item_explosion_trauma = 0.7
 item_explosion_shake_radius = 25.0
+look_ahead_distance = 2.5
+turn_look_ahead = 4.0
+look_smoothing = 7.0
+boost_start_trauma = 0.15
