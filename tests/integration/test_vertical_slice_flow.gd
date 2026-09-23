@@ -12,7 +12,11 @@ const LAPS: int = 3
 const KARTS: int = 8
 const TIME_SCALE: float = 4.0
 const MAX_RACE_SECONDS: float = 600.0
-const MAX_TRANSITION_FRAMES: int = 480
+## Wall-clock budget for one menu transition. The overlay's fades are real-time
+## tweens (2 x TransitionOverlay.FADE_SECONDS plus a threaded load), so a frame
+## count is the wrong unit: an idle machine spins 480 headless frames in well
+## under the ~0.5 s the fades need, and the test timed out mid fade-in.
+const MAX_TRANSITION_MSEC: int = 10000
 const SETTLE_FRAMES: int = 240
 const NODE_GROWTH_LIMIT: int = 50
 const MEMORY_GROWTH_LIMIT: int = 8 * 1024 * 1024
@@ -162,7 +166,8 @@ func _finish_race(manager: RaceManager) -> bool:
 
 
 func _wait_for_scene(path: String) -> bool:
-	for _frame: int in range(MAX_TRANSITION_FRAMES):
+	var deadline: int = Time.get_ticks_msec() + MAX_TRANSITION_MSEC
+	while Time.get_ticks_msec() < deadline:
 		var current: Node = get_tree().current_scene
 		if current != null and current.scene_file_path == path and get_tree().root.get_node_or_null("SceneTransition") == null:
 			await wait_process_frames(2)
