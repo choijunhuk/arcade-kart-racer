@@ -156,6 +156,7 @@ func bind(
 		_drift_meter.set_controller(player_kart.drift_controller)
 	_minimap.bind(racing_line, karts, player_kart)
 	($Celebration as FinishCelebration).bind(player_kart, lap_tracker, karts)
+	($NameTags as RaceNameTags).bind(player_kart, position_tracker, karts)
 
 
 ## Selects whether this player's viewport pays the minimap rendering cost.

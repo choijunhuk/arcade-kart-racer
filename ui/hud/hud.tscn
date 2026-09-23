@@ -1,4 +1,4 @@
-[gd_scene load_steps=16 format=3]
+[gd_scene load_steps=17 format=3]
 
 [ext_resource type="Script" path="res://ui/hud/hud.gd" id="1_hud"]
 [ext_resource type="PackedScene" path="res://ui/hud/drift_meter.tscn" id="2_drift"]
@@ -8,6 +8,7 @@
 [ext_resource type="Script" path="res://ui/hud/item_slot_view.gd" id="6_item"]
 [ext_resource type="Script" path="res://ui/hud/race_intro_card.gd" id="7_intro"]
 [ext_resource type="Script" path="res://ui/hud/finish_celebration.gd" id="8_celebration"]
+[ext_resource type="Script" path="res://ui/hud/name_tags.gd" id="9_tags"]
 
 [sub_resource type="StyleBoxFlat" id="Style_threat"]
 bg_color = Color(0.85, 0.08, 0.16, 0.82)
@@ -54,6 +55,17 @@ fill_to = Vector2(1, 0.5)
 script = ExtResource("1_hud")
 
 [node name="Fade" type="CanvasModulate" parent="."]
+
+[node name="NameTags" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme = ExtResource("4_theme")
+script = ExtResource("9_tags")
 
 [node name="PositionPanel" type="Control" parent="."]
 layout_mode = 3
