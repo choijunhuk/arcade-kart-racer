@@ -564,6 +564,102 @@ use no textures and no `TIME` in the sky, and collision is never touched.
 
 Volumetric fog stays off on every tier.
 
+### Phase 19-D play feel (decisions)
+
+- **Corner-safe respawn** (`RespawnSystem.corner_safe_offset`). Track01's
+  Checkpoint07 sits on the apex of the wall-less closing arc. A kart that
+  respawned there faced the tangent with about 18 m of road before the cliff
+  and fell off again at full throttle. If a checkpoint spot is inside a corner
+  tighter than 1/33 m, the spot steps back along the line in 3 m steps (never
+  past the previous gate minus 6 m) until the next 40 m of road stays within
+  that curvature. Spots on straights are unchanged (spec §14.5), and the
+  resolver still runs only on the server. Regression: a zero-steer,
+  full-throttle kart stays on the road for 3 s after an apex respawn.
+- **Intro flyover / finish presentation.** Only menu flows set
+  `RaceConfig.intro_seconds`, through `RaceIntro.apply`: 2.6 s, time trial
+  1.2 s. There is no flyover online, in the tutorial, in automation or sims,
+  in all-AI races, or when `gameplay.race_intro` is off. Configs built
+  elsewhere default to 0, so tests and net keep the old timing. `Countdown`
+  holds tick 3 for that long and does not sample start input meanwhile.
+  `ui_accept`/`use_item` skips it. `CameraCinematics` owns the flyover pose
+  and the finish beat. The finish "slow-mo" is a 0.5 s camera hold plus an
+  FOV punch-in before a slow orbit. It is never `Engine.time_scale`, which
+  stays network-deterministic. `FinishCelebration` (HUD canvas) runs confetti
+  and fireworks for a 1st-3rd finish only; any other rank keeps the plain
+  FINISH banner.
+- **HUD additions** are self-contained HUD children (`RaceNameTags`,
+  `HudFeedback`, `RaceIntroCard`, `FinishCelebration`). They read EventBus
+  and the bound kart only, so `RaceHud` stays under 400 lines. Name tags
+  project through each SubViewport's own camera, follow `Visuals` (delayed
+  poses on network replicas), fade out between 16 and 55 m, give the racers
+  directly ahead/behind a rival accent, and drop overlapping tags. They can
+  be switched off with `gameplay.name_tags`.
+- **Track rhythm.** Track01's three boost pads and MainJump were authored at
+  y 0.3, so their trigger top (0.5) sat under the 0.6 road top and had never
+  fired. They now sit at 0.75, the ContentTrack contact height. MainJump
+  launches at 26 m/s forward; 16 m/s would have braked karts. Added pads:
+  Track01 `HairpinExitDash`, Track02 `SweeperDash0/1` (sweeper exit into the
+  tunnel), Track03 `WestKicker` (7 m/s hop, 26 m/s forward) and
+  `CrownDash0/1` (final-corner exit). All sit on the racing line via
+  `ContentTrack.place()`, and checkpoints and the line are unchanged.
+  `GhostRecording.VERSION` is 4. AI pad entries per 8-kart/3-lap race
+  (seed 1): Track01 24 on each pad, Track02 21-22, Track03 21-24.
+  Record comparability: the revived Track01 pads and jump (and the new pads
+  on Track02/03) change the lap times players can reach. Saved best laps and
+  positions recorded before 19-D are therefore not directly comparable with
+  newer ones, especially on Track01. They are kept, not reset, because the
+  save format and SaveManager are unchanged. Time-trial ghosts are the one
+  exception: `GhostRecording.VERSION` 4 invalidates them, since an old input
+  replay would miss the pads.
+
+Seeded sims (`tools/run_sim.sh --track track_0N --karts 8 --laps 3`, normal,
+items on, seed 0). "before" is main 6f05a1b; "after" is item 5 (pads) before
+the item 6 tuning:
+
+| track | run | finished | respawns | finish spread s | mean lap s | winner s | wall head-ons |
+|---|---|---|---|---|---|---|---|
+| track_01 | before | 8/8 | 0 | 6.30 | 62.75 | 185.28 | 0 |
+| track_01 | after | 8/8 | 0 | 3.55 | 62.59 | 185.95 | 0 |
+| track_02 | before | 8/8 | 0 | 2.65 | 53.36 | 158.63 | 0 |
+| track_02 | after | 8/8 | 0 | 3.47 | 52.83 | 157.07 | 0 |
+| track_03 | before | 8/8 | 0 | 2.17 | 66.58 | 198.65 | 0 |
+| track_03 | after | 8/8 | 0 | 3.23 | 66.28 | 197.52 | 1 |
+| track_04 | before | 8/8 | 0 | 6.38 | 68.45 | 200.95 | 4 |
+| track_04 | after | 8/8 | 0 | 6.38 | 68.45 | 200.95 | 4 |
+
+- **Feel tuning pass (item 6): no `data/tuning` change.** `user://telemetry`
+  is empty on this machine because only real `PlayerInputProvider` karts are
+  recorded, so the evidence below comes from sims plus a scratch probe. The
+  probe ran an 8-kart/3-lap Track01 race with a drifting scripted player and
+  logged drift-release tier and charge at release.
+  - Drift tiers (T1/T2/T3 = 1.0/2.2/3.6 s charge; 0.67/1.47/2.4 s at full
+    steer alignment): tracks 2-4 have no drifts at all from AI or the
+    scripted line follower, because no corner is tighter than their 22 m
+    radius gate. On Track01, AI releases were T0/T1/T2/T3 = 90/38/4/0
+    (seed 1) and 98/34/8/0 (seed 2). AI charge peaks at 2.2 s on the hairpin,
+    and 14-15 releases per race end 0-10% short of T2.
+  - Items (20-race strict balance, Track01, items on/off, same seeds): the
+    lap-1-last rank gain delta was -0.4 on main 6f05a1b (gate fail) and +0.4
+    on item 5 (gate minimum). Leader hits were 0.9-1.0 per race in both. With
+    ±0.4 between configurations, this sample size does not show a stable
+    catch-up effect. Rocket Dart landed 0 hits in 31 uses and Triple Dart 1
+    in 15. That is item/AI aim behaviour, and it lives in `data/item_tables`
+    and item scenes, outside this lane's tuning scope.
+  - Trial (reverted): T2 2.2→2.0 s and T3 3.6→3.2 s turned about 15 AI
+    near-miss releases per race into T2 (mini_turbo_2 boosts 6-10 → 23-26).
+    The 4-track sims were unchanged except Track01 finish spread
+    (3.55 → 3.05 s), but the 20-race balance delta dropped 0.4 → 0.3 and
+    failed the gate. Neither the balance data nor human telemetry supports the
+    change, so the tuning stays as it is.
+
+| evidence (Track01, 8 karts, 3 laps) | main 6f05a1b | item 5 | T2 2.0 / T3 3.2 trial |
+|---|---|---|---|
+| AI T0/T1/T2/T3 releases (seed 1 probe) | n/a | 90/38/4/0 | 93/20/21/0 |
+| mini_turbo_2 boosts (seed 1 / 2) | n/a | 6 / 10 | 23 / 26 |
+| 20-race lap-1-last gain on / off (delta) | 0.5 / 0.9 (-0.4) | 0.9 / 0.5 (+0.4) | 0.7 / 0.4 (+0.3) |
+| leader hits per race | 0.9 | 1.0 | 0.9 |
+| mean finish spread s / mean lap s | 5.98 / 63.06 | 5.65 / 62.76 | 5.40 / 62.79 |
+
 ## Build and export
 
 `export_presets.cfg` defines Windows x86_64, macOS Universal (unsigned), and Linux

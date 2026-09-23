@@ -155,6 +155,9 @@ func bind(
 	if player_kart != null:
 		_drift_meter.set_controller(player_kart.drift_controller)
 	_minimap.bind(racing_line, karts, player_kart)
+	($Celebration as FinishCelebration).bind(player_kart, lap_tracker, karts)
+	($NameTags as RaceNameTags).bind(player_kart, position_tracker, karts)
+	($Feedback as HudFeedback).bind(player_kart, item_manager)
 
 
 ## Selects whether this player's viewport pays the minimap rendering cost.
@@ -221,8 +224,9 @@ func bind_time_trial(trial: TimeTrialGhost) -> void:
 		add_child(_time_label)
 	_time_label.visible = trial != null
 	$ItemPanel.visible = trial == null
-	for label: Label in [_position_label, _ordinal_label, _position_count_label, _timer_label, _split_label]:
+	for label: Label in [_position_label, _ordinal_label, _position_count_label, _timer_label]:
 		label.visible = trial == null
+	_split_label.visible = trial == null and not _compact_layout # compact split screen has no split line
 
 
 func _refresh_speedometer_setting(section: StringName) -> void:

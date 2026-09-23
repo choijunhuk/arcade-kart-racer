@@ -23,6 +23,8 @@ enum SpeedClass { CRUISE, STANDARD, TURBO }
 @export var player_driver: DriverData
 @export var items_enabled: bool = true
 @export var seed: int = 0
+## Pre-countdown presentation flyover; 0 (tests, sims, online) means none.
+@export var intro_seconds: float = 0.0
 
 ## Canonical local-human roster; legacy player_slot fields are normalized into it.
 @export var players: Array[PlayerSlot] = []

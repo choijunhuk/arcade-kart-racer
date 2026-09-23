@@ -15,6 +15,9 @@ var _throttle_was_held: Dictionary[int, bool] = {}
 var _elapsed_in_step: float = 0.0
 var _current_tick: int = FIRST_TICK
 var _active: bool = false
+## Offline-only pre-roll before tick 3 (19-D item 2): karts stay frozen and no
+## start input is sampled while the presentation flyover runs; skippable.
+var _intro_remaining: float = 0.0
 
 
 ## Configures the countdown and resets per-kart start-input decisions.
@@ -27,22 +30,56 @@ func setup(tuning: RaceTuning, karts: Array[KartController]) -> void:
 		_throttle_was_held[kart.get_instance_id()] = false
 
 
-## Starts at 3 and freezes every registered kart.
-func start() -> void:
+## Starts at 3 (after an optional `intro_seconds` flyover) and freezes every kart.
+func start(intro_seconds: float = 0.0) -> void:
 	if _tuning == null:
 		push_error("Countdown.start requires RaceTuning")
 		return
 	_elapsed_in_step = 0.0
 	_current_tick = FIRST_TICK
 	_active = true
+	_intro_remaining = maxf(intro_seconds, 0.0)
 	for kart: KartController in _karts:
 		kart.set_frozen(true)
+	if _intro_remaining > 0.0:
+		if is_inside_tree():
+			EventBus.race_intro_started.emit(_intro_remaining)
+		return
+	_emit_tick(_current_tick)
+
+
+## True while the pre-countdown flyover is still running.
+func is_intro_active() -> bool:
+	return _active and _intro_remaining > 0.0
+
+
+## Ends the flyover immediately and begins the 3-2-1 sequence.
+func skip_intro() -> void:
+	if is_intro_active():
+		_intro_remaining = 0.0
+		_finish_intro()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if is_intro_active() and (event.is_action_pressed(&"ui_accept") or event.is_action_pressed(&"use_item")):
+		skip_intro()
+		get_viewport().set_input_as_handled()
+
+
+func _finish_intro() -> void:
+	if is_inside_tree():
+		EventBus.race_intro_finished.emit()
 	_emit_tick(_current_tick)
 
 
 ## Advances deterministic countdown time; returns true exactly when GO fires.
 func advance(delta: float) -> bool:
 	if not _active or _tuning == null:
+		return false
+	if _intro_remaining > 0.0:
+		_intro_remaining = maxf(0.0, _intro_remaining - maxf(delta, 0.0))
+		if _intro_remaining <= 0.0:
+			_finish_intro()
 		return false
 	_sample_start_inputs()
 	_elapsed_in_step += maxf(delta, 0.0)
@@ -69,7 +106,7 @@ func evaluate_start_input_for_kart(kart: KartController, frame: InputFrame, phas
 func get_phase_seconds() -> float:
 	if not _active or _tuning == null:
 		return 0.0
-	return maxf(0.0, float(_current_tick) * _tuning.countdown_step_seconds - _elapsed_in_step)
+	return _intro_remaining + maxf(0.0, float(_current_tick) * _tuning.countdown_step_seconds - _elapsed_in_step)
 
 
 func _sample_start_inputs() -> void:

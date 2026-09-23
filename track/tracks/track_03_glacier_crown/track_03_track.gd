@@ -8,6 +8,11 @@ const GAP_MIN_X: float = -216.0
 const GAP_MAX_X: float = -204.0
 const PEAK_HEIGHT: float = 16.0
 const BANK_DEGREES: float = 5.0
+## 19-D item 5 rhythm: a kicker ramp on the short west link (trick chance
+## between the two sweepers) and a dash-panel pair out of the final corner.
+const KICKER_OFFSET: float = 400.0
+const KICKER_LAUNCH: Vector3 = Vector3(0.0, 7.0, -26.0)
+const FINAL_DASH_OFFSETS: Array[float] = [1452.0, 1464.0]
 
 
 func surface_height(point: Vector3) -> float:
@@ -31,6 +36,10 @@ func build_theme() -> void:
 	var pad: JumpPad = place(JUMP_SCENE, "JumpPads", "ChasmLaunch", jump_offset) as JumpPad
 	pad.launch_velocity = Vector3(0.0, 14.0, -27.0)
 	pad.scale.x = road_width / 5.0
+	var kicker: JumpPad = place(JUMP_SCENE, "JumpPads", "WestKicker", KICKER_OFFSET) as JumpPad
+	kicker.launch_velocity = KICKER_LAUNCH
+	for index: int in range(FINAL_DASH_OFFSETS.size()):
+		place(BOOST_SCENE, "BoostPads", "CrownDash%d" % index, FINAL_DASH_OFFSETS[index])
 	for index: int in range(3):
 		var offset: float = line.offset_at(Vector3(-130.0 + float(index) * 100.0, ROAD_HEIGHT, half_depth))
 		terrain_patch("GlacierSheet%d" % index, offset, Vector3(road_width, 4.0, 65.0), ICE)

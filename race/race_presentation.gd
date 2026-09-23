@@ -27,8 +27,36 @@ static func configure(
 	observer_hud.visible = false
 	observer_speed_lines.visible = false
 	split_screen.configure(world, players, lap_tracker, position_tracker, karts.size(), config.laps, item_manager, track.get_racing_line(), karts, config.mirror)
+	seed_saved_best_laps(config, karts, players, split_screen.get_huds(), SaveManager)
 	particle_budget.configure_cameras(karts, split_screen.get_cameras())
 	return split_screen.get_huds()[0]
+
+
+## Seeds each player HUD's lap split with that player's saved best for this
+## race's record key. The profile index follows RaceResults: order among the
+## human grid slots.
+static func seed_saved_best_laps(
+	config: RaceConfig, karts: Array[KartController], players: Array[KartController],
+	huds: Array[RaceHud], save_manager: SaveManagerService,
+) -> void:
+	if config.track == null:
+		return
+	for index: int in range(mini(players.size(), huds.size())):
+		var feedback: HudFeedback = huds[index].get_node_or_null(^"Feedback") as HudFeedback
+		if feedback != null:
+			var profile: int = human_profile_index(config, karts, players[index])
+			feedback.seed_best_lap(HudFeedback.saved_best_seconds(save_manager, config.record_track_id(), profile))
+
+
+## 0-based rank of `player` among the human grid slots (karts are in grid order).
+static func human_profile_index(config: RaceConfig, karts: Array[KartController], player: KartController) -> int:
+	var profile: int = 0
+	for slot: int in range(karts.size()):
+		if karts[slot] == player:
+			return profile
+		if config.is_human_grid_slot(slot):
+			profile += 1
+	return 0
 
 
 ## Binds and resets pause/results overlays before a countdown begins.

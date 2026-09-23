@@ -154,21 +154,24 @@ position = Vector3(-90, 0.6, 24.5)
 [node name="BoostPads" type="Node3D" parent="."]
 
 [node name="BoostPad00" parent="BoostPads" instance=ExtResource("5_boost_pad")]
-position = Vector3(-40, 0.3, 20)
+position = Vector3(-40, 0.75, 20)
 rotation_degrees = Vector3(0, -90, 0)
 [node name="BoostPad01" parent="BoostPads" instance=ExtResource("5_boost_pad")]
-position = Vector3(-30, 0.3, 20)
+position = Vector3(-30, 0.75, 20)
 rotation_degrees = Vector3(0, -90, 0)
 [node name="BoostPad02" parent="BoostPads" instance=ExtResource("5_boost_pad")]
-position = Vector3(-20, 0.3, 20)
+position = Vector3(-20, 0.75, 20)
+rotation_degrees = Vector3(0, -90, 0)
+[node name="HairpinExitDash" parent="BoostPads" instance=ExtResource("5_boost_pad")]
+position = Vector3(-655, 0.75, 20)
 rotation_degrees = Vector3(0, -90, 0)
 
 [node name="JumpPads" type="Node3D" parent="."]
 
 [node name="MainJump" parent="JumpPads" instance=ExtResource("6_jump_pad")]
-position = Vector3(-520, 0.3, 20)
+position = Vector3(-520, 0.75, 20)
 rotation_degrees = Vector3(0, -90, 0)
-launch_velocity = Vector3(0, 8, -16)
+launch_velocity = Vector3(0, 8, -26)
 
 [node name="OffroadZones" type="Node3D" parent="."]
 

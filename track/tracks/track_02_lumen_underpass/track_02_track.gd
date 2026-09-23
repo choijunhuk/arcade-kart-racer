@@ -59,6 +59,9 @@ const GATE_FRACTIONS: Array[float] = [0.45, 0.54]
 const BOOST_BASE_FRACTION: float = 0.87
 const BOOST_COUNT: int = 3
 const BOOST_SPACING: float = 12.0
+## 19-D item 5: a dash-panel pair on the sweeper exit rewards a clean line
+## through the 180 deg sweeper and carries speed into the tunnel.
+const SWEEPER_DASH_OFFSETS: Array[float] = [488.0, 500.0]
 
 const OBSTACLE_SCENE: PackedScene = preload("res://track/elements/moving_obstacle.tscn")
 
@@ -132,6 +135,8 @@ func _build_boost_pads() -> void:
 	var base_offset: float = line.length() * BOOST_BASE_FRACTION
 	for index: int in range(BOOST_COUNT):
 		place(BOOST_SCENE, "BoostPads", "NeonBoost%d" % index, base_offset + float(index) * BOOST_SPACING)
+	for index: int in range(SWEEPER_DASH_OFFSETS.size()):
+		place(BOOST_SCENE, "BoostPads", "SweeperDash%d" % index, SWEEPER_DASH_OFFSETS[index])
 
 
 ## The alley spans ~80m of the hairpin, which the compound turn sweeps

@@ -3,8 +3,9 @@ extends RefCounted
 
 ## Versioned best-lap input stream. Progress is timing metadata, never a pose replay.
 
-## Phase 13 changes hills geometry; reject recordings from older content.
-const VERSION: int = 3
+## Phase 13 changes hills geometry; 19-D adds boost/jump pads to tracks 1-3.
+## Reject recordings from older content (input replays would miss the pads).
+const VERSION: int = 4
 const TICK_RATE: int = 60
 const MAX_TICKS: int = TICK_RATE * 600
 const DEFAULT_DIRECTORY: String = "user://ghosts"

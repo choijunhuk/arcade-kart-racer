@@ -160,7 +160,7 @@ func _begin_loading(is_restart: bool) -> void:
 	RacePresentation.prepare_overlays(self, _config, _player_kart, _pause_menu, _results_screen)
 	_transition_to(RaceState.COUNTDOWN)
 	if not GameState.is_networked:
-		_countdown.start()
+		_countdown.start(_config.intro_seconds)
 	else:
 		for kart: KartController in _karts:
 			kart.set_frozen(true)

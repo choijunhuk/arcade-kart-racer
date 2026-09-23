@@ -3,6 +3,9 @@ extends Node
 signal race_state_changed(previous_state: int, new_state: int)
 signal race_started()
 signal countdown_tick(value: int)
+## Presentation-only pre-countdown flyover (offline races; never networked).
+signal race_intro_started(seconds: float)
+signal race_intro_finished()
 signal kart_finished(kart: Node, finish_time_seconds: float)
 signal position_changed(kart: Node, old_position: int, new_position: int)
 signal lap_completed(kart: Node, lap: int, lap_time_seconds: float)

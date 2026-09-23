@@ -51,5 +51,6 @@ static func next_grand_prix_race() -> bool:
 	if gp == null or not gp.advance():
 		return false
 	GameState.pending_race_config = gp.current_config()
+	RaceIntro.apply(GameState.pending_race_config)
 	GameState.selected_track_id = GameState.pending_race_config.track.id
 	return true
