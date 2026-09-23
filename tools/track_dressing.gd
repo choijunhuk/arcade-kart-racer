@@ -13,8 +13,9 @@ const STRAIGHT_STEP: float = 4.0
 const STRAIGHT_CURVATURE_MAX: float = 0.006
 const STAND_COUNT_MAX: int = 9
 const STAND_OUTSET: float = 9.5
-const TERRAIN_MARGIN: float = 90.0
-const TERRAIN_DIVISIONS: int = 18
+## Reaches under the near backdrop ring (TrackBackdrop.NEAR_MARGIN) so no sky gap shows.
+const TERRAIN_MARGIN: float = 340.0
+const TERRAIN_DIVISIONS: int = 32
 const TERRAIN_DEPTH: float = 2.6
 const TERRAIN_NOISE_AMPLITUDE: float = 1.4
 const CLIFF_STEP: float = 4.0
@@ -32,7 +33,7 @@ static func install(root: Node3D, track: Node3D, line: RacingLine, theme: int) -
 	_gantry(root, line, width)
 
 
-static func _batch(root: Node3D, node_name: String, mesh: Mesh, paint: Material, transforms: Array[Transform3D]) -> void:
+static func batch(root: Node3D, node_name: String, mesh: Mesh, paint: Material, transforms: Array[Transform3D]) -> void:
 	if transforms.is_empty():
 		return
 	var multimesh: MultiMesh = MultiMesh.new()
@@ -74,8 +75,8 @@ static func _hairpin_signs(root: Node3D, track: Node3D, line: RacingLine, width:
 		var basis: Basis = Basis.looking_at(facing, Vector3.UP)
 		backing_xf.append(Transform3D(basis, root.to_local(at)))
 		face_xf.append(Transform3D(basis, root.to_local(at + facing * -0.03)))
-	_batch(root, "SignBacking", backing, PrimitiveArt.material(Color(0.95, 0.75, 0.08), true), backing_xf)
-	_batch(root, "SignFace", face, PrimitiveArt.material(Color(0.05, 0.05, 0.05)), face_xf)
+	batch(root, "SignBacking", backing, PrimitiveArt.material(Color(0.95, 0.75, 0.08), true), backing_xf)
+	batch(root, "SignFace", face, PrimitiveArt.material(Color(0.05, 0.05, 0.05)), face_xf)
 
 
 ## Bleacher blocks and a facing banner strip along the lap's longest straight.
@@ -97,8 +98,8 @@ static func _crowd(root: Node3D, line: RacingLine, width: float) -> void:
 		stand_xf.append(Transform3D(basis, root.to_local(stand_pos)))
 		var banner_pos: Vector3 = line.sample(offset) + line.right_at(offset) * (width * 0.5 + STAND_OUTSET - 2.6) + Vector3.UP * 2.9
 		banner_xf.append(Transform3D(basis, root.to_local(banner_pos)))
-	_batch(root, "CrowdStands", stand, PrimitiveArt.material(Color(0.32, 0.36, 0.42)), stand_xf)
-	_batch(root, "CrowdBanners", banner, PrimitiveArt.material(Color(0.85, 0.2, 0.18), true), banner_xf)
+	batch(root, "CrowdStands", stand, PrimitiveArt.material(Color(0.32, 0.36, 0.42)), stand_xf)
+	batch(root, "CrowdBanners", banner, PrimitiveArt.material(Color(0.85, 0.2, 0.18), true), banner_xf)
 
 
 ## Longest contiguous low-curvature span of the lap, as `(start_offset, length)`.
@@ -140,7 +141,7 @@ static func _item_box_markers(root: Node3D, track: Node3D) -> void:
 		if box is Node3D:
 			var at: Vector3 = (box as Node3D).global_position + Vector3.UP * 2.1
 			transforms.append(Transform3D(Basis(Vector3.UP, deg_to_rad(45.0)), root.to_local(at)))
-	_batch(root, "ItemBoxMarkers", shape, PrimitiveArt.material(Color(0.95, 0.75, 0.15), true), transforms)
+	batch(root, "ItemBoxMarkers", shape, PrimitiveArt.material(Color(0.95, 0.75, 0.15), true), transforms)
 
 
 ## Two pillars, a header beam and a row of lights over the start line; the
