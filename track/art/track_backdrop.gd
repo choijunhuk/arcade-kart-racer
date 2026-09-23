@@ -76,6 +76,10 @@ static func _profile(theme: int, radius: float, look: Dictionary, seed_value: in
 			points.append(Vector2(arc, height))
 			points.append(Vector2(arc + width, height))
 			arc += width
+		# Close the ring: a vertical step back to the first building's height at the
+		# seam angle, so the last and first buildings share a face instead of a gap.
+		if points.size() > 0:
+			points.append(Vector2(circumference, points[0].y))
 		return points
 	var steps: int = ceili(circumference / ARC_STEP)
 	for index: int in range(steps + 1):
