@@ -78,6 +78,7 @@ func default_settings() -> Dictionary:
 			"speedometer": true,
 			"camera_preset": CameraPreset.ARCADE_ID,
 			"telemetry_enabled": true,
+			"race_intro": true,
 			"speed_class": RaceConfig.SpeedClass.STANDARD,
 			"mirror": false,
 			"unlock_all": false,

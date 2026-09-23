@@ -118,6 +118,7 @@ func _start_race(difficulty: AIDifficultyProfile) -> void:
 		GameState.grand_prix_state = GrandPrix.new()
 		GameState.grand_prix_state.setup(GameState.pending_race_config, tracks)
 		GameState.pending_race_config = GameState.grand_prix_state.current_config()
+	RaceIntro.apply(GameState.pending_race_config)
 	SaveManager.save_last_selection(driver.id, kart.id, track.id)
 	GameState.current_mode = GameState.Mode.RACE
 	go_to(RACE_SCENE_PATH)

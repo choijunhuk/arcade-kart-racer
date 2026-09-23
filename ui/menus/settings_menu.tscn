@@ -291,6 +291,11 @@ layout_mode = 2
 button_pressed = true
 text = "Local Handling Telemetry"
 
+[node name="RaceIntroToggle" type="CheckButton" parent="Panel/VBox/Tabs/Gameplay"]
+layout_mode = 2
+button_pressed = true
+text = "Race Intro Flyover"
+
 [node name="ReplayTutorialButton" type="Button" parent="Panel/VBox/Tabs/Gameplay"]
 layout_mode = 2
 text = "REPLAY TUTORIAL"

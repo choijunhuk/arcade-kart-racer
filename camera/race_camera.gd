@@ -15,6 +15,7 @@ var _drift_offset: float = 0.0
 var _look_back_blend: float = 0.0
 var _shake: CameraShake = CameraShake.new()
 var _fov_model: CameraFov = CameraFov.new()
+var _cinematics: CameraCinematics = CameraCinematics.new()
 var _base_tuning: FeelTuning
 var _smoothed_look: Vector3 = Vector3.FORWARD
 var _look_ahead: Vector3 = Vector3.ZERO
@@ -37,6 +38,7 @@ func set_target(target: KartController) -> void:
 	_drift_offset = 0.0
 	_look_back_blend = 0.0
 	_shake.clear()
+	_cinematics.stop()
 	if _target == null:
 		return
 	_smoothed_look = _look_direction()
@@ -47,6 +49,9 @@ func set_target(target: KartController) -> void:
 
 func _process(delta: float) -> void:
 	if _target == null:
+		return
+	if _cinematics.is_active():
+		_process_cinematic(delta)
 		return
 	_update_look_back(delta)
 	var raw_look: Vector3 = _look_direction()
@@ -68,6 +73,27 @@ func _process(delta: float) -> void:
 		_target.get_speed_ratio(), _target.is_boosting(), delta,
 		SettingsManager.get_fov_effect_strength(),
 	)
+
+
+## Intro flyover / finish orbit (presentation only; see CameraCinematics).
+func _process_cinematic(delta: float) -> void:
+	_cinematics.step(delta)
+	var desired: Vector3 = _cinematics.pose(
+		_target.global_position, _target.get_forward(), tuning.camera_distance, tuning.camera_height,
+	)
+	global_position = _resolve_clipping(desired)
+	var focus: Vector3 = _target.global_position + Vector3.UP * LOOK_TARGET_HEIGHT
+	if focus.distance_to(global_position) > POSITION_EPSILON:
+		look_at(focus, Vector3.UP)
+	fov = _fov_model.step(
+		_target.get_speed_ratio(), _target.is_boosting(), delta, SettingsManager.get_fov_effect_strength(),
+	) + _cinematics.fov_offset()
+	_smoothed_look = _look_direction()
+
+
+## Current cinematic mode (CameraCinematics.Mode) for tests and presentation.
+func get_cinematic_mode() -> int:
+	return _cinematics.mode
 
 
 ## Adds trauma through the bounded camera model for tests and local effects.
@@ -188,6 +214,10 @@ func _connect_events() -> void:
 		EventBus.item_exploded.connect(_on_item_exploded)
 	if not EventBus.boost_started.is_connected(_on_boost_started):
 		EventBus.boost_started.connect(_on_boost_started)
+	if not EventBus.race_intro_started.is_connected(_on_race_intro_started):
+		EventBus.race_intro_started.connect(_on_race_intro_started)
+		EventBus.race_intro_finished.connect(_on_race_intro_finished)
+		EventBus.kart_finished.connect(_on_kart_finished)
 	if not SettingsManager.settings_changed.is_connected(_on_settings_changed):
 		SettingsManager.settings_changed.connect(_on_settings_changed)
 
@@ -203,6 +233,10 @@ func _disconnect_events() -> void:
 		EventBus.item_exploded.disconnect(_on_item_exploded)
 	if EventBus.boost_started.is_connected(_on_boost_started):
 		EventBus.boost_started.disconnect(_on_boost_started)
+	if EventBus.race_intro_started.is_connected(_on_race_intro_started):
+		EventBus.race_intro_started.disconnect(_on_race_intro_started)
+		EventBus.race_intro_finished.disconnect(_on_race_intro_finished)
+		EventBus.kart_finished.disconnect(_on_kart_finished)
 	if SettingsManager.settings_changed.is_connected(_on_settings_changed):
 		SettingsManager.settings_changed.disconnect(_on_settings_changed)
 
@@ -210,6 +244,21 @@ func _disconnect_events() -> void:
 func _on_settings_changed(section: StringName) -> void:
 	if section == &"gameplay":
 		apply_camera_preset(String(SettingsManager.get_setting(&"gameplay", &"camera_preset", CameraPreset.ARCADE_ID)))
+
+
+func _on_race_intro_started(seconds: float) -> void:
+	if _target != null:
+		_cinematics.start_intro(seconds)
+
+
+func _on_race_intro_finished() -> void:
+	if _cinematics.mode == CameraCinematics.Mode.INTRO:
+		_cinematics.stop()
+
+
+func _on_kart_finished(kart: Node, _finish_time_seconds: float) -> void:
+	if kart == _target and _target != null:
+		_cinematics.start_finish(global_position)
 
 
 func _on_kart_hit(kart: Node, _hit_type: int) -> void:
