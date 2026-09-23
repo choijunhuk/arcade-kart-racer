@@ -253,17 +253,39 @@ static func resolve_respawn_transform(
 ## When the checkpoint spot itself sits inside a corner tighter than
 ## `RESPAWN_MAX_CURVATURE`, steps `offset` back in `RESPAWN_STEP_BACK`
 ## increments (at most `max_step_back` metres) until the next
-## `RESPAWN_CLEAR_RUN` metres of line stay within that limit. A spot outside
-## a corner keeps the exact checkpoint offset (spec §14.5).
+## `RESPAWN_CLEAR_RUN` metres of line stay within that limit. If the limit
+## (closely spaced gates) runs out first, returns the candidate in
+## [offset - limit, offset] with the lowest mean curvature ahead instead of
+## the raw apex. A spot outside a corner keeps the exact checkpoint offset
+## (spec §14.5).
 static func corner_safe_offset(racing_line: RacingLine, offset: float, max_step_back: float) -> float:
 	if absf(racing_line.curvature_at(offset)) <= RESPAWN_MAX_CURVATURE:
 		return offset
 	var limit: float = clampf(max_step_back, 0.0, RESPAWN_MAX_CORNER_STEP_BACK)
+	var length: float = maxf(racing_line.length(), 0.001)
+	var best_step: float = 0.0
+	var best_score: float = INF
 	var step_back: float = 0.0
-	while step_back + RESPAWN_STEP_BACK <= limit \
-			and racing_line.max_curvature_in(offset - step_back, RESPAWN_CLEAR_RUN) > RESPAWN_MAX_CURVATURE:
-		step_back += RESPAWN_STEP_BACK
-	return fposmod(offset - step_back, maxf(racing_line.length(), 0.001))
+	while true:
+		if racing_line.max_curvature_in(offset - step_back, RESPAWN_CLEAR_RUN) <= RESPAWN_MAX_CURVATURE:
+			return fposmod(offset - step_back, length)
+		var score: float = mean_curvature_ahead(racing_line, offset - step_back)
+		if score < best_score:
+			best_score = score
+			best_step = step_back
+		if step_back >= limit:
+			break
+		step_back = minf(step_back + RESPAWN_STEP_BACK, limit)
+	return fposmod(offset - best_step, length)
+
+
+## Mean absolute curvature over the next `RESPAWN_CLEAR_RUN` metres.
+static func mean_curvature_ahead(racing_line: RacingLine, offset: float) -> float:
+	var samples: int = 20
+	var total: float = 0.0
+	for index: int in range(samples + 1):
+		total += absf(racing_line.curvature_at(offset + RESPAWN_CLEAR_RUN * float(index) / float(samples)))
+	return total / float(samples + 1)
 
 
 ## Line distance back to the previous checkpoint gate minus a margin, read
