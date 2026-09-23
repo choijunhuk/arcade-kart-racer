@@ -27,6 +27,9 @@ class Registration extends RefCounted:
 	var track_motion: bool = false
 	var previous_position: Vector3
 	var last_grounded_transform: Transform3D
+	## False until the first processed tick re-reads the pose: registration
+	## happens on the raw grid slot, before GridSettle lifts the kart.
+	var pose_seeded: bool = false
 	var wall_fall_guard_remaining: float = 0.0
 	var pending_respawn_transform: Variant = null
 
@@ -94,6 +97,10 @@ func request_respawn(kart: KartController) -> void:
 
 
 func _update_registration(registration: Registration, delta: float) -> void:
+	if not registration.pose_seeded:
+		registration.pose_seeded = true
+		registration.previous_position = registration.kart.global_position
+		registration.last_grounded_transform = registration.kart.global_transform
 	if _update_wall_fall_guard(registration, delta):
 		return
 	match registration.phase:

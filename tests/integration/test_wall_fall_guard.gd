@@ -96,6 +96,31 @@ func test_wall_contact_then_lower_road_jump_does_not_trigger_guard() -> void:
 	assert_eq(_respawn_count, 0)
 
 
+func test_last_ground_pose_comes_from_the_settled_spawn_not_the_registration_pose() -> void:
+	# RaceManager registers karts right after placing them on the authored
+	# grid slot; GridSettle lifts them onto the road on the next tick, and the
+	# kart is frozen (never probes ground) until GO.
+	_add_floor(Vector3.ZERO, true)
+	var kart: KartController = (load("res://kart/kart.tscn") as PackedScene).instantiate() as KartController
+	add_child_autofree(kart)
+	kart.set_physics_process(false)
+	var settled: Transform3D = Transform3D(Basis.IDENTITY, Vector3(0.0, 0.35, 0.0))
+	kart.global_transform = settled.translated(Vector3.DOWN * 0.45)
+	var respawn: RespawnSystem = _build_respawn_system(kart, Transform3D.IDENTITY)
+	kart.global_transform = settled
+	assert_false(kart.is_grounded(), "test precondition: a frozen spawn has never probed the ground")
+	respawn._physics_process(STEP)
+
+	EventBus.wall_impacted.emit(kart)
+	kart.global_position.y -= FALL_DISTANCE
+	respawn._physics_process(STEP)
+	respawn._physics_process(respawn.tuning.respawn_fade_duration)
+
+	assert_eq(_respawn_count, 1)
+	assert_almost_eq(kart.global_position.distance_to(settled.origin), 0.0, 0.01,
+		"wall-fall recovery must return to the settled spawn, not the sunk pre-settle pose")
+
+
 func _build_grounded_kart(driveable: bool = false) -> KartController:
 	_add_floor(Vector3.ZERO, driveable)
 	var kart: KartController = (load("res://kart/kart.tscn") as PackedScene).instantiate() as KartController
