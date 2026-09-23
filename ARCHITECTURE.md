@@ -604,6 +604,13 @@ Volumetric fog stays off on every tier.
   `ContentTrack.place()`, and checkpoints and the line are unchanged.
   `GhostRecording.VERSION` is 4. AI pad entries per 8-kart/3-lap race
   (seed 1): Track01 24 on each pad, Track02 21-22, Track03 21-24.
+  Record comparability: the revived Track01 pads and jump (and the new pads
+  on Track02/03) change the lap times players can reach. Saved best laps and
+  positions recorded before 19-D are therefore not directly comparable with
+  newer ones, especially on Track01. They are kept, not reset, because the
+  save format and SaveManager are unchanged. Time-trial ghosts are the one
+  exception: `GhostRecording.VERSION` 4 invalidates them, since an old input
+  replay would miss the pads.
 
 Seeded sims (`tools/run_sim.sh --track track_0N --karts 8 --laps 3`, normal,
 items on, seed 0). "before" is main 6f05a1b; "after" is item 5 (pads) before
