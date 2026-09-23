@@ -15,6 +15,9 @@ const FALLBACK_COLORS: Array[Color] = [
 	Color(1.0, 0.82, 0.12), Color(0.18, 0.78, 1.0), Color(1.0, 0.28, 0.12), Color(0.24, 0.82, 0.35),
 	Color(0.95, 0.22, 0.72), Color(0.58, 0.34, 1.0), Color(0.12, 0.88, 0.72), Color(0.92, 0.92, 0.95),
 ]
+## DriverData colour properties in preference order (livery_primary is
+## added by the kart-visuals lane; driver_color is the existing field).
+const LIVERY_PROPERTIES: Array[StringName] = [&"livery_primary", &"driver_color"]
 ## Ribbon widths as a fraction of the drawable height (scale with split screen).
 const RIBBON_EDGE_RATIO: float = 0.1
 const RIBBON_ROAD_RATIO: float = 0.065
@@ -113,14 +116,18 @@ func _rebuild_dots() -> void:
 		_dots[kart.get_instance_id()] = dot
 
 
-## Livery colour of a kart's driver (read defensively: any exported
-## `driver_data.driver_color`), else a fixed palette entry by grid order.
+## Livery colour of a kart's driver, read defensively: `livery_primary`
+## when DriverData exposes it, else `driver_color`, else a fixed palette
+## entry by grid order. An unset (white) colour falls through.
 static func kart_color(kart: KartController, index: int) -> Color:
 	var driver: Resource = kart.get(&"driver_data") as Resource
-	if driver != null and &"driver_color" in driver:
-		var color: Variant = driver.get(&"driver_color")
-		if color is Color and color != Color.WHITE:
-			return color as Color
+	if driver != null:
+		for property: StringName in LIVERY_PROPERTIES:
+			if not property in driver:
+				continue
+			var color: Variant = driver.get(property)
+			if color is Color and color != Color.WHITE:
+				return color as Color
 	return FALLBACK_COLORS[index % FALLBACK_COLORS.size()]
 
 
