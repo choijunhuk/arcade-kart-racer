@@ -2,7 +2,8 @@ shader_type spatial;
 render_mode diffuse_burley, specular_schlick_ggx;
 
 // Kart car-paint body material with the hit-flash overlay (Phase 19).
-// Vertex COLOR marks the baked surface role: r = paint, g = glass, else trim.
+// Vertex COLOR marks the baked surface role: r = paint, g = glass, b = accent
+// paint, else trim.
 // Livery patterns are resolved in normalised body space (0..1 per axis,
 // front of the kart = low z): 0 centre stripe, 1 two-tone lower band,
 // 2 contrasting nose + wing.
@@ -43,7 +44,9 @@ float accent_mask() {
 void fragment() {
 	float paint = use_vertex_roles ? COLOR.r : 1.0;
 	float glass = use_vertex_roles ? COLOR.g : 0.0;
-	vec3 livery = mix(albedo_color.rgb, accent_color.rgb, accent_mask());
+	float accent_part = use_vertex_roles ? COLOR.b : 0.0;
+	vec3 livery = mix(albedo_color.rgb, accent_color.rgb, max(accent_mask() * paint, accent_part));
+	paint = max(paint, accent_part);
 	vec3 base = mix(trim_color.rgb, livery, paint);
 	base = mix(base, glass_color.rgb, glass);
 	ALBEDO = mix(base, vec3(1.0), flash_strength);

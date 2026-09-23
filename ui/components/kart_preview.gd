@@ -7,16 +7,6 @@ extends SubViewportContainer
 ## this component). Not for grids of karts at once -- one live viewport per
 ## instance is the intended footprint.
 
-## Wheel offsets mirror kart/kart.tscn's Visuals skeleton so the mesh built
-## by KartMeshBuilder.decorate() sits the same way it does on a real kart.
-const WHEEL_OFFSETS: Dictionary[StringName, Vector3] = {
-	&"WheelFL": Vector3(-0.75, -0.1, -0.85),
-	&"WheelFR": Vector3(0.75, -0.1, -0.85),
-	&"WheelRL": Vector3(-0.75, -0.1, 0.85),
-	&"WheelRR": Vector3(0.75, -0.1, 0.85),
-}
-const DRIVER_OFFSET: Vector3 = Vector3(0, 0.55, 0.15)
-
 const CAMERA_DISTANCE: float = 3.6
 const CAMERA_HEIGHT: float = 1.4
 const CAMERA_TARGET_HEIGHT: float = 0.35
@@ -88,11 +78,10 @@ static func build_visual_skeleton() -> Node3D:
 	visuals.add_child(body)
 	var driver: MeshInstance3D = MeshInstance3D.new()
 	driver.name = "Driver"
-	driver.position = DRIVER_OFFSET
 	visuals.add_child(driver)
-	for wheel_name: StringName in WHEEL_OFFSETS:
+	# KartMeshBuilder.decorate() places the driver and wheel pivots per kart.
+	for wheel_name: StringName in KartMeshBuilder.WHEEL_NAMES:
 		var wheel: Node3D = Node3D.new()
 		wheel.name = String(wheel_name)
-		wheel.position = WHEEL_OFFSETS[wheel_name]
 		visuals.add_child(wheel)
 	return visuals

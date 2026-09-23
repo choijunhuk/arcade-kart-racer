@@ -1,9 +1,9 @@
 class_name KartLivery
 extends RefCounted
 
-## Presentation-only per-driver identity: body paint, accent, race number and
-## the materials that carry them (car-paint body shader, helmet, suit, rims,
-## number plate). Physics and gameplay never read any of this.
+## Presentation-only per-driver identity: body paint, accent, race number,
+## face and the materials that carry them (car-paint body shader, helmet,
+## suit, face shader, rims, number plate). Physics and gameplay never read it.
 
 const PAINT_SHADER: Shader = preload("res://effects/hit_flash.gdshader")
 const NUMBER_NODE_NAME: String = "RaceNumber"
@@ -24,6 +24,11 @@ var accent: Color = FALLBACK_ACCENT
 var helmet: Color = Color.WHITE
 var number: int = 0
 var pattern: int = 0
+var skin: Color = Color(0.96, 0.78, 0.64)
+var eyes: Color = Color(0.28, 0.48, 0.9)
+var hair: Color = Color(0.32, 0.2, 0.12)
+var expression: int = 0
+var blink_offset: float = 0.0
 
 
 ## Resolves a stable livery; a null driver falls back to the kart's own colour.
@@ -39,6 +44,11 @@ static func resolve(driver: DriverData, kart: KartData = null) -> KartLivery:
 	livery.helmet = driver.driver_color
 	livery.number = driver.race_number
 	livery.pattern = pattern_for(driver)
+	livery.skin = driver.skin_tone
+	livery.eyes = driver.eye_color
+	livery.hair = driver.hair_color
+	livery.expression = driver.face_expression
+	livery.blink_offset = float(posmod(int(hash(driver.id)), 1000)) * 0.0037
 	return livery
 
 
@@ -70,15 +80,21 @@ func apply_body(body: MeshInstance3D) -> ShaderMaterial:
 	return material
 
 
-## Driver wears the driver colour: matte suit, clearcoated helmet with an
-## accent stripe (the helmet's gloss and dark visor keep the two readable).
+## Driver wears the driver colour: matte suit (vertex COLOR darkens gloves and
+## the steering wheel), clearcoated helmet with an accent rim, and the face.
 func apply_driver(driver_node: MeshInstance3D) -> void:
 	if driver_node == null:
 		return
-	driver_node.material_override = _glossy(helmet, 0.75, 0.0)
+	var suit: StandardMaterial3D = _glossy(helmet, 0.75, 0.0)
+	suit.vertex_color_use_as_albedo = true
+	driver_node.material_override = suit
+	_apply_face(driver_node.get_node_or_null(KartDriverBuilder.HEAD_NODE_NAME) as MeshInstance3D)
 	var helmet_node: MeshInstance3D = driver_node.get_node_or_null(HELMET_NODE_NAME) as MeshInstance3D
 	if helmet_node != null:
+		# Only the helmet dome skips receiving shadows (its own terminator banding);
+		# suit, face and rim stripe still darken in tunnels and at night.
 		var shell: StandardMaterial3D = _glossy(helmet, 0.22, 0.15)
+		shell.disable_receive_shadows = true
 		shell.clearcoat_enabled = true
 		shell.clearcoat = 1.0
 		shell.clearcoat_roughness = 0.1
@@ -116,11 +132,28 @@ func _apply_number(body: MeshInstance3D) -> void:
 		label.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		label.rotation_degrees = Vector3(NUMBER_TILT_DEGREES, 0.0, 0.0)
 		body.add_child(label)
-	label.position = NUMBER_POSITION + Vector3(0.0, -body.position.y, 0.0)
+	var anchor: Variant = body.mesh.get_meta(&"number_anchor", null) if body.mesh != null else null
+	if anchor is Transform3D:
+		label.transform = anchor as Transform3D
+	else:
+		label.position = NUMBER_POSITION + Vector3(0.0, -body.position.y, 0.0)
 	label.text = str(number)
 	var dark_paint: bool = paint.get_luminance() < 0.45
 	label.modulate = Color.WHITE if dark_paint else Color(0.06, 0.06, 0.08)
 	label.outline_modulate = accent if dark_paint else Color.WHITE
+
+
+func _apply_face(head: MeshInstance3D) -> void:
+	if head == null:
+		return
+	var face: ShaderMaterial = head.material_override as ShaderMaterial
+	if face == null:
+		return
+	face.set_shader_parameter("skin_tone", skin)
+	face.set_shader_parameter("eye_color", eyes)
+	face.set_shader_parameter("hair_color", hair)
+	face.set_shader_parameter("expression", expression)
+	face.set_shader_parameter("blink_offset", blink_offset)
 
 
 static func _glossy(color: Color, roughness: float, metallic: float) -> StandardMaterial3D:
