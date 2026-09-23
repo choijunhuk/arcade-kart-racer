@@ -1,7 +1,8 @@
 extends Node3D
 ## Windowed visual review (not headless): lines up one kart per driver on a
-## flat lit pad and saves rear-3/4, front-3/4 and close-up PNGs, so livery,
-## driver and material changes can be judged without running a race.
+## flat lit pad and saves rear-3/4, front-3/4 and close-up PNGs, then one
+## front-3/4 face close-up per driver (livery_04+), so livery, driver, face and
+## material changes can be judged without running a race.
 ## usage: godot --path . --resolution 1600x900 res://scenes/test/kart_livery_snapshot.tscn -- <out_dir>
 
 const KART_SCENE: PackedScene = preload("res://kart/kart.tscn")
@@ -18,6 +19,7 @@ var _out_dir: String = "/tmp/livery"
 var _frame: int = 0
 var _view: int = 0
 var _camera: Camera3D
+var _views: Array[Array] = []
 
 
 func _ready() -> void:
@@ -34,7 +36,12 @@ func _ready() -> void:
 		var kart: KartController = KART_SCENE.instantiate() as KartController
 		kart.set_driver_data(drivers[index] as DriverData)
 		add_child(kart)
-		kart.global_position = Vector3((float(index) - float(drivers.size() - 1) * 0.5) * SPACING, 0.7, 0.0)
+		var x: float = (float(index) - float(drivers.size() - 1) * 0.5) * SPACING
+		kart.global_position = Vector3(x, 0.7, 0.0)
+		_views.append([Vector3(x + 0.8, 1.0, -1.45), Vector3(x, 0.72, 0.0), 26.0])
+	var all_views: Array[Array] = VIEWS.duplicate()
+	all_views.append_array(_views)
+	_views = all_views
 	_camera = Camera3D.new()
 	_camera.fov = 55.0
 	add_child(_camera)
@@ -49,7 +56,7 @@ func _process(_delta: float) -> void:
 	var image: Image = get_viewport().get_texture().get_image()
 	image.save_png("%s/livery_%02d.png" % [_out_dir, _view])
 	_view += 1
-	if _view >= VIEWS.size():
+	if _view >= _views.size():
 		get_tree().quit()
 		return
 	_place_camera(_view)
@@ -57,8 +64,9 @@ func _process(_delta: float) -> void:
 
 
 func _place_camera(view: int) -> void:
-	_camera.global_position = VIEWS[view][0] as Vector3
-	_camera.look_at(VIEWS[view][1] as Vector3, Vector3.UP)
+	_camera.global_position = _views[view][0] as Vector3
+	_camera.look_at(_views[view][1] as Vector3, Vector3.UP)
+	_camera.fov = _views[view][2] if _views[view].size() > 2 else 55.0
 
 
 func _build_stage() -> void:

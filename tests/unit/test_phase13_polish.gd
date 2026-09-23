@@ -1,8 +1,24 @@
 extends GutTest
 
+## Phase 19 kart-soft: the chassis is the lofted soft body (no longer the
+## 96-vertex octagon), so "closed" is checked directly: every triangle edge is
+## shared by exactly two triangles (no holes or open seams).
 func test_chassis_has_closed_triangle_faces() -> void:
 	var data: KartData = load("res://data/karts/light.tres") as KartData
-	assert_eq(KartMeshBuilder.chassis(data).surface_get_array_len(0), 96)
+	var indices: PackedInt32Array = KartMeshBuilder.chassis(data).surface_get_arrays(0)[Mesh.ARRAY_INDEX]
+	assert_gt(indices.size(), 0)
+	assert_eq(indices.size() % 3, 0)
+	var edges: Dictionary[Vector2i, int] = {}
+	for corner: int in range(indices.size()):
+		var a: int = indices[corner]
+		var b: int = indices[corner - corner % 3 + (corner + 1) % 3]
+		var key: Vector2i = Vector2i(mini(a, b), maxi(a, b))
+		edges[key] = edges.get(key, 0) + 1
+	var open_edges: int = 0
+	for count: int in edges.values():
+		if count != 2:
+			open_edges += 1
+	assert_eq(open_edges, 0)
 
 func test_mesh_bounds_follow_weight_class() -> void:
 	var light: KartData = load("res://data/karts/light.tres") as KartData
