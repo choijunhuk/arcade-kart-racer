@@ -37,7 +37,7 @@ uniform float bump_strength = 1.0;
 instance uniform float track_length = 0.0;
 uniform float grid_first = 3.0;
 uniform float grid_spacing = 3.5;
-uniform float grid_lateral = 1.4;
+instance uniform float grid_lateral = 1.4;
 uniform int grid_rows = 4;
 
 void fragment() {
@@ -62,7 +62,7 @@ void fragment() {
 	col *= 1.0 - 0.1 * smoothstep(0.55, 0.9, streak);
 
 	float rough = roughness_base - speck * 0.1;
-	float height = (n_mid * 0.004 + n_fine * 0.0025 * fine_fade) * bump_strength;
+	float height = (n_mid * 0.004 + n_fine * 0.0012 * fine_fade * fine_fade) * bump_strength;
 
 	// Painted markings.
 	float kerb_on = step(0.5, UV2.y);

@@ -35,7 +35,7 @@ const ROAD_PARAMS: Array[Dictionary] = [
 		"base_color": Color(0.56, 0.3, 0.17), "patch_color": Color(0.64, 0.38, 0.21),
 		"wear_color": Color(0.42, 0.22, 0.13), "wear_amount": 0.5, "grain": 0.3, "speckle": 0.5,
 		"streak_stretch": 4.0, "line_color": Color(0.96, 0.9, 0.78), "paint_fade": 0.55,
-		"roughness_base": 0.95, "centre_line": 0.0, "bump_strength": 1.6,
+		"roughness_base": 0.95, "centre_line": 0.0, "bump_strength": 1.1,
 	},
 ]
 ## Ground beyond the road: meadow, dark city lot, snowfield, desert sand.
@@ -58,7 +58,7 @@ const TERRAIN_PARAMS: Array[Dictionary] = [
 ## Barriers: painted concrete, neon night concrete, glacier ice, canyon rock.
 const WALL_PARAMS: Array[Dictionary] = [
 	{"style": 0},
-	{"style": 1, "color_a": Color(0.07, 0.075, 0.09), "glow_color": Color(0.15, 0.85, 1.0)},
+	{"style": 1, "color_a": Color(0.07, 0.075, 0.09), "glow_color": Color(0.15, 0.85, 1.0), "glow_energy": 3.0},
 	{"style": 2, "color_a": Color(0.78, 0.9, 0.98), "color_b": Color(0.3, 0.58, 0.85), "color_c": Color(0.96, 0.99, 1.0)},
 	{
 		"style": 3, "color_a": Color(0.66, 0.33, 0.18), "color_b": Color(0.8, 0.46, 0.25),
@@ -109,6 +109,9 @@ static func apply(track: Node3D, theme: int) -> void:
 		var main: bool = bool(visual.get_meta(MAIN_ROAD_META, false))
 		visual.set_instance_shader_parameter(&"track_length", line.length() if main and line != null else 0.0)
 		visual.set_instance_shader_parameter(&"grid_lateral", grid_lateral)
+	var geometry: Node = track.get_node_or_null("Geometry")
+	if geometry != null:
+		_skin_geometry(track, geometry, wall_paint, theme)
 	var zones: Node = track.get_node_or_null("OffroadZones")
 	if zones != null:
 		for zone: Node in zones.get_children():
