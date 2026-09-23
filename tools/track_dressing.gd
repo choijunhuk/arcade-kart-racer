@@ -41,9 +41,10 @@ static func install(root: Node3D, track: Node3D, line: RacingLine, theme: int) -
 	_gantry(root, line, width)
 
 
-static func batch(root: Node3D, node_name: String, mesh: Mesh, paint: Material, transforms: Array[Transform3D]) -> void:
+## Returns the created batch node, or null when there is nothing to draw.
+static func batch(root: Node3D, node_name: String, mesh: Mesh, paint: Material, transforms: Array[Transform3D]) -> MultiMeshInstance3D:
 	if transforms.is_empty():
-		return
+		return null
 	var multimesh: MultiMesh = MultiMesh.new()
 	multimesh.transform_format = MultiMesh.TRANSFORM_3D
 	multimesh.mesh = mesh
@@ -56,6 +57,7 @@ static func batch(root: Node3D, node_name: String, mesh: Mesh, paint: Material, 
 	node.material_override = paint
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(node)
+	return node
 
 
 ## Trackside hazard boards on the outside apex of every hairpin-tight corner,

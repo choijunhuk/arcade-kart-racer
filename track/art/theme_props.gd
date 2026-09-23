@@ -261,7 +261,8 @@ static func _baked(mesh: PrimitiveMesh, transform: Transform3D) -> ArrayMesh:
 static func _batch_chunks(root: Node3D, node_name: String, mesh: Mesh, paint: Material, transforms: Array[Transform3D]) -> void:
 	for start: int in range(0, transforms.size(), CHUNK):
 		var slice: Array[Transform3D] = transforms.slice(start, mini(start + CHUNK, transforms.size()))
-		TrackDressing.batch(root, node_name, mesh, paint, slice)
-		var node: MultiMeshInstance3D = root.get_child(root.get_child_count() - 1) as MultiMeshInstance3D
+		var node: MultiMeshInstance3D = TrackDressing.batch(root, node_name, mesh, paint, slice)
+		if node == null:
+			continue
 		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		node.visibility_range_end = PROP_RANGE
