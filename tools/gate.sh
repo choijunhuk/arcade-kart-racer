@@ -54,6 +54,14 @@ fi
 step "tests"
 if run_stage tests '---- All tests passed! ----' tools/run_tests.sh; then
   grep -E '^(Tests|Passing Tests|Failing)' "$gate_tmp/tests.log" || true
+  # GUT silently drops a test script that fails to parse ("Ignoring script ...
+  # because it does not extend GutTest"), so its tests vanish from the totals
+  # instead of failing. Treat any unloadable res://tests script as a failure.
+  if grep -qE 'Ignoring script res://tests/|Failed to load script "res://tests/' "$gate_tmp/tests.log"; then
+    echo "FAIL: test scripts failed to load (parse errors hide their tests)"
+    grep -E 'Ignoring script res://tests/|Failed to load script "res://tests/' "$gate_tmp/tests.log" | sort -u | head -10
+    keep_stage_log tests "$gate_tmp/tests.log"; fail=1
+  fi
   if [ "$(awk '/^Tests/{t=$2} /^Passing Tests/{p=$3} END{print (t==p && t>0)?"eq":"ne"}' "$gate_tmp/tests.log")" != "eq" ]; then echo "FAIL: tests completion totals do not match"; awk '/res:\/\/tests\/.*\.gd/{f=$0} /\[Failed\]/{print f}' "$gate_tmp/tests.log" | sort | uniq -c | head -5; keep_stage_log tests "$gate_tmp/tests.log"; fail=1; else echo "ok"; fi
 fi
 
