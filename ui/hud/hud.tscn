@@ -51,6 +51,8 @@ fill_to = Vector2(1, 0.5)
 [node name="HUD" type="CanvasLayer"]
 script = ExtResource("1_hud")
 
+[node name="Fade" type="CanvasModulate" parent="."]
+
 [node name="PositionPanel" type="Control" parent="."]
 layout_mode = 3
 anchors_preset = 0

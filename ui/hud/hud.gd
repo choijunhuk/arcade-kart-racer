@@ -16,6 +16,7 @@ const COUNTDOWN_POP_SCALE: float = 1.9
 const COUNTDOWN_POP_SECONDS: float = 0.32
 const BANNER_POP_SECONDS: float = 0.28
 const WRONG_WAY_PULSE_SECONDS: float = 0.45
+const RESULTS_FADE_SECONDS: float = 0.3
 
 @export var tuning: FeelTuning = preload("res://data/tuning/feel_default.tres")
 
@@ -37,6 +38,8 @@ const WRONG_WAY_PULSE_SECONDS: float = 0.45
 @onready var _speed_label: Label = $Speedometer/SpeedLabel
 @onready var _net_quality_label: Label = $NetQualityLabel
 @onready var _reconnecting_overlay: Control = $ReconnectingOverlay
+## Layer-wide tint: its alpha fades the whole HUD canvas (per viewport).
+@onready var _fade: CanvasModulate = $Fade
 
 var _net_quality: RaceHudNetQuality = RaceHudNetQuality.new()
 var _readout: HudReadout = HudReadout.new()
@@ -52,6 +55,7 @@ var _lap_tween: Tween
 var _countdown_tween: Tween
 var _message_tween: Tween
 var _wrong_way_tween: Tween
+var _results_fade_tween: Tween
 var _shown_position: int = 0
 var _lap_base_position: Vector2 = Vector2.ZERO
 var _threat_remaining: float = 0.0
@@ -73,6 +77,7 @@ func _ready() -> void:
 	EventBus.kart_finished.connect(_on_kart_finished)
 	EventBus.threat_warning.connect(_on_threat_warning)
 	EventBus.position_changed.connect(_on_position_changed)
+	EventBus.race_state_changed.connect(_on_race_state_changed)
 	_wrong_way_label.visible = false
 	_message_label.text = ""
 	_threat_warning.visible = false
@@ -242,7 +247,21 @@ func _exit_tree() -> void:
 		EventBus.threat_warning.disconnect(_on_threat_warning)
 	if EventBus.position_changed.is_connected(_on_position_changed):
 		EventBus.position_changed.disconnect(_on_position_changed)
+	if EventBus.race_state_changed.is_connected(_on_race_state_changed):
+		EventBus.race_state_changed.disconnect(_on_race_state_changed)
 	_net_quality.unbind()
+
+
+## Fades every HUD element out while the results screen owns the view (both
+## the authoritative and the network-replica RESULTS paths emit this), and
+## back in for any other state, e.g. a restart's countdown. Per viewport, so
+## each split-screen HUD fades on its own.
+func _on_race_state_changed(_old_state: int, new_state: int) -> void:
+	var target: Color = Color(1.0, 1.0, 1.0, 0.0 if new_state == RaceState.RESULTS else 1.0)
+	if _results_fade_tween != null:
+		_results_fade_tween.kill()
+	_results_fade_tween = create_tween()
+	_results_fade_tween.tween_property(_fade, "color", target, RESULTS_FADE_SECONDS)
 
 
 func _on_countdown_tick(value: int) -> void:

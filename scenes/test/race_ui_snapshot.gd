@@ -109,6 +109,7 @@ func _finish() -> void:
 		_save("pause")
 		pause_menu.hide_menu()
 		var results: ResultsScreen = _manager.get_node(^"ResultsScreen") as ResultsScreen
+		EventBus.race_state_changed.emit(RaceState.FINISHING, RaceState.RESULTS)
 		results.show_results(_sample_entries(), null)
 		await get_tree().create_timer(OVERLAY_SETTLE_SECONDS * 2.0).timeout
 		_save("results")
