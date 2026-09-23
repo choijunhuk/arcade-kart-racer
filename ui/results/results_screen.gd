@@ -9,10 +9,13 @@ const ROW_SEPARATION: int = 8
 const MILLISECONDS_PER_MINUTE: int = 60_000
 const MILLISECONDS_PER_SECOND: int = 1_000
 const SECONDS_PER_MINUTE: int = 60
+const ROW_FONT_SIZE: int = 19
+const PODIUM_PLACES: int = 3
 
 @export var tuning: FeelTuning = preload("res://data/tuning/feel_default.tres")
 
 @onready var _rows: VBoxContainer = $Panel/VBox/Rows
+@onready var _podium: HBoxContainer = $Panel/VBox/Podium
 @onready var _record_badge: Label = $Panel/VBox/NewRecordBadge
 @onready var _restart_button: Button = $Panel/VBox/Actions/RestartButton
 @onready var _track_select_button: Button = $Panel/VBox/Actions/TrackSelectButton
@@ -45,11 +48,15 @@ func _ready() -> void:
 func show_results(entries: Array[RaceResults.Entry], manager: RaceManager) -> void:
 	_manager = manager
 	_is_grand_prix = GameState.grand_prix_state != null
-	_rows.custom_minimum_size.y = 0.0 if _is_grand_prix else 420.0
-	_rows.add_theme_constant_override("separation", 4 if _is_grand_prix else 7)
+	_rows.custom_minimum_size.y = 0.0
+	_rows.add_theme_constant_override("separation", 4 if _is_grand_prix else 3)
 	_clear_rows()
 	_record_badge.visible = false
 	var ordered: Array[RaceResults.Entry] = ResultsOrdering.by_rank(entries)
+	_podium.visible = not _is_grand_prix and not ordered.is_empty()
+	if _podium.visible:
+		ResultsPodium.build(_podium, ordered, _format_time)
+		ResultsPodium.animate(_podium)
 	for index: int in range(ordered.size()):
 		var entry: RaceResults.Entry = ordered[index]
 		var row: HBoxContainer = _create_row(entry)
@@ -80,6 +87,13 @@ func _create_row(entry: RaceResults.Entry) -> HBoxContainer:
 	if entry.is_human:
 		row.modulate = Color(1.0, 0.88, 0.42, 1.0)
 	_add_cell(row, &"Position", str(entry.rank), POSITION_WIDTH)
+	if entry.rank >= 1 and entry.rank <= PODIUM_PLACES:
+		var pill: StyleBoxFlat = StyleBoxFlat.new()
+		pill.bg_color = Color(ResultsPodium.PLACE_COLORS[entry.rank - 1], 0.3)
+		pill.border_color = ResultsPodium.PLACE_COLORS[entry.rank - 1]
+		pill.border_width_left = 4
+		pill.skew = Vector2(0.3, 0.0)
+		(row.get_node(^"Position") as Label).add_theme_stylebox_override(&"normal", pill)
 	_add_cell(row, &"Driver", entry.driver_name, NAME_WIDTH)
 	var kart_name: String = entry.kart_display_name if not entry.kart_display_name.is_empty() else entry.kart_name
 	_add_cell(row, &"Kart", kart_name, NAME_WIDTH)
@@ -94,8 +108,7 @@ func _add_cell(row: HBoxContainer, cell_name: StringName, text: String, width: f
 	label.name = cell_name
 	label.custom_minimum_size.x = width
 	label.text = text
-	if _is_grand_prix:
-		label.add_theme_font_size_override("font_size", 18)
+	label.add_theme_font_size_override("font_size", 18 if _is_grand_prix else ROW_FONT_SIZE)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	row.add_child(label)
 

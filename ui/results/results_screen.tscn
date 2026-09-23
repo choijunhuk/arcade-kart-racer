@@ -1,11 +1,27 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://ui/results/results_screen.gd" id="1_results"]
 [ext_resource type="Theme" path="res://ui/theme/default_theme.tres" id="2_theme"]
 
+[sub_resource type="StyleBoxFlat" id="Style_header"]
+bg_color = Color(1, 1, 1, 0.05)
+border_width_bottom = 2
+border_color = Color(1, 0.48, 0.1, 0.8)
+content_margin_top = 4.0
+content_margin_bottom = 4.0
+
 [node name="ResultsScreen" type="CanvasLayer"]
 layer = 20
 script = ExtResource("1_results")
+
+[node name="Dim" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.02, 0.025, 0.06, 0.55)
 
 [node name="Panel" type="PanelContainer" parent="."]
 anchors_preset = 8
@@ -13,17 +29,17 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -530.0
-offset_top = -360.0
-offset_right = 530.0
-offset_bottom = 360.0
+offset_left = -560.0
+offset_top = -430.0
+offset_right = 560.0
+offset_bottom = 430.0
 grow_horizontal = 2
 grow_vertical = 2
 theme = ExtResource("2_theme")
 
 [node name="VBox" type="VBoxContainer" parent="Panel"]
 layout_mode = 2
-theme_override_constants/separation = 12
+theme_override_constants/separation = 10
 
 [node name="Title" type="Label" parent="Panel/VBox"]
 layout_mode = 2
@@ -39,48 +55,64 @@ theme_override_colors/font_color = Color(1, 0.82, 0.14, 1)
 text = "★ NEW RECORD ★"
 horizontal_alignment = 1
 
-[node name="Header" type="HBoxContainer" parent="Panel/VBox"]
+[node name="Podium" type="HBoxContainer" parent="Panel/VBox"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 18
+
+[node name="HeaderBar" type="PanelContainer" parent="Panel/VBox"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("Style_header")
+
+[node name="Header" type="HBoxContainer" parent="Panel/VBox/HeaderBar"]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="Position" type="Label" parent="Panel/VBox/Header"]
+[node name="Position" type="Label" parent="Panel/VBox/HeaderBar/Header"]
 custom_minimum_size = Vector2(70, 0)
 layout_mode = 2
+theme_type_variation = &"CaptionLabel"
 text = "POS"
 horizontal_alignment = 1
 
-[node name="Driver" type="Label" parent="Panel/VBox/Header"]
+[node name="Driver" type="Label" parent="Panel/VBox/HeaderBar/Header"]
 custom_minimum_size = Vector2(175, 0)
 layout_mode = 2
+theme_type_variation = &"CaptionLabel"
 text = "DRIVER"
 horizontal_alignment = 1
 
-[node name="Kart" type="Label" parent="Panel/VBox/Header"]
+[node name="Kart" type="Label" parent="Panel/VBox/HeaderBar/Header"]
 custom_minimum_size = Vector2(175, 0)
 layout_mode = 2
+theme_type_variation = &"CaptionLabel"
 text = "KART"
 horizontal_alignment = 1
 
-[node name="Total" type="Label" parent="Panel/VBox/Header"]
+[node name="Total" type="Label" parent="Panel/VBox/HeaderBar/Header"]
 custom_minimum_size = Vector2(145, 0)
 layout_mode = 2
+theme_type_variation = &"CaptionLabel"
 text = "TOTAL"
 horizontal_alignment = 1
 
-[node name="BestLap" type="Label" parent="Panel/VBox/Header"]
+[node name="BestLap" type="Label" parent="Panel/VBox/HeaderBar/Header"]
 custom_minimum_size = Vector2(145, 0)
 layout_mode = 2
+theme_type_variation = &"CaptionLabel"
 text = "BEST LAP"
 horizontal_alignment = 1
 
-[node name="Record" type="Label" parent="Panel/VBox/Header"]
+[node name="Record" type="Label" parent="Panel/VBox/HeaderBar/Header"]
 custom_minimum_size = Vector2(125, 0)
 layout_mode = 2
+theme_type_variation = &"CaptionLabel"
 text = "RECORD"
 horizontal_alignment = 1
 
 [node name="Rows" type="VBoxContainer" parent="Panel/VBox"]
-custom_minimum_size = Vector2(0, 420)
+custom_minimum_size = Vector2(0, 0)
+size_flags_vertical = 3
 layout_mode = 2
 theme_override_constants/separation = 7
 
