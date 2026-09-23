@@ -7,7 +7,8 @@ extends Node
 ## With demo=1 every player starts an item roulette (rocket dart) and gets a
 ## threat warning right after the first shot, so later shots show the
 ## roulette, the landed item and the warning banner.
-## demo=2 instead fakes every player finishing at the first shot (finish
+## demo=3 fires the HUD feedback cues (rank gain, lap split, item hit,
+## wrong way) at the first shot. demo=2 instead fakes every player finishing at the first shot (finish
 ## camera beat/orbit + podium celebration). intro_seconds > 0 plays the
 ## pre-countdown flyover (shot times still count from scene start).
 ## usage: godot --path . --resolution 1600x900 res://scenes/test/race_ui_snapshot.tscn -- <out_dir> [players 1-4] [track_index 0-3] [shot_times_csv] [overlays 0/1] [demo 0/1/2] [intro_seconds]
@@ -33,6 +34,7 @@ var _shot_ticks: Array[int] = []
 var _overlays: bool = false
 var _demo: bool = false
 var _finish_demo: bool = false
+var _feedback_demo: bool = false
 var _tick: int = 0
 var _shot: int = 0
 var _capture_pending: bool = false
@@ -49,6 +51,7 @@ func _ready() -> void:
 	_overlays = args.size() > 4 and args[4] == "1"
 	_demo = args.size() > 5 and args[5] == "1"
 	_finish_demo = args.size() > 5 and args[5] == "2"
+	_feedback_demo = args.size() > 5 and args[5] == "3"
 	for part: String in times:
 		_shot_ticks.append(int(float(part) * Engine.physics_ticks_per_second))
 	DirAccess.make_dir_recursive_absolute(_out_dir)
@@ -99,6 +102,14 @@ func _process(_delta: float) -> void:
 	_save("shot_%02d" % _shot)
 	if _demo and _shot == 0:
 		_start_demo()
+	if _feedback_demo and _shot == 0:
+		var karts: Array[KartController] = _manager.get_karts()
+		for kart: KartController in _manager.get_human_karts():
+			EventBus.position_changed.emit(kart, 5, 3)
+			EventBus.lap_completed.emit(kart, 1, 41.207)
+			EventBus.lap_completed.emit(kart, 2, 81.95)
+			EventBus.item_hit.emit(karts[karts.size() - 1], kart, &"rocket_dart")
+			EventBus.wrong_way.emit(kart, true)
 	if _finish_demo and _shot == 0:
 		for kart: KartController in _manager.get_human_karts():
 			EventBus.kart_finished.emit(kart, 60.0)
