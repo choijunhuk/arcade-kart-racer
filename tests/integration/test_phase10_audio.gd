@@ -146,7 +146,7 @@ func test_real_launch_contact_and_hit_play_once_per_owner() -> void:
 	var resolver: KartCollisionResolver = KartCollisionResolver.new()
 	add_child_autofree(resolver)
 	resolver.set_physics_process(false)
-	resolver._resolve_pair(kart, other)
+	resolver._resolve_pair(kart, other, true) # A first touch is a new contact edge.
 	assert_eq(_plays.count(&"impact_kart"), 2, "one contact sound per kart")
 	assert_true(kart.apply_hit(HitReactor.HitType.SPIN_OUT))
 	assert_eq(_plays.count(&"hit_spin"), 1)
