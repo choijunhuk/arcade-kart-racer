@@ -4,7 +4,10 @@ extends Node
 ## split screen is exercised exactly as in local multiplayer), saves PNGs at
 ## fixed race times, then optionally shows the pause overlay and a results
 ## screen over the live frame and captures those too.
-## usage: godot --path . --resolution 1600x900 res://scenes/test/race_ui_snapshot.tscn -- <out_dir> [players 1-4] [track_index 0-3] [shot_times_csv] [overlays 0/1]
+## With demo=1 every player starts an item roulette (rocket dart) and gets a
+## threat warning right after the first shot, so later shots show the
+## roulette, the landed item and the warning banner.
+## usage: godot --path . --resolution 1600x900 res://scenes/test/race_ui_snapshot.tscn -- <out_dir> [players 1-4] [track_index 0-3] [shot_times_csv] [overlays 0/1] [demo 0/1]
 ## example: ... -- /tmp/split2 2 0 1,6 0
 
 const RACE_SCENE: String = "res://race/race.tscn"
@@ -25,6 +28,7 @@ var _out_dir: String = "/tmp/race_ui"
 var _manager: RaceManager
 var _shot_ticks: Array[int] = []
 var _overlays: bool = false
+var _demo: bool = false
 var _tick: int = 0
 var _shot: int = 0
 var _capture_pending: bool = false
@@ -39,6 +43,7 @@ func _ready() -> void:
 	var track_index: int = clampi(int(args[2]) if args.size() > 2 else 0, 0, TRACKS.size() - 1)
 	var times: PackedStringArray = (args[3] if args.size() > 3 else "4,9").split(",", false)
 	_overlays = args.size() > 4 and args[4] == "1"
+	_demo = args.size() > 5 and args[5] == "1"
 	for part: String in times:
 		_shot_ticks.append(int(float(part) * Engine.physics_ticks_per_second))
 	DirAccess.make_dir_recursive_absolute(_out_dir)
@@ -84,7 +89,16 @@ func _process(_delta: float) -> void:
 		return
 	_capture_pending = false
 	_save("shot_%02d" % _shot)
+	if _demo and _shot == 0:
+		_start_demo()
 	_shot += 1
+
+
+func _start_demo() -> void:
+	var item: ItemData = load("res://data/items/rocket_dart.tres") as ItemData
+	for kart: KartController in _manager.get_human_karts():
+		kart.item_slot.begin_roulette(item)
+		EventBus.threat_warning.emit(kart, &"hunter_drone", 4.0)
 
 
 func _finish() -> void:

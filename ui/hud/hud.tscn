@@ -1,53 +1,135 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://ui/hud/hud.gd" id="1_hud"]
 [ext_resource type="PackedScene" path="res://ui/hud/drift_meter.tscn" id="2_drift"]
 [ext_resource type="PackedScene" path="res://ui/hud/minimap.tscn" id="3_minimap"]
 [ext_resource type="Theme" path="res://ui/theme/default_theme.tres" id="4_theme"]
+[ext_resource type="Script" path="res://ui/hud/speed_gauge.gd" id="5_gauge"]
+[ext_resource type="Script" path="res://ui/hud/item_slot_view.gd" id="6_item"]
+
+[sub_resource type="StyleBoxFlat" id="Style_threat"]
+bg_color = Color(0.85, 0.08, 0.16, 0.82)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+skew = Vector2(0.25, 0)
+content_margin_left = 24.0
+content_margin_right = 24.0
+
+[sub_resource type="StyleBoxFlat" id="Style_wrong_way"]
+bg_color = Color(0.85, 0.08, 0.16, 0.88)
+border_width_top = 4
+border_width_bottom = 4
+border_color = Color(1, 0.82, 0.12, 1)
+skew = Vector2(0.25, 0)
+
+[sub_resource type="Gradient" id="Gradient_shield"]
+offsets = PackedFloat32Array(0, 0.8, 0.83, 0.97, 1)
+colors = PackedColorArray(0.3, 0.85, 1, 0, 0.3, 0.85, 1, 0, 0.45, 0.9, 1, 1, 0.3, 0.85, 1, 0.9, 0.3, 0.85, 1, 0)
+
+[sub_resource type="GradientTexture2D" id="Texture_shield"]
+gradient = SubResource("Gradient_shield")
+width = 128
+height = 128
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(1, 0.5)
+
+[sub_resource type="Gradient" id="Gradient_shield_under"]
+offsets = PackedFloat32Array(0, 0.8, 0.83, 0.97, 1)
+colors = PackedColorArray(1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0.14, 1, 1, 1, 0.14, 1, 1, 1, 0)
+
+[sub_resource type="GradientTexture2D" id="Texture_shield_under"]
+gradient = SubResource("Gradient_shield_under")
+width = 128
+height = 128
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(1, 0.5)
 
 [node name="HUD" type="CanvasLayer"]
 script = ExtResource("1_hud")
 
-[node name="PositionPanel" type="PanelContainer" parent="."]
+[node name="PositionPanel" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 0
 offset_left = 24.0
-offset_top = 20.0
-offset_right = 214.0
-offset_bottom = 142.0
+offset_top = 16.0
+offset_right = 344.0
+offset_bottom = 216.0
 mouse_filter = 2
 theme = ExtResource("4_theme")
 
 [node name="PositionLabel" type="Label" parent="."]
-offset_left = 42.0
-offset_top = 26.0
-offset_right = 124.0
-offset_bottom = 104.0
+offset_left = 30.0
+offset_top = -6.0
+offset_right = 150.0
+offset_bottom = 126.0
 mouse_filter = 2
 theme = ExtResource("4_theme")
-theme_override_colors/font_color = Color(1, 0.82, 0.14, 1)
-theme_override_font_sizes/font_size = 64
+theme_type_variation = &"HudNumber"
+theme_override_colors/font_color = Color(1, 0.82, 0.12, 1)
+theme_override_font_sizes/font_size = 124
 text = "1"
-horizontal_alignment = 1
+horizontal_alignment = 2
+
+[node name="OrdinalLabel" type="Label" parent="."]
+offset_left = 132.0
+offset_top = 16.0
+offset_right = 222.0
+offset_bottom = 66.0
+mouse_filter = 2
+theme = ExtResource("4_theme")
+theme_type_variation = &"HudNumber"
+theme_override_colors/font_color = Color(1, 0.82, 0.12, 1)
+theme_override_font_sizes/font_size = 46
+text = "ST"
 
 [node name="PositionCountLabel" type="Label" parent="."]
-offset_left = 124.0
-offset_top = 56.0
-offset_right = 194.0
-offset_bottom = 100.0
+offset_left = 136.0
+offset_top = 66.0
+offset_right = 226.0
+offset_bottom = 96.0
 mouse_filter = 2
 theme = ExtResource("4_theme")
-theme_override_font_sizes/font_size = 28
+theme_type_variation = &"HudText"
+theme_override_colors/font_color = Color(0.75, 0.82, 0.95, 1)
+theme_override_font_sizes/font_size = 22
 text = "/8"
 
 [node name="LapLabel" type="Label" parent="."]
-offset_left = 42.0
-offset_top = 104.0
-offset_right = 194.0
-offset_bottom = 136.0
+offset_left = 34.0
+offset_top = 118.0
+offset_right = 314.0
+offset_bottom = 152.0
 mouse_filter = 2
 theme = ExtResource("4_theme")
-theme_override_font_sizes/font_size = 22
+theme_type_variation = &"HudText"
+theme_override_font_sizes/font_size = 28
 text = "LAP 1/3"
-horizontal_alignment = 1
+
+[node name="TimerLabel" type="Label" parent="."]
+offset_left = 34.0
+offset_top = 150.0
+offset_right = 314.0
+offset_bottom = 186.0
+mouse_filter = 2
+theme = ExtResource("4_theme")
+theme_type_variation = &"HudNumber"
+theme_override_font_sizes/font_size = 30
+text = "0:00.000"
+
+[node name="SplitLabel" type="Label" parent="."]
+offset_left = 36.0
+offset_top = 186.0
+offset_right = 336.0
+offset_bottom = 210.0
+mouse_filter = 2
+theme = ExtResource("4_theme")
+theme_type_variation = &"HudText"
+theme_override_colors/font_color = Color(0.75, 0.82, 0.95, 1)
+theme_override_font_sizes/font_size = 15
 
 [node name="CountdownLabel" type="Label" parent="."]
 anchors_preset = 8
@@ -55,16 +137,18 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -180.0
-offset_top = -130.0
-offset_right = 180.0
-offset_bottom = 130.0
+offset_left = -220.0
+offset_top = -150.0
+offset_right = 220.0
+offset_bottom = 150.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 theme = ExtResource("4_theme")
-theme_override_colors/font_color = Color(1, 0.82, 0.14, 1)
-theme_override_font_sizes/font_size = 112
+theme_type_variation = &"HudNumber"
+theme_override_colors/font_color = Color(1, 0.82, 0.12, 1)
+theme_override_constants/outline_size = 18
+theme_override_font_sizes/font_size = 220
 text = "3"
 horizontal_alignment = 1
 vertical_alignment = 1
@@ -75,30 +159,35 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -260.0
+offset_left = -300.0
 offset_top = 110.0
-offset_right = 260.0
-offset_bottom = 170.0
+offset_right = 300.0
+offset_bottom = 180.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 theme = ExtResource("4_theme")
-theme_override_colors/font_color = Color(1, 0.2, 0.15, 1)
-theme_override_font_sizes/font_size = 42
+theme_type_variation = &"HudNumber"
+theme_override_constants/outline_size = 0
+theme_override_font_sizes/font_size = 52
+theme_override_styles/normal = SubResource("Style_wrong_way")
 text = "WRONG WAY"
 horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="MessageLabel" type="Label" parent="."]
 anchors_preset = 10
 anchor_right = 1.0
-offset_top = 94.0
-offset_bottom = 150.0
+offset_top = 150.0
+offset_bottom = 220.0
 grow_horizontal = 2
 mouse_filter = 2
 theme = ExtResource("4_theme")
-theme_override_colors/font_color = Color(1, 0.45, 0.16, 1)
-theme_override_font_sizes/font_size = 38
+theme_type_variation = &"HudNumber"
+theme_override_colors/font_color = Color(1, 0.55, 0.12, 1)
+theme_override_font_sizes/font_size = 56
 horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="ThreatWarning" type="Label" parent="."]
 anchors_preset = 10
@@ -110,10 +199,12 @@ offset_bottom = 78.0
 grow_horizontal = 2
 mouse_filter = 2
 theme = ExtResource("4_theme")
-theme_override_colors/font_color = Color(0.55, 0.82, 1, 1)
+theme_type_variation = &"HudText"
 theme_override_font_sizes/font_size = 30
+theme_override_styles/normal = SubResource("Style_threat")
 text = "STORM BEACON INCOMING"
 horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="Minimap" parent="." instance=ExtResource("3_minimap")]
 layout_mode = 3
@@ -121,8 +212,8 @@ anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
 offset_left = 24.0
-offset_top = -224.0
-offset_right = 284.0
+offset_top = -244.0
+offset_right = 304.0
 offset_bottom = -24.0
 grow_vertical = 0
 
@@ -133,34 +224,42 @@ anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = -210.0
-offset_top = -98.0
-offset_right = 210.0
-offset_bottom = -26.0
+offset_left = -200.0
+offset_top = -78.0
+offset_right = 200.0
+offset_bottom = -22.0
 grow_horizontal = 2
 grow_vertical = 0
 
-[node name="Speedometer" type="PanelContainer" parent="."]
+[node name="Speedometer" type="Control" parent="."]
 layout_mode = 3
-anchors_preset = 7
-anchor_left = 0.5
+anchors_preset = 3
+anchor_left = 1.0
 anchor_top = 1.0
-anchor_right = 0.5
+anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 228.0
-offset_top = -98.0
-offset_right = 398.0
-offset_bottom = -26.0
-grow_horizontal = 2
+offset_left = -244.0
+offset_top = -204.0
+offset_right = -24.0
+offset_bottom = -24.0
+grow_horizontal = 0
 grow_vertical = 0
 mouse_filter = 2
 theme = ExtResource("4_theme")
+script = ExtResource("5_gauge")
 
 [node name="SpeedLabel" type="Label" parent="Speedometer"]
-layout_mode = 2
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_bottom = -30.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
-theme_override_font_sizes/font_size = 24
-text = "000 km/h"
+theme_type_variation = &"HudNumber"
+theme_override_font_sizes/font_size = 52
+text = "0"
 horizontal_alignment = 1
 vertical_alignment = 1
 
@@ -169,58 +268,48 @@ layout_mode = 3
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -244.0
-offset_top = 238.0
+offset_left = -204.0
+offset_top = 236.0
 offset_right = -24.0
-offset_bottom = 398.0
+offset_bottom = 436.0
 grow_horizontal = 0
-theme = ExtResource("4_theme")
-
-[node name="Background" type="PanelContainer" parent="ItemPanel"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
 mouse_filter = 2
+theme = ExtResource("4_theme")
+script = ExtResource("6_item")
 
 [node name="Icon" type="TextureRect" parent="ItemPanel"]
 layout_mode = 0
-offset_left = 74.0
-offset_top = 10.0
+offset_left = 34.0
+offset_top = 34.0
 offset_right = 146.0
-offset_bottom = 82.0
+offset_bottom = 146.0
 mouse_filter = 2
 expand_mode = 1
 stretch_mode = 5
-pivot_offset = Vector2(36, 36)
+pivot_offset = Vector2(56, 56)
 
 [node name="ItemName" type="Label" parent="ItemPanel"]
 layout_mode = 0
-offset_top = 86.0
-offset_right = 220.0
-offset_bottom = 114.0
+offset_top = 170.0
+offset_right = 180.0
+offset_bottom = 198.0
 mouse_filter = 2
-text = "EMPTY"
+theme_type_variation = &"HudText"
 horizontal_alignment = 1
 
 [node name="RouletteLabel" type="Label" parent="ItemPanel"]
 layout_mode = 0
-offset_top = 110.0
-offset_right = 220.0
-offset_bottom = 134.0
 mouse_filter = 2
-theme_override_colors/font_color = Color(1, 0.82, 0.2, 1)
-theme_override_font_sizes/font_size = 16
+theme_type_variation = &"HudText"
 horizontal_alignment = 1
 
 [node name="CooldownBar" type="ProgressBar" parent="ItemPanel"]
+visible = false
 layout_mode = 0
-offset_left = 16.0
-offset_top = 136.0
-offset_right = 204.0
-offset_bottom = 151.0
+offset_left = 32.0
+offset_top = 162.0
+offset_right = 148.0
+offset_bottom = 171.0
 mouse_filter = 2
 show_percentage = false
 
@@ -228,17 +317,21 @@ show_percentage = false
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -258.0
-offset_top = 224.0
-offset_right = -10.0
-offset_bottom = 412.0
+offset_left = -212.0
+offset_top = 230.0
+offset_right = -16.0
+offset_bottom = 426.0
 grow_horizontal = 0
 mouse_filter = 2
 theme = ExtResource("4_theme")
 value = 100.0
 fill_mode = 4
+nine_patch_stretch = true
+texture_under = SubResource("Texture_shield_under")
+texture_progress = SubResource("Texture_shield")
 
 [node name="NetQualityLabel" type="Label" parent="."]
+visible = false
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
@@ -249,12 +342,13 @@ offset_bottom = 34.0
 grow_horizontal = 0
 mouse_filter = 2
 theme = ExtResource("4_theme")
+theme_type_variation = &"HudText"
 theme_override_font_sizes/font_size = 16
 text = "PING --ms  LOSS 0"
 horizontal_alignment = 2
-visible = false
 
 [node name="ReconnectingOverlay" type="ColorRect" parent="."]
+visible = false
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -262,7 +356,6 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 color = Color(0, 0, 0, 0.55)
-visible = false
 
 [node name="ReconnectingLabel" type="Label" parent="ReconnectingOverlay"]
 anchors_preset = 8
@@ -270,15 +363,16 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -220.0
-offset_top = -30.0
-offset_right = 220.0
-offset_bottom = 30.0
+offset_left = -260.0
+offset_top = -40.0
+offset_right = 260.0
+offset_bottom = 40.0
 grow_horizontal = 2
 grow_vertical = 2
 theme = ExtResource("4_theme")
-theme_override_colors/font_color = Color(1, 0.82, 0.14, 1)
-theme_override_font_sizes/font_size = 36
+theme_type_variation = &"HudNumber"
+theme_override_colors/font_color = Color(1, 0.82, 0.12, 1)
+theme_override_font_sizes/font_size = 40
 text = "RECONNECTING…"
 horizontal_alignment = 1
 vertical_alignment = 1
