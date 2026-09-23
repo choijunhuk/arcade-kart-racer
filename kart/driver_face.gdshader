@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode diffuse_burley, specular_schlick_ggx, shadows_disabled;
+render_mode diffuse_burley, specular_schlick_ggx;
 
 // Driver head with a painted SDF face (Phase 19 kart-soft). The face is
 // projected onto the front (-Z) of the head in head-radius units, so it needs
