@@ -153,9 +153,10 @@ func _draw_tag(tag: Dictionary) -> void:
 		draw_rect(box, Color(accent, alpha), false, 2.0)
 		var tip: Vector2 = Vector2(box.get_center().x, box.end.y + font_size * 0.45)
 		var half: float = font_size * 0.35
-		draw_colored_polygon(PackedVector2Array([
+		# draw_primitive: no triangulation, so a degenerate (tiny/offscreen) pointer cannot error.
+		draw_primitive(PackedVector2Array([
 			Vector2(tip.x - half, box.end.y), Vector2(tip.x + half, box.end.y), tip,
-		]), Color(accent, alpha))
+		]), PackedColorArray([Color(accent, alpha)]), PackedVector2Array())
 	var baseline: float = box.position.y + PADDING.y + font_size * 0.82
 	var rank_color: Color = HudReadout.position_color(int(tag["rank"]))
 	_draw_text(Vector2(box.position.x + PADDING.x, baseline), rank_text, font_size, Color(rank_color, alpha))
