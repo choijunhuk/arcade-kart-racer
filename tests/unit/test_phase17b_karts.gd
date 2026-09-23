@@ -68,3 +68,13 @@ func _build_visuals() -> Node3D:
 		child.name = child_name
 		visuals.add_child(child)
 	return visuals
+
+
+## Phase 19 kart-soft budget gate: one fully decorated kart (body, 4 wheels,
+## driver) stays within 16k triangles at LOD0; far LODs are generated.
+func test_decorated_kart_triangle_budget_per_class() -> void:
+	for kart_id: String in ["light", "medium", "heavy"]:
+		var data: KartData = load("res://data/karts/%s.tres" % kart_id) as KartData
+		var triangles: int = KartMeshBuilder.triangle_count(data)
+		assert_gt(triangles, 0, kart_id)
+		assert_lte(triangles, 16000, "%s LOD0 triangles %d" % [kart_id, triangles])
