@@ -70,11 +70,12 @@ func apply_body(body: MeshInstance3D) -> ShaderMaterial:
 	return material
 
 
-## Helmet in the driver colour, race suit in the livery accent.
+## Driver wears the driver colour: matte suit, clearcoated helmet with an
+## accent stripe (the helmet's gloss and dark visor keep the two readable).
 func apply_driver(driver_node: MeshInstance3D) -> void:
 	if driver_node == null:
 		return
-	driver_node.material_override = _glossy(accent.darkened(0.12), 0.6, 0.0)
+	driver_node.material_override = _glossy(helmet, 0.75, 0.0)
 	var helmet_node: MeshInstance3D = driver_node.get_node_or_null(HELMET_NODE_NAME) as MeshInstance3D
 	if helmet_node != null:
 		var shell: StandardMaterial3D = _glossy(helmet, 0.22, 0.15)
