@@ -10,6 +10,11 @@ extends RefCounted
 ## roles (paint/glass/trim), so the car keeps its two-tone look in one draw.
 ## Wheels are not behind that shader, so tyre and rim stay separate surfaces
 ## (rim is surface 1, recoloured per driver by KartLivery).
+##
+## Phase 19 kart-soft: NOT used by the default karts any more -- those are the
+## procedural soft bodies (KartSoftBody / KartDriverBuilder via
+## KartMeshBuilder.decorate()). Retained for an optional Kenney kart style and
+## for tests/unit/test_phase18e_kenney_art.gd; do not delete without both.
 
 const MODEL_DIR: String = "res://assets/kenney/racing_kit/"
 ## Paint-surface reference colors per race car variant (geometry is identical
