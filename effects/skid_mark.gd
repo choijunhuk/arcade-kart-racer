@@ -1,7 +1,7 @@
 class_name SkidMark
 extends MeshInstance3D
 
-## Continuous ring-buffered tyre strip detached from the moving kart transform.
+## Two continuous ring-buffered rear-tyre strips detached from the moving kart transform.
 
 @export var tuning: FeelTuning = preload("res://data/tuning/feel_default.tres")
 
@@ -10,6 +10,10 @@ const FADE_SECONDS: float = 3.0
 var _idle_seconds: float = 0.0
 
 const TANGENT_EPSILON: float = 0.0001
+## Lateral distance from the kart centre line to each rear tyre track.
+const REAR_TRACK_OFFSET: float = 0.78
+## Track points trail slightly behind the kart origin, under the rear axle.
+const REAR_AXLE_Z: float = 0.8
 
 var _kart: KartController
 var _buffer: SkidStripBuffer = SkidStripBuffer.new()
@@ -35,7 +39,10 @@ func _process(delta: float) -> void:
 		_array_mesh.clear_surfaces()
 	_idle_seconds = 0.0
 	transparency = 0.0
-	var local_point: Vector3 = to_local(_kart.global_position - Vector3.UP * tuning.skid_mark_ground_offset)
+	var local_point: Vector3 = to_local(
+		_kart.global_position - Vector3.UP * tuning.skid_mark_ground_offset
+		+ _kart.global_basis.z * REAR_AXLE_Z
+	)
 	var points: Array[Vector3] = _buffer.get_points()
 	if not points.is_empty() and points.back().distance_to(local_point) < tuning.skid_mark_min_spacing:
 		return
@@ -73,19 +80,39 @@ static func build_strip_geometry(
 	return {"vertices": vertices, "colors": colors, "indices": indices}
 
 
+## Shifts a centre-line polyline sideways (flat XZ normal), for per-tyre tracks.
+static func offset_points(points: Array[Vector3], offset: float) -> Array[Vector3]:
+	var result: Array[Vector3] = []
+	for index: int in range(points.size()):
+		var tangent: Vector3 = points[mini(index + 1, points.size() - 1)] - points[maxi(index - 1, 0)]
+		tangent.y = 0.0
+		var side: Vector3 = tangent.normalized().cross(Vector3.UP) if tangent.length_squared() > TANGENT_EPSILON else Vector3.RIGHT
+		result.append(points[index] + side * offset)
+	return result
+
+
 func _rebuild_mesh() -> void:
 	_array_mesh.clear_surfaces()
-	var geometry: Dictionary = build_strip_geometry(
-		_buffer.get_points(), tuning.skid_mark_half_width, tuning.skid_mark_alpha,
-	)
-	var vertices: PackedVector3Array = geometry["vertices"] as PackedVector3Array
+	var points: Array[Vector3] = _buffer.get_points()
+	var vertices: PackedVector3Array = PackedVector3Array()
+	var colors: PackedColorArray = PackedColorArray()
+	var indices: PackedInt32Array = PackedInt32Array()
+	for offset: float in [-REAR_TRACK_OFFSET, REAR_TRACK_OFFSET]:
+		var geometry: Dictionary = build_strip_geometry(
+			offset_points(points, offset), tuning.skid_mark_half_width, tuning.skid_mark_alpha,
+		)
+		var base: int = vertices.size()
+		vertices.append_array(geometry["vertices"] as PackedVector3Array)
+		colors.append_array(geometry["colors"] as PackedColorArray)
+		for index: int in geometry["indices"] as PackedInt32Array:
+			indices.append(base + index)
 	if vertices.is_empty():
 		return
 	var arrays: Array = []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = vertices
-	arrays[Mesh.ARRAY_COLOR] = geometry["colors"] as PackedColorArray
-	arrays[Mesh.ARRAY_INDEX] = geometry["indices"] as PackedInt32Array
+	arrays[Mesh.ARRAY_COLOR] = colors
+	arrays[Mesh.ARRAY_INDEX] = indices
 	_array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 
 
