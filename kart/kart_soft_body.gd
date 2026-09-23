@@ -19,6 +19,8 @@ const REAR_RADIUS: float = 0.28
 ## Rear tyre half width per weight class (front tyres are 85% of it).
 const TYRE_HALF: Array[float] = [0.12, 0.14, 0.16]
 const DRIVER_SCALE: Array[float] = [0.92, 1.0, 1.07]
+## Raised rim spokes (make the wheel spin readable).
+const SPOKES: int = 5
 ## Wing height above the engine cover per weight class (0 = no wing).
 const WING_LIFT: Array[float] = [0.0, 0.2, 0.26]
 ## Exhaust tip must stay clear of the tub so it lines up with BoostEffects.
@@ -119,11 +121,11 @@ static func wheel_mesh(front: bool, outer: float, s: Shape) -> ArrayMesh:
 	var path: PackedVector3Array = PackedVector3Array()
 	var sizes: PackedVector2Array = PackedVector2Array()
 	var center_radius: float = (radius + inner) * 0.5
-	for index: int in range(14):
-		var angle: float = TAU * float(index) / 14.0
+	for index: int in range(16):
+		var angle: float = TAU * float(index) / 16.0
 		path.append(Vector3(0.0, sin(angle), cos(angle)) * center_radius)
 		sizes.append(Vector2(half, (radius - inner) * 0.5))
-	tyre.sweep(path, sizes, Color.WHITE, 8, 2.8, Vector3.UP, true, 0.0, Vector3.ZERO)
+	tyre.sweep(path, sizes, Color.WHITE, 6, 2.8, Vector3.UP, true, 0.0, Vector3.ZERO)
 	var rim: SoftMesh = SoftMesh.new()
 	rim.dome_rings = 2
 	var axle: PackedVector3Array = PackedVector3Array([Vector3(-0.5, 0, 0), Vector3(0.42, 0, 0), Vector3(0.62, 0, 0)])
@@ -131,6 +133,14 @@ static func wheel_mesh(front: bool, outer: float, s: Shape) -> ArrayMesh:
 		axle[index] *= half * outer
 	var rim_sizes: PackedVector2Array = PackedVector2Array([Vector2.ONE * (inner + 0.01), Vector2.ONE * (inner + 0.01), Vector2.ONE * inner * 0.55])
 	rim.sweep(axle, rim_sizes, Color.WHITE, 10, 2.0, Vector3.UP, false, 0.7)
+	# Raised spokes on the rim face so the wheel visibly spins.
+	rim.dome_rings = 1
+	var face_x: float = (0.42 * half + 0.012) * outer
+	for spoke: int in range(SPOKES):
+		var angle: float = TAU * float(spoke) / float(SPOKES)
+		var dir: Vector3 = Vector3(0.0, sin(angle), cos(angle))
+		var spoke_path: PackedVector3Array = PackedVector3Array([Vector3(face_x, 0, 0) + dir * inner * 0.5, Vector3(face_x, 0, 0) + dir * inner * 0.92])
+		rim.sweep(spoke_path, PackedVector2Array([Vector2(0.024, 0.016), Vector2(0.02, 0.014)]), Color.WHITE, 5, 2.0, Vector3.RIGHT * outer, false, 0.8)
 	var mesh: ArrayMesh = SoftMesh.bake([tyre, rim], [_tyre_material, _rim_material])
 	mesh.set_meta(&"triangles", tyre.triangle_count() + rim.triangle_count())
 	_wheels[key] = mesh

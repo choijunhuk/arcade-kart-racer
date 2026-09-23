@@ -20,11 +20,13 @@ const HELMET_RADIUS: float = 0.218
 ## Open-face cut: brow edge elevation in front, lower edge elsewhere, and the
 ## half-angle of the face opening around -Z (degrees).
 const BROW_ELEVATION: float = 33.0
-const SKIRT_ELEVATION: float = -40.0
+const SKIRT_ELEVATION: float = -38.0
+const SKIRT_BACK_ELEVATION: float = -50.0
 const OPENING_HALF_ANGLE: float = 62.0
 ## Brow edge drops this much (degrees) towards the temples: an oval face opening.
 const BROW_ARCH: float = 12.0
 const GOGGLE_ELEVATION: float = 52.0
+const STRAP_BACK_ELEVATION: float = 12.0
 const HELMET_SEGMENTS: int = 30
 const HELMET_BANDS: int = 7
 const SUIT: Color = Color(1.0, 1.0, 1.0)
@@ -160,16 +162,31 @@ static func _helmet() -> Array[ArrayMesh]:
 	rim_sizes.resize(edge.size())
 	rim_sizes.fill(Vector2(0.024, 0.02))
 	rim.sweep(edge, rim_sizes, Color.WHITE, 6, 2.2, Vector3.UP, true, 0.0, Vector3.ZERO)
+	# Accent racing stripe over the crown, brow to nape (reads from the chase camera).
+	rim.dome_rings = 2
+	var stripe: PackedVector3Array = PackedVector3Array()
+	var stripe_from: float = deg_to_rad(BROW_ELEVATION + 8.0)
+	var stripe_to: float = PI - deg_to_rad(-SKIRT_BACK_ELEVATION - 6.0)
+	for index: int in range(13):
+		var theta: float = lerpf(stripe_from, stripe_to, float(index) / 12.0)
+		stripe.append(Vector3(0.0, sin(theta), -cos(theta) * 1.04) * (HELMET_RADIUS + 0.002))
+	var stripe_sizes: PackedVector2Array = PackedVector2Array()
+	stripe_sizes.resize(stripe.size())
+	stripe_sizes.fill(Vector2(0.032, 0.009))
+	rim.sweep(stripe, stripe_sizes, Color.WHITE, 6, 2.4, Vector3.UP, false, 1.0, Vector3.ZERO)
+	# Goggles pushed up on the brow; the strap wraps round the back, tilting down.
 	var goggles: SoftMesh = SoftMesh.new()
 	goggles.dome_rings = 2
-	var arc: PackedVector3Array = PackedVector3Array()
-	for index: int in range(9):
-		var psi: float = -PI * 0.5 + deg_to_rad(lerpf(-62.0, 62.0, float(index) / 8.0))
-		arc.append(_on_helmet(psi, deg_to_rad(GOGGLE_ELEVATION), HELMET_RADIUS + 0.004))
-	var arc_sizes: PackedVector2Array = PackedVector2Array()
-	arc_sizes.resize(arc.size())
-	arc_sizes.fill(Vector2(0.022, 0.012))
-	goggles.sweep(arc, arc_sizes, Color.WHITE, 6, 2.4, Vector3.UP, false, 1.0, Vector3.ZERO)
+	var strap: PackedVector3Array = PackedVector3Array()
+	for index: int in range(24):
+		var psi: float = TAU * float(index) / 24.0
+		var from_front: float = absf(wrapf(psi + PI * 0.5, -PI, PI))
+		var elevation: float = deg_to_rad(lerpf(STRAP_BACK_ELEVATION, GOGGLE_ELEVATION, 0.5 + 0.5 * cos(from_front)))
+		strap.append(_on_helmet(psi, elevation, HELMET_RADIUS + 0.004))
+	var strap_sizes: PackedVector2Array = PackedVector2Array()
+	strap_sizes.resize(strap.size())
+	strap_sizes.fill(Vector2(0.02, 0.009))
+	goggles.sweep(strap, strap_sizes, Color.WHITE, 6, 2.4, Vector3.UP, true, 0.0, Vector3.ZERO)
 	for side: float in [-1.0, 1.0]:
 		var normal: Vector3 = _on_helmet(-PI * 0.5 + side * deg_to_rad(21.0), deg_to_rad(GOGGLE_ELEVATION), 1.0).normalized()
 		var lens: PackedVector3Array = PackedVector3Array([normal * (HELMET_RADIUS - 0.01), normal * (HELMET_RADIUS + 0.018)])
@@ -187,7 +204,8 @@ static func _edge_elevation(psi: float) -> float:
 	var open: float = deg_to_rad(OPENING_HALF_ANGLE)
 	var blend: float = smoothstep(open - deg_to_rad(30.0), open + deg_to_rad(18.0), from_front)
 	var brow: float = BROW_ELEVATION - BROW_ARCH * pow(minf(from_front / open, 1.0), 2.0)
-	return deg_to_rad(lerpf(brow, SKIRT_ELEVATION, blend))
+	var skirt: float = lerpf(SKIRT_ELEVATION, SKIRT_BACK_ELEVATION, smoothstep(PI * 0.5, PI, from_front))
+	return deg_to_rad(lerpf(brow, skirt, blend))
 
 
 ## Azimuth `psi` turns from +X towards +Z, so -Z (the face) is psi = -PI/2.
