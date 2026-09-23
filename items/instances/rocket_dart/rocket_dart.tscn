@@ -1,18 +1,55 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://items/instances/rocket_dart/rocket_dart.gd" id="1_script"]
+[ext_resource type="Script" path="res://effects/item_fx.gd" id="2_fx"]
+[ext_resource type="Script" path="res://effects/projectile_trail.gd" id="3_trail"]
+
+[sub_resource type="StandardMaterial3D" id="Material_body"]
+albedo_color = Color(0.95, 0.95, 0.97, 1)
+metallic = 0.4
+roughness = 0.3
 
 [sub_resource type="StandardMaterial3D" id="Material"]
 albedo_color = Color(1, 0.22, 0.12, 1)
 emission_enabled = true
 emission = Color(1, 0.08, 0.02, 1)
-emission_energy_multiplier = 2.0
+emission_energy_multiplier = 1.2
+
+[sub_resource type="StandardMaterial3D" id="Material_flame"]
+transparency = 1
+blend_mode = 1
+shading_mode = 0
+billboard_mode = 1
+albedo_color = Color(1, 0.7, 0.25, 1)
 
 [sub_resource type="CylinderMesh" id="Mesh"]
+material = SubResource("Material_body")
+top_radius = 0.13
+bottom_radius = 0.13
+height = 0.62
+radial_segments = 12
+
+[sub_resource type="CylinderMesh" id="Mesh_nose"]
 material = SubResource("Material")
-top_radius = 0.16
-bottom_radius = 0.28
-height = 0.9
+top_radius = 0.0
+bottom_radius = 0.13
+height = 0.32
+radial_segments = 12
+
+[sub_resource type="BoxMesh" id="Mesh_fin_h"]
+material = SubResource("Material")
+size = Vector3(0.56, 0.04, 0.2)
+
+[sub_resource type="BoxMesh" id="Mesh_fin_v"]
+material = SubResource("Material")
+size = Vector3(0.04, 0.56, 0.2)
+
+[sub_resource type="SphereMesh" id="Mesh_flame"]
+material = SubResource("Material_flame")
+radius = 0.16
+height = 0.32
+radial_segments = 8
+rings = 4
 
 [sub_resource type="SphereShape3D" id="Shape"]
 radius = 0.35
@@ -20,9 +57,35 @@ radius = 0.35
 [node name="RocketDart" type="Node3D"]
 script = ExtResource("1_script")
 
-[node name="Mesh" type="MeshInstance3D" parent="."]
+[node name="Visual" type="Node3D" parent="."]
+script = ExtResource("2_fx")
+face_travel = true
+
+[node name="Mesh" type="MeshInstance3D" parent="Visual"]
 rotation_degrees = Vector3(90, 0, 0)
 mesh = SubResource("Mesh")
+
+[node name="Nose" type="MeshInstance3D" parent="Visual"]
+position = Vector3(0, 0, -0.47)
+rotation_degrees = Vector3(-90, 0, 0)
+mesh = SubResource("Mesh_nose")
+
+[node name="FinH" type="MeshInstance3D" parent="Visual"]
+position = Vector3(0, 0, 0.26)
+mesh = SubResource("Mesh_fin_h")
+
+[node name="FinV" type="MeshInstance3D" parent="Visual"]
+position = Vector3(0, 0, 0.26)
+mesh = SubResource("Mesh_fin_v")
+
+[node name="Flame" type="MeshInstance3D" parent="Visual"]
+position = Vector3(0, 0, 0.42)
+cast_shadow = 0
+mesh = SubResource("Mesh_flame")
+
+[node name="Trail" type="MeshInstance3D" parent="."]
+script = ExtResource("3_trail")
+trail_color = Color(1, 0.5, 0.15, 0.85)
 
 [node name="CollisionCast" type="ShapeCast3D" parent="."]
 collision_mask = 5

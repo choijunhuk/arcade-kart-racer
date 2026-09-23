@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://items/instances/aegis_bubble/aegis_bubble.gd" id="1_script"]
 
 [ext_resource type="Shader" path="res://effects/shield_bubble.gdshader" id="2_shader"]
+[ext_resource type="Script" path="res://effects/shield_fx.gd" id="3_fx"]
 
 [sub_resource type="ShaderMaterial" id="Material"]
 shader = ExtResource("2_shader")
@@ -17,3 +18,6 @@ script = ExtResource("1_script")
 
 [node name="Mesh" type="MeshInstance3D" parent="."]
 mesh = SubResource("Mesh")
+
+[node name="ShieldFx" type="Node" parent="."]
+script = ExtResource("3_fx")
