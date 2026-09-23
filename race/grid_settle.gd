@@ -6,12 +6,19 @@ extends Node
 ## Authored slots can sit below the road top (Track01's markers were 0.1 m
 ## under its ribbon, so karts waited sunk into the road for the whole frozen
 ## countdown and popped up at GO) or below the body clearance a sloped grid
-## needs. The settle runs as a one-shot child node on the kart's first
-## physics tick: the freshly instanced track's collision is not queryable in
-## the frame it is added (a ray cast there misses), and a child node dies with
-## its kart if the race is torn down first. Only the height changes, never the
-## slot's horizontal position or facing; it is a pure geometry query, so the
-## server and every client derive the same spawn height.
+## needs. Only the height changes, never the slot's horizontal position or
+## facing; it is a pure geometry query, so the server and every client derive
+## the same spawn height.
+##
+## The settle runs exactly once, from a short-lived child node, on the first
+## physics tick after the spawn tick: the freshly instanced track's collision
+## is not queryable until the physics server syncs at the start of a tick (a
+## ray cast in the spawn frame misses), and a child node dies with its kart if
+## the race is torn down first. Online, NetRace's first snapshot goes out on
+## its SNAPSHOT_INTERVAL-th (3rd) tick after the session starts running, never
+## earlier than the spawn tick, so the settle always lands before any snapshot
+## and clients never receive an unsettled height (a client that settles after
+## applying a snapshot recomputes the same height: idempotent).
 
 ## Probe window around the slot: start above markers that sit inside the
 ## road, search a short distance below markers that float above it.
@@ -20,11 +27,9 @@ const SURFACE_PROBE_BELOW: float = 3.0
 const WORLD_COLLISION_MASK: int = 1
 ## Height above the hover pose from which the body box is dropped onto the road.
 const BODY_DROP_HEIGHT: float = 1.0
-## A race (re)loaded mid physics tick gets its first settle call before the
-## track collision syncs; retry a few ticks (the kart is frozen meanwhile).
-const MAX_ATTEMPTS: int = 5
 
-var _attempts_left: int = MAX_ATTEMPTS
+## Physics tick during which the kart was placed; the settle waits for a later one.
+var _spawn_physics_frame: int = 0
 
 
 ## Places `kart` on `slot` and schedules the surface settle for its first tick.
@@ -32,15 +37,18 @@ static func place(kart: KartController, slot: Transform3D) -> void:
 	kart.global_transform = slot
 	var settle: GridSettle = GridSettle.new()
 	settle.name = "GridSettle"
+	settle._spawn_physics_frame = Engine.get_physics_frames()
 	kart.add_child(settle)
 
 
 func _physics_process(_delta: float) -> void:
+	if Engine.get_physics_frames() <= _spawn_physics_frame:
+		return # Spawned during this very tick: its collision has not synced yet.
 	var kart: KartController = get_parent() as KartController
-	_attempts_left -= 1
-	if kart == null or settle_kart(kart) or _attempts_left <= 0:
-		set_physics_process(false)
-		queue_free()
+	if kart != null:
+		settle_kart(kart)
+	set_physics_process(false)
+	queue_free()
 
 
 ## Snaps `kart` vertically to the world surface under it plus its hover

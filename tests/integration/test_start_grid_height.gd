@@ -33,6 +33,9 @@ func _check_track(track_path: String) -> void:
 	var manager: Node = (load(RACE_SCENE_PATH) as PackedScene).instantiate()
 	manager.call("configure", _make_config(track_path), _make_idle_provider)
 	add_child(manager)
+	# Spawned inside physics tick N; the settle must have run by the end of
+	# tick N+1, before NetRace's first snapshot could ever go out (tick N+2 at
+	# the earliest: SNAPSHOT_INTERVAL = 3 ticks after the session runs).
 	await wait_physics_frames(2)
 	assert_eq(int(manager.call("get_state")), RaceState.COUNTDOWN, "%s: still counting down" % track_name)
 	var karts: Array[KartController] = manager.call("get_karts") as Array[KartController]
@@ -46,6 +49,7 @@ func _check_track(track_path: String) -> void:
 			"%s slot %d must rest at hover height above the road during the countdown" % [track_name, slot])
 		assert_false(_body_overlaps_world(kart), "%s slot %d body must not sit inside the road" % [track_name, slot])
 		assert_true(_center_ray_hits(kart), "%s slot %d ground ray must see the road during the countdown" % [track_name, slot])
+		assert_null(kart.get_node_or_null("GridSettle"), "%s slot %d settle must finish on the first tick after spawn" % [track_name, slot])
 	for _tick: int in range(COUNTDOWN_TIMEOUT_TICKS):
 		if int(manager.call("get_state")) == RaceState.RACING:
 			break
