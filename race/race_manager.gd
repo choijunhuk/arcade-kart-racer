@@ -210,7 +210,7 @@ func _spawn_karts() -> void:
 		else:
 			kart_audio.set_player_audio(false)
 		_karts_root.add_child(kart)
-		kart.global_transform = grid[slot]
+		GridSettle.place(kart, grid[slot])
 		kart.reset_motion_arcade()
 		if is_player:
 			kart.set_input_provider(_make_player_provider(kart, player))
