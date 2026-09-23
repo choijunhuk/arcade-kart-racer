@@ -42,6 +42,8 @@ var _flash_segments_remaining: int = 0
 var _flash_segment_remaining: float = 0.0
 var _bob_noise: FastNoiseLite = FastNoiseLite.new()
 var _contact_shadow: Decal
+var _shadow_quality_enabled: bool = true
+var _shadow_lod_enabled: bool = true
 
 
 func _ready() -> void:
@@ -119,6 +121,7 @@ func _install_contact_shadow() -> void:
 	decal.distance_fade_length = 15.0
 	add_child(decal)
 	_contact_shadow = decal
+	_refresh_contact_shadow()
 
 
 static func _contact_shadow_texture() -> GradientTexture2D:
@@ -241,5 +244,18 @@ func _update_hit_flash(delta: float) -> void:
 ## Keeps the chassis visible while culling small distant accessories.
 func set_detail_tier(tier: int) -> void:
 	_driver_mesh.visible = tier < 2
+	_shadow_lod_enabled = tier == 0
+	_refresh_contact_shadow()
 	for child: Node3D in _body_mesh.get_children():
 		child.visible = tier == 0
+
+
+## Quality gate for the contact-shadow decal: off on the Low tier.
+func set_contact_shadow_quality(enabled: bool) -> void:
+	_shadow_quality_enabled = enabled
+	_refresh_contact_shadow()
+
+
+func _refresh_contact_shadow() -> void:
+	if _contact_shadow != null:
+		_contact_shadow.visible = _shadow_quality_enabled and _shadow_lod_enabled

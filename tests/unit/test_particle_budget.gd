@@ -44,3 +44,20 @@ func _require_script() -> GDScript:
 		return load(BUDGET_PATH) as GDScript
 	fail_test("ParticleBudget script is missing")
 	return null
+
+
+## Phase 19 review: the kart contact-shadow decal follows the Low quality
+## tier and the near-detail LOD tier like the other per-kart effects.
+func test_contact_shadow_hidden_on_low_quality_and_far_lod() -> void:
+	var kart: KartController = (load("res://kart/kart.tscn") as PackedScene).instantiate() as KartController
+	add_child_autofree(kart)
+	var visuals: KartVisuals = kart.get_node("Visuals") as KartVisuals
+	var decal: Decal = visuals.get_node("ContactShadow") as Decal
+	assert_true(decal.visible)
+	visuals.set_contact_shadow_quality(false)
+	assert_false(decal.visible, "Low tier hides the contact shadow")
+	visuals.set_contact_shadow_quality(true)
+	visuals.set_detail_tier(1)
+	assert_false(decal.visible, "beyond the near LOD tier the contact shadow is hidden")
+	visuals.set_detail_tier(0)
+	assert_true(decal.visible)

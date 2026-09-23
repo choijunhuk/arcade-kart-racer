@@ -97,6 +97,8 @@ func _apply_particle_quality() -> void:
 	var quality: int = int(SettingsManager.get_setting(&"video", &"particle_quality", 2))
 	var ratio: float = quality_ratio(quality)
 	for registration: Registration in _registrations:
+		if registration.visuals != null:
+			registration.visuals.set_contact_shadow_quality(quality > 0)
 		if registration.drift_effects != null:
 			registration.drift_effects.set_quality_ratio(ratio)
 		if registration.boost_effects != null:
