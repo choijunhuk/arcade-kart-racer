@@ -13,6 +13,14 @@ const STRAIGHT_STEP: float = 4.0
 const STRAIGHT_CURVATURE_MAX: float = 0.006
 const STAND_COUNT_MAX: int = 9
 const STAND_OUTSET: float = 9.5
+const STAND_ROWS: int = 4
+const STAND_STEP_RISE: float = 0.8
+const STAND_STEP_DEPTH: float = 1.3
+const STAND_LENGTH: float = 12.0
+const CROWD_COLORS: Array[Color] = [
+	Color(0.9, 0.2, 0.18), Color(0.2, 0.45, 0.9), Color(0.98, 0.8, 0.2), Color(0.95, 0.95, 0.95),
+	Color(0.2, 0.7, 0.35), Color(0.95, 0.5, 0.15), Color(0.6, 0.3, 0.8), Color(0.15, 0.15, 0.2),
+]
 ## Reaches under the near backdrop ring (TrackBackdrop.NEAR_MARGIN) so no sky gap shows.
 const TERRAIN_MARGIN: float = 340.0
 const TERRAIN_DIVISIONS: int = 32
@@ -79,31 +87,59 @@ static func _hairpin_signs(root: Node3D, track: Node3D, line: RacingLine, width:
 	batch(root, "SignFace", face, PrimitiveArt.material(Color(0.05, 0.05, 0.05)), face_xf)
 
 
-## Bleacher blocks and a facing banner strip along the lap's longest straight.
+## Stepped bleachers packed with colourful spectators (per-instance colour,
+## one draw each) along the inside of the lap's longest straight.
 static func _crowd(root: Node3D, line: RacingLine, width: float) -> void:
-	var straight: Vector2 = _longest_straight(line)
+	var straight: Vector2 = longest_straight(line)
 	if straight.y < STRAIGHT_STEP * 3.0:
 		return
-	var count: int = clampi(int(straight.y / 14.0), 2, STAND_COUNT_MAX)
-	var stand: BoxMesh = BoxMesh.new()
-	stand.size = Vector3(4.0, 3.2, 3.0)
-	var banner: BoxMesh = BoxMesh.new()
-	banner.size = Vector3(3.4, 1.1, 0.1)
-	var stand_xf: Array[Transform3D] = []
-	var banner_xf: Array[Transform3D] = []
+	var count: int = clampi(int(straight.y / 18.0), 2, STAND_COUNT_MAX)
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 4242
+	var steps: Array[Transform3D] = []
+	var people: Array[Transform3D] = []
+	var colors: PackedColorArray = PackedColorArray()
 	for index: int in range(count):
 		var offset: float = straight.x + straight.y * (float(index) + 0.5) / float(count)
 		var basis: Basis = Basis.looking_at(line.tangent_at(offset), Vector3.UP)
-		var stand_pos: Vector3 = line.sample(offset) + line.right_at(offset) * (width * 0.5 + STAND_OUTSET) + Vector3.UP * 1.6
-		stand_xf.append(Transform3D(basis, root.to_local(stand_pos)))
-		var banner_pos: Vector3 = line.sample(offset) + line.right_at(offset) * (width * 0.5 + STAND_OUTSET - 2.6) + Vector3.UP * 2.9
-		banner_xf.append(Transform3D(basis, root.to_local(banner_pos)))
-	batch(root, "CrowdStands", stand, PrimitiveArt.material(Color(0.32, 0.36, 0.42)), stand_xf)
-	batch(root, "CrowdBanners", banner, PrimitiveArt.material(Color(0.85, 0.2, 0.18), true), banner_xf)
+		var origin: Vector3 = line.sample(offset) - line.right_at(offset) * (width * 0.5 + STAND_OUTSET) + Vector3.DOWN * 0.6
+		for row: int in range(STAND_ROWS):
+			var rise: float = float(row + 1) * STAND_STEP_RISE
+			var back: Vector3 = basis.x * (-float(row) * STAND_STEP_DEPTH)
+			steps.append(Transform3D(basis.scaled_local(Vector3(STAND_STEP_DEPTH, rise, STAND_LENGTH)), root.to_local(origin + back + Vector3.UP * rise * 0.5)))
+			for seat: int in range(int(STAND_LENGTH / 0.7)):
+				if rng.randf() < 0.18:
+					continue
+				var along: Vector3 = -basis.z * (-STAND_LENGTH * 0.5 + 0.35 + float(seat) * 0.7 + rng.randf_range(-0.1, 0.1))
+				var at: Vector3 = origin + back + along + Vector3.UP * (rise + 0.4 + rng.randf() * 0.12)
+				people.append(Transform3D(basis, root.to_local(at)))
+				colors.append(CROWD_COLORS[rng.randi() % CROWD_COLORS.size()])
+	var step_mesh: BoxMesh = BoxMesh.new()
+	batch(root, "CrowdStands", step_mesh, PrimitiveArt.material(Color(0.62, 0.65, 0.7)), steps)
+	var body: BoxMesh = BoxMesh.new()
+	body.size = Vector3(0.42, 0.8, 0.36)
+	var multimesh: MultiMesh = MultiMesh.new()
+	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.use_colors = true
+	multimesh.mesh = body
+	multimesh.instance_count = people.size()
+	for index: int in range(people.size()):
+		multimesh.set_instance_transform(index, people[index])
+		multimesh.set_instance_color(index, colors[index])
+	var paint: StandardMaterial3D = StandardMaterial3D.new()
+	paint.vertex_color_use_as_albedo = true
+	paint.roughness = 0.8
+	var node: MultiMeshInstance3D = MultiMeshInstance3D.new()
+	node.name = "CrowdPeople"
+	node.multimesh = multimesh
+	node.material_override = paint
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	node.visibility_range_end = 260.0
+	root.add_child(node)
 
 
 ## Longest contiguous low-curvature span of the lap, as `(start_offset, length)`.
-static func _longest_straight(line: RacingLine) -> Vector2:
+static func longest_straight(line: RacingLine) -> Vector2:
 	var count: int = ceili(line.length() / STRAIGHT_STEP)
 	var best_start: float = 0.0
 	var best_len: float = 0.0

@@ -3,9 +3,6 @@ extends RefCounted
 
 ## Original procedural surfaces and batched scenery; never changes collisions.
 const TEXTURE_SIZE: int = 128
-const PROP_SPACING: float = 24.0
-const PROP_OFFSET: float = 15.0
-const PROP_RANGE: float = 160.0
 const THEMES: Array[Color] = [Color(0.18, 0.42, 0.18), Color(0.06, 0.12, 0.25), Color(0.65, 0.83, 0.9), Color(0.65, 0.36, 0.15)]
 ## The underpass theme reads as night: emissive lamp heads plus a few real lights.
 const NIGHT_THEME: int = 1
@@ -53,7 +50,7 @@ static func install(track: Node3D) -> void:
 	track.add_child(root)
 	TrackSky.apply(track, theme)
 	TrackBackdrop.install(root, line, theme)
-	_props(root, line, theme)
+	ThemeProps.install(root, track, line, theme)
 	WorldMaterials.apply(track, theme)
 	if theme == NIGHT_THEME:
 		_lamps(root, track, line)
@@ -116,29 +113,3 @@ static func _lamps(root: Node3D, track: Node3D, line: RacingLine) -> void:
 	TrackDressing.batch(root, "LampPoles", pole, metal, poles)
 	TrackDressing.batch(root, "LampArms", arm, metal, arms)
 	TrackDressing.batch(root, "LampHeads", head, head_paint, heads)
-
-
-static func _props(root: Node3D, line: RacingLine, theme: int) -> void:
-	var shape: CylinderMesh = CylinderMesh.new()
-	shape.radial_segments = 6
-	shape.top_radius = 0.0 if theme == 0 else 0.6
-	shape.bottom_radius = 2.0 if theme == 0 else 1.2
-	shape.height = 5.0 if theme < 2 else 2.5
-	shape.material = surface(THEMES[theme], true)
-	var count: int = ceili(line.length() / PROP_SPACING)
-	# Small batches allow distance culling instead of an all-track AABB.
-	for batch: int in range(ceili(float(count) / 8.0)):
-		var mesh: MultiMesh = MultiMesh.new()
-		mesh.transform_format = MultiMesh.TRANSFORM_3D
-		mesh.mesh = shape
-		mesh.instance_count = mini(8, count - batch * 8)
-		var node: MultiMeshInstance3D = MultiMeshInstance3D.new()
-		node.multimesh = mesh
-		node.visibility_range_end = PROP_RANGE
-		root.add_child(node)
-		var origin: Vector3 = line.sample(float(batch * 8) * PROP_SPACING)
-		node.global_position = origin
-		for index: int in range(mesh.instance_count):
-			var offset: float = float(batch * 8 + index) * PROP_SPACING
-			var at: Vector3 = line.sample(offset) + line.right_at(offset) * PROP_OFFSET + Vector3.UP * shape.height * 0.5
-			mesh.set_instance_transform(index, Transform3D(Basis.IDENTITY, at - origin))

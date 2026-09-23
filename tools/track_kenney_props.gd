@@ -173,7 +173,7 @@ static func _perimeter(root: Node3D, track: Node3D, line: RacingLine, half_width
 ## Grandstand/tent/billboard dressing along the lap's longest straight;
 ## Ochre favors tent/billboard, other themes get the grandstand.
 static func _main_straight(root: Node3D, line: RacingLine, half_width: float, theme: int) -> void:
-	var straight: Vector2 = _longest_straight(line)
+	var straight: Vector2 = TrackDressing.longest_straight(line)
 	if straight.y < TREE_STEP:
 		return
 	var model_name: String = "tent" if theme == OCHRE_THEME else "grandStand"
@@ -186,7 +186,8 @@ static func _main_straight(root: Node3D, line: RacingLine, half_width: float, th
 	var billboard_transforms: Array[Transform3D] = []
 	for index: int in range(count):
 		var offset: float = straight.x + straight.y * (float(index) + 0.5) / float(count)
-		var basis: Basis = Basis.looking_at(-line.tangent_at(offset), Vector3.UP)
+		# Kenney models face +Z; aim -Z away from the road so seats face the track.
+		var basis: Basis = Basis.looking_at(line.right_at(offset), Vector3.UP)
 		var at: Vector3 = line.sample(offset) + line.right_at(offset) * (half_width + STAND_OUTSET)
 		transforms.append(Transform3D(basis, root.to_local(at)))
 		if billboard_mesh != null and index % 2 == 0:
@@ -208,34 +209,9 @@ static func _pits(root: Node3D, line: RacingLine, half_width: float) -> void:
 	var node: MeshInstance3D = MeshInstance3D.new()
 	node.name = "KenneyPitsGarage"
 	node.mesh = mesh
-	var basis: Basis = Basis.looking_at(-line.right_at(offset), Vector3.UP)
+	var basis: Basis = Basis.looking_at(line.right_at(offset), Vector3.UP)
 	node.transform = Transform3D(basis, root.to_local(at))
 	root.add_child(node)
-
-
-static func _longest_straight(line: RacingLine) -> Vector2:
-	const STEP: float = 4.0
-	const CURVATURE_MAX: float = 0.006
-	var count: int = ceili(line.length() / STEP)
-	var best_start: float = 0.0
-	var best_len: float = 0.0
-	var run_start: float = 0.0
-	var in_run: bool = false
-	for index: int in range(count):
-		var offset: float = float(index) * STEP
-		var straight: bool = absf(line.curvature_at(offset)) < CURVATURE_MAX
-		if straight and not in_run:
-			run_start = offset
-			in_run = true
-		elif not straight and in_run:
-			if offset - run_start > best_len:
-				best_len = offset - run_start
-				best_start = run_start
-			in_run = false
-	if in_run and line.length() - run_start > best_len:
-		best_len = line.length() - run_start
-		best_start = run_start
-	return Vector2(best_start, best_len)
 
 
 static func _batch(root: Node3D, node_name: String, mesh: Mesh, transforms: Array[Transform3D]) -> void:
