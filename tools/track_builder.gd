@@ -19,6 +19,7 @@ static func build_road_segments(
 	if length <= 0.0:
 		return
 	var steps: int = maxi(1, int(ceil(length / segment_length)))
+	var racing: RacingLine = path as RacingLine
 	var surface: SurfaceTool = SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
 	surface.set_material(TrackArt.surface(material.albedo_color))
@@ -46,8 +47,10 @@ static func build_road_segments(
 		shape_node.set_meta(&"driveable_surface", true)
 		body.add_child(shape_node)
 		var half: float = width * 0.5
-		var kerb_a: float = _kerb_mask(curve, a)
-		var kerb_b: float = _kerb_mask(curve, b)
+		# One kerb estimator for every ribbon (RacingLine curvature); shortcut
+		# alt curves are plain paths and carry no kerbs.
+		var kerb_a: float = RoadRibbon.kerb_mask(racing, a) if racing != null else 0.0
+		var kerb_b: float = RoadRibbon.kerb_mask(racing, b) if racing != null else 0.0
 		var corners: Array = [
 			[start - ra + up, Vector2(-half, a), kerb_a], [end - rb + up, Vector2(-half, b), kerb_b],
 			[end + rb + up, Vector2(half, b), kerb_b], [start - ra + up, Vector2(-half, a), kerb_a],
@@ -66,20 +69,6 @@ static func build_road_segments(
 	visual.add_to_group(&"road_visual")
 	visual.set_meta(&"main_road", path is RacingLine)
 	body.add_child(visual)
-
-
-## Road-shader kerb mask from the heading change over +-2 m of the curve.
-static func _kerb_mask(curve: Curve3D, offset: float) -> float:
-	var length: float = curve.get_baked_length()
-	var before: Vector3 = curve.sample_baked(clampf(offset - 2.0, 0.0, length))
-	var here: Vector3 = curve.sample_baked(clampf(offset, 0.0, length))
-	var after: Vector3 = curve.sample_baked(clampf(offset + 2.0, 0.0, length))
-	var first: Vector3 = Vector3(here.x - before.x, 0.0, here.z - before.z)
-	var second: Vector3 = Vector3(after.x - here.x, 0.0, after.z - here.z)
-	if first.length() < 0.01 or second.length() < 0.01:
-		return 0.0
-	return 1.0 if first.angle_to(second) / 2.0 >= RoadRibbon.KERB_CURVATURE_MIN else 0.0
-
 
 
 ## Adds a single oriented box (mesh + collision) spanning `start` to `end`
