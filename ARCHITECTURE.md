@@ -540,6 +540,30 @@ API references used: [ResourceLoader](https://docs.godotengine.org/en/latest/cla
 [MultiMesh](https://docs.godotengine.org/en/latest/classes/class_multimesh.html).
 The current retention policy is `docs/phase13_asset_ledger.md`.
 
+### Phase 19 world look
+
+`TrackArt.install` (deferred, visual only) now drives the `track/art/` passes.
+`WorldMaterials` re-skins the already-built track with `material_override` and
+instance shader parameters. The road ribbons (`RoadRibbon` and
+`TrackBuilder.build_road_segments`, group `road_visual`) carry UV = lateral/along
+metres and UV2 = half width plus a corner kerb mask from `RacingLine.curvature_at`.
+Wall and structural meshes are matched by their authored material.
+`TrackSky` sets the theme sky, sun, AgX grade, horizon-matched fog and post
+parameters. `TrackBackdrop` builds two silhouette rings. `ThemeProps` adds
+chunked MultiMesh theme scenery; its Kenney straight dressing follows
+`video.art_style`. The original shaders live in `assets/shaders/world/`: `road`,
+`terrain`, `wall`, `sky`, `backdrop` and the shared `world_noise` include. They
+use no textures and no `TIME` in the sky, and collision is never touched.
+
+`QualityTier` maps the particle selector to the world budget as follows:
+- Low: no shadows, fog, glow, SSAO, SSIL or SSR; 1024 shadow atlas.
+- Medium: 2-split shadows to 70 m, fog, glow, SSAO; 2048 atlas.
+- High: 4 splits to 140 m, SSIL, SSR (only environments that opt in via the
+  `wants_ssr` meta, i.e. the wet night track) and real night-lamp OmniLights;
+  4096 atlas.
+
+Volumetric fog stays off on every tier.
+
 ## Build and export
 
 `export_presets.cfg` defines Windows x86_64, macOS Universal (unsigned), and Linux

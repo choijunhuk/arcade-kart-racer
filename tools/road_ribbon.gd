@@ -4,6 +4,8 @@ extends RefCounted
 ## Continuous road surface: shared chord edges prevent box end-face wall impacts.
 
 const SEGMENT_LENGTH: float = 4.0
+## Curvature (1/m) above which the road shader paints corner kerbs.
+const KERB_CURVATURE_MIN: float = 0.0111
 
 
 ## Builds one mesh/trimesh with matching banked edges and explicitly omitted gaps.
@@ -27,19 +29,36 @@ static func build(track: ContentTrack) -> void:
 		var right_start: Vector3 = start + from_right + up
 		var left_end: Vector3 = end - to_right + up
 		var right_end: Vector3 = end + to_right + up
-		for vertex: Vector3 in [left_start, left_end, right_end, left_start, right_end, right_start]:
-			surface.set_uv(Vector2(vertex.x, vertex.z) * 0.2)
-			surface.add_vertex(track.geometry.to_local(vertex))
+		var half: float = track.road_width * 0.5
+		var kerb_from: float = kerb_mask(line, from_offset)
+		var kerb_to: float = kerb_mask(line, to_offset)
+		var corners: Array = [
+			[left_start, Vector2(-half, from_offset), kerb_from], [left_end, Vector2(-half, to_offset), kerb_to],
+			[right_end, Vector2(half, to_offset), kerb_to], [left_start, Vector2(-half, from_offset), kerb_from],
+			[right_end, Vector2(half, to_offset), kerb_to], [right_start, Vector2(half, from_offset), kerb_from],
+		]
+		for corner: Array in corners:
+			# UV: lateral/along metres; UV2: half width + corner kerb mask (road.gdshader).
+			surface.set_uv(corner[1])
+			surface.set_uv2(Vector2(half, corner[2]))
+			surface.add_vertex(track.geometry.to_local(corner[0]))
 	surface.generate_normals()
 	var mesh: ArrayMesh = surface.commit()
 	var visual: MeshInstance3D = MeshInstance3D.new()
 	visual.name = "RoadRibbon"
 	visual.mesh = mesh
+	visual.add_to_group(&"road_visual")
+	visual.set_meta(&"main_road", true)
 	track.geometry.add_child(visual)
 	var collision: CollisionShape3D = CollisionShape3D.new()
 	collision.name = "RoadSurface"
 	collision.shape = mesh.create_trimesh_shape()
 	track.geometry.add_child(collision)
+
+
+## 1 where the line is cornering hard enough for kerbs, else 0.
+static func kerb_mask(line: RacingLine, offset: float) -> float:
+	return 1.0 if absf(line.curvature_at(offset)) >= KERB_CURVATURE_MIN else 0.0
 
 
 static func _banked_right(track: ContentTrack, offset: float) -> Vector3:

@@ -7,6 +7,10 @@ const FAR_DISTANCE: float = 100.0
 ## Directional shadow reach and cascade split count, indexed by tier.
 const SHADOW_MAX_DISTANCE: Array[float] = [0.0, 70.0, 140.0]
 const SHADOW_SPLITS: Array[int] = [0, 2, 4]
+## Directional shadow atlas edge per tier (Low trades crispness for fill rate).
+const SHADOW_ATLAS_SIZE: Array[int] = [1024, 2048, 4096]
+## Environments that opt into screen-space reflections (wet night asphalt) set this meta.
+const SSR_META: StringName = &"wants_ssr"
 ## Decorative instance-count multiplier for crowd/curb/prop batches (perf guard).
 const DRESSING_DENSITY: Array[float] = [0.5, 0.75, 1.0]
 ## Group tag applied to lamp `OmniLight3D`s that are real lights only on the
@@ -21,8 +25,12 @@ static func settings(tier: int) -> Dictionary:
 		"msaa": level,
 		"shadows": level > 0,
 		"fog": level > 0,
-		"glow": level == 2,
-		"ssao": level == 2,
+		"glow": level >= 1,
+		"ssao": level >= 1,
+		"ssil": level == 2,
+		"ssr": level == 2,
+		"volumetric_fog": false,
+		"shadow_atlas": SHADOW_ATLAS_SIZE[level],
 		"shadow_splits": SHADOW_SPLITS[level],
 		"shadow_max_distance": SHADOW_MAX_DISTANCE[level],
 		"real_lamps": level == 2,
@@ -45,6 +53,7 @@ static func apply_scene(node: Node, tier: int) -> void:
 				else DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
 			)
 			sun.directional_shadow_max_distance = float(values["shadow_max_distance"])
+			RenderingServer.directional_shadow_atlas_set_size(int(values["shadow_atlas"]), true)
 	elif node is Light3D:
 		(node as Light3D).shadow_enabled = values["shadows"]
 	if node is OmniLight3D and node.is_in_group(DRESSING_LAMP_GROUP):
@@ -55,5 +64,8 @@ static func apply_scene(node: Node, tier: int) -> void:
 			environment.fog_enabled = values["fog"]
 			environment.glow_enabled = values["glow"]
 			environment.ssao_enabled = values["ssao"]
+			environment.ssil_enabled = values["ssil"]
+			environment.ssr_enabled = bool(values["ssr"]) and bool(environment.get_meta(SSR_META, false))
+			environment.volumetric_fog_enabled = values["volumetric_fog"]
 	for child: Node in node.get_children():
 		apply_scene(child, tier)

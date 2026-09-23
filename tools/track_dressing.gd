@@ -1,15 +1,11 @@
 class_name TrackDressing
 extends RefCounted
 
-## Phase 17 "v3" trackside dressing layered on top of TrackArt's sky/props/
-## markings: tyre-line curbs, crowd, hairpin signage, finish checker, item-box
-## markers, a countdown-lit start gantry and the ground beyond the road.
+## Phase 17 "v3" trackside dressing layered on top of TrackArt's sky/props:
+## crowd, hairpin signage, item-box markers, a countdown-lit start gantry and
+## the ground beyond the road (kerbs/checker are painted by road.gdshader).
 ## Visual only — never adds or edits collision shapes.
 
-const CURB_STEP: float = 2.0
-const CURB_CURVATURE_MIN: float = 0.0111
-const CURB_OUTSET: float = 0.5
-const CURB_HEIGHT: float = 0.16
 const SIGN_STEP: float = 12.0
 const SIGN_CURVATURE_MIN: float = 0.033
 const SIGN_OUTSET: float = 2.4
@@ -17,8 +13,17 @@ const STRAIGHT_STEP: float = 4.0
 const STRAIGHT_CURVATURE_MAX: float = 0.006
 const STAND_COUNT_MAX: int = 9
 const STAND_OUTSET: float = 9.5
-const TERRAIN_MARGIN: float = 90.0
-const TERRAIN_DIVISIONS: int = 18
+const STAND_ROWS: int = 4
+const STAND_STEP_RISE: float = 0.8
+const STAND_STEP_DEPTH: float = 1.3
+const STAND_LENGTH: float = 12.0
+const CROWD_COLORS: Array[Color] = [
+	Color(0.9, 0.2, 0.18), Color(0.2, 0.45, 0.9), Color(0.98, 0.8, 0.2), Color(0.95, 0.95, 0.95),
+	Color(0.2, 0.7, 0.35), Color(0.95, 0.5, 0.15), Color(0.6, 0.3, 0.8), Color(0.15, 0.15, 0.2),
+]
+## Reaches under the near backdrop ring (TrackBackdrop.NEAR_MARGIN) so no sky gap shows.
+const TERRAIN_MARGIN: float = 340.0
+const TERRAIN_DIVISIONS: int = 32
 const TERRAIN_DEPTH: float = 2.6
 const TERRAIN_NOISE_AMPLITUDE: float = 1.4
 const CLIFF_STEP: float = 4.0
@@ -30,17 +35,16 @@ static func install(root: Node3D, track: Node3D, line: RacingLine, theme: int) -
 	_terrain(root, line, theme)
 	if track.has_method("is_gap"):
 		_cliffs(root, track, line)
-	_curbs(root, track, line, width)
 	_hairpin_signs(root, track, line, width)
 	_crowd(root, line, width)
-	_finish_checker(root, line, width)
 	_item_box_markers(root, track)
 	_gantry(root, line, width)
 
 
-static func _batch(root: Node3D, node_name: String, mesh: Mesh, paint: Material, transforms: Array[Transform3D]) -> void:
+## Returns the created batch node, or null when there is nothing to draw.
+static func batch(root: Node3D, node_name: String, mesh: Mesh, paint: Material, transforms: Array[Transform3D]) -> MultiMeshInstance3D:
 	if transforms.is_empty():
-		return
+		return null
 	var multimesh: MultiMesh = MultiMesh.new()
 	multimesh.transform_format = MultiMesh.TRANSFORM_3D
 	multimesh.mesh = mesh
@@ -53,32 +57,7 @@ static func _batch(root: Node3D, node_name: String, mesh: Mesh, paint: Material,
 	node.material_override = paint
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(node)
-
-
-## Raised alternating red/white rumble strips along the outer road edge
-## wherever the racing line's curvature says "corner", not "straight".
-static func _curbs(root: Node3D, track: Node3D, line: RacingLine, width: float) -> void:
-	var shape: BoxMesh = BoxMesh.new()
-	shape.size = Vector3(CURB_OUTSET * 1.8, CURB_HEIGHT, CURB_STEP * 0.92)
-	var white: Array[Transform3D] = []
-	var red: Array[Transform3D] = []
-	var count: int = ceili(line.length() / CURB_STEP)
-	var stripe: int = 0
-	for index: int in range(count):
-		var offset: float = float(index) * CURB_STEP
-		var at_center: Vector3 = line.sample(offset)
-		if track.has_method("is_gap") and bool(track.call("is_gap", at_center)):
-			continue
-		if absf(line.curvature_at(offset)) < CURB_CURVATURE_MIN:
-			continue
-		stripe += 1
-		var basis: Basis = Basis.looking_at(line.tangent_at(offset), Vector3.UP)
-		for side: float in [-1.0, 1.0]:
-			var at: Vector3 = at_center + line.right_at(offset) * (side * (width * 0.5 + CURB_OUTSET)) + Vector3.UP * (CURB_HEIGHT * 0.5)
-			var xf: Transform3D = Transform3D(basis, root.to_local(at))
-			(white if stripe % 2 == 0 else red).append(xf)
-	_batch(root, "CurbWhite", shape, PrimitiveArt.material(Color(0.92, 0.94, 0.98)), white)
-	_batch(root, "CurbRed", shape, PrimitiveArt.material(Color(0.82, 0.09, 0.07)), red)
+	return node
 
 
 ## Trackside hazard boards on the outside apex of every hairpin-tight corner,
@@ -106,35 +85,63 @@ static func _hairpin_signs(root: Node3D, track: Node3D, line: RacingLine, width:
 		var basis: Basis = Basis.looking_at(facing, Vector3.UP)
 		backing_xf.append(Transform3D(basis, root.to_local(at)))
 		face_xf.append(Transform3D(basis, root.to_local(at + facing * -0.03)))
-	_batch(root, "SignBacking", backing, PrimitiveArt.material(Color(0.95, 0.75, 0.08), true), backing_xf)
-	_batch(root, "SignFace", face, PrimitiveArt.material(Color(0.05, 0.05, 0.05)), face_xf)
+	batch(root, "SignBacking", backing, PrimitiveArt.material(Color(0.95, 0.75, 0.08), true), backing_xf)
+	batch(root, "SignFace", face, PrimitiveArt.material(Color(0.05, 0.05, 0.05)), face_xf)
 
 
-## Bleacher blocks and a facing banner strip along the lap's longest straight.
+## Stepped bleachers packed with colourful spectators (per-instance colour,
+## one draw each) along the inside of the lap's longest straight.
 static func _crowd(root: Node3D, line: RacingLine, width: float) -> void:
-	var straight: Vector2 = _longest_straight(line)
+	var straight: Vector2 = longest_straight(line)
 	if straight.y < STRAIGHT_STEP * 3.0:
 		return
-	var count: int = clampi(int(straight.y / 14.0), 2, STAND_COUNT_MAX)
-	var stand: BoxMesh = BoxMesh.new()
-	stand.size = Vector3(4.0, 3.2, 3.0)
-	var banner: BoxMesh = BoxMesh.new()
-	banner.size = Vector3(3.4, 1.1, 0.1)
-	var stand_xf: Array[Transform3D] = []
-	var banner_xf: Array[Transform3D] = []
+	var count: int = clampi(int(straight.y / 18.0), 2, STAND_COUNT_MAX)
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 4242
+	var steps: Array[Transform3D] = []
+	var people: Array[Transform3D] = []
+	var colors: PackedColorArray = PackedColorArray()
 	for index: int in range(count):
 		var offset: float = straight.x + straight.y * (float(index) + 0.5) / float(count)
 		var basis: Basis = Basis.looking_at(line.tangent_at(offset), Vector3.UP)
-		var stand_pos: Vector3 = line.sample(offset) + line.right_at(offset) * (width * 0.5 + STAND_OUTSET) + Vector3.UP * 1.6
-		stand_xf.append(Transform3D(basis, root.to_local(stand_pos)))
-		var banner_pos: Vector3 = line.sample(offset) + line.right_at(offset) * (width * 0.5 + STAND_OUTSET - 2.6) + Vector3.UP * 2.9
-		banner_xf.append(Transform3D(basis, root.to_local(banner_pos)))
-	_batch(root, "CrowdStands", stand, PrimitiveArt.material(Color(0.32, 0.36, 0.42)), stand_xf)
-	_batch(root, "CrowdBanners", banner, PrimitiveArt.material(Color(0.85, 0.2, 0.18), true), banner_xf)
+		var origin: Vector3 = line.sample(offset) - line.right_at(offset) * (width * 0.5 + STAND_OUTSET) + Vector3.DOWN * 0.6
+		for row: int in range(STAND_ROWS):
+			var rise: float = float(row + 1) * STAND_STEP_RISE
+			var back: Vector3 = basis.x * (-float(row) * STAND_STEP_DEPTH)
+			steps.append(Transform3D(basis.scaled_local(Vector3(STAND_STEP_DEPTH, rise, STAND_LENGTH)), root.to_local(origin + back + Vector3.UP * rise * 0.5)))
+			for seat: int in range(int(STAND_LENGTH / 0.7)):
+				if rng.randf() < 0.18:
+					continue
+				var along: Vector3 = -basis.z * (-STAND_LENGTH * 0.5 + 0.35 + float(seat) * 0.7 + rng.randf_range(-0.1, 0.1))
+				var at: Vector3 = origin + back + along + Vector3.UP * (rise + 0.4 + rng.randf() * 0.12)
+				people.append(Transform3D(basis, root.to_local(at)))
+				colors.append(CROWD_COLORS[rng.randi() % CROWD_COLORS.size()])
+	var step_mesh: BoxMesh = BoxMesh.new()
+	batch(root, "CrowdStands", step_mesh, PrimitiveArt.material(Color(0.62, 0.65, 0.7)), steps)
+	var body: BoxMesh = BoxMesh.new()
+	body.size = Vector3(0.42, 0.8, 0.36)
+	var multimesh: MultiMesh = MultiMesh.new()
+	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.use_colors = true
+	multimesh.mesh = body
+	multimesh.instance_count = people.size()
+	for index: int in range(people.size()):
+		multimesh.set_instance_transform(index, people[index])
+		multimesh.set_instance_color(index, colors[index])
+	var paint: StandardMaterial3D = StandardMaterial3D.new()
+	paint.vertex_color_use_as_albedo = true
+	paint.roughness = 0.8
+	var node: MultiMeshInstance3D = MultiMeshInstance3D.new()
+	node.name = "CrowdPeople"
+	node.multimesh = multimesh
+	node.material_override = paint
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	node.visibility_range_end = 260.0
+	root.add_child(node)
 
 
 ## Longest contiguous low-curvature span of the lap, as `(start_offset, length)`.
-static func _longest_straight(line: RacingLine) -> Vector2:
+static func longest_straight(line: RacingLine) -> Vector2:
 	var count: int = ceili(line.length() / STRAIGHT_STEP)
 	var best_start: float = 0.0
 	var best_len: float = 0.0
@@ -157,37 +164,6 @@ static func _longest_straight(line: RacingLine) -> Vector2:
 	return Vector2(best_start, best_len)
 
 
-## A black/white checker patch across the full road width at the start line.
-static func _finish_checker(root: Node3D, line: RacingLine, width: float) -> void:
-	var surface: SurfaceTool = SurfaceTool.new()
-	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	surface.set_material(PrimitiveArt.material(Color(0.95, 0.95, 0.95), true))
-	var columns: int = maxi(4, int(width / 1.4))
-	var up: Vector3 = Vector3.UP * 0.24
-	for row: int in range(2):
-		var a: float = float(row) - 1.0
-		var b: float = float(row)
-		for column: int in range(columns):
-			if (row + column) % 2 == 0:
-				continue
-			var lateral_a: float = -width * 0.5 + width * float(column) / float(columns)
-			var lateral_b: float = -width * 0.5 + width * float(column + 1) / float(columns)
-			var ra: Vector3 = line.right_at(a)
-			var rb: Vector3 = line.right_at(b)
-			var p1: Vector3 = line.sample(a) + ra * lateral_a + up
-			var p2: Vector3 = line.sample(b) + rb * lateral_a + up
-			var p3: Vector3 = line.sample(b) + rb * lateral_b + up
-			var p4: Vector3 = line.sample(a) + ra * lateral_b + up
-			for vertex: Vector3 in [p1, p2, p3, p1, p3, p4]:
-				surface.add_vertex(root.to_local(vertex))
-	surface.generate_normals()
-	var node: MeshInstance3D = MeshInstance3D.new()
-	node.name = "FinishChecker"
-	node.mesh = surface.commit()
-	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	root.add_child(node)
-
-
 ## A small floating diamond marker above every item box, batched in one draw.
 static func _item_box_markers(root: Node3D, track: Node3D) -> void:
 	var container: Node = track.get_node_or_null("ItemBoxes")
@@ -203,7 +179,7 @@ static func _item_box_markers(root: Node3D, track: Node3D) -> void:
 		if box is Node3D:
 			var at: Vector3 = (box as Node3D).global_position + Vector3.UP * 2.1
 			transforms.append(Transform3D(Basis(Vector3.UP, deg_to_rad(45.0)), root.to_local(at)))
-	_batch(root, "ItemBoxMarkers", shape, PrimitiveArt.material(Color(0.95, 0.75, 0.15), true), transforms)
+	batch(root, "ItemBoxMarkers", shape, PrimitiveArt.material(Color(0.95, 0.75, 0.15), true), transforms)
 
 
 ## Two pillars, a header beam and a row of lights over the start line; the
@@ -240,7 +216,7 @@ static func _terrain(root: Node3D, line: RacingLine, theme: int) -> void:
 	noise.frequency = 0.01
 	var surface: SurfaceTool = SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	surface.set_material(TrackArt.surface(TrackArt.THEMES[theme].darkened(0.15), true))
+	surface.set_material(WorldMaterials.terrain(theme))
 	var grid: Array = []
 	for row: int in range(TERRAIN_DIVISIONS + 1):
 		var line_row: Array[Vector3] = []
