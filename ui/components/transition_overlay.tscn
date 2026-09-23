@@ -1,6 +1,10 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://ui/components/transition_overlay.gd" id="1_transition"]
+[ext_resource type="Shader" path="res://ui/theme/transition_wipe.gdshader" id="2_wipe"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_wipe"]
+shader = ExtResource("2_wipe")
 
 [node name="TransitionOverlay" type="CanvasLayer"]
 process_mode = 3
@@ -8,6 +12,7 @@ layer = 100
 script = ExtResource("1_transition")
 
 [node name="Fade" type="ColorRect" parent="."]
+material = SubResource("ShaderMaterial_wipe")
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0

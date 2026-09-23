@@ -1,7 +1,11 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://ui/menus/track_select.gd" id="1_script"]
 [ext_resource type="Theme" path="res://ui/theme/default_theme.tres" id="2_theme"]
+[ext_resource type="Shader" path="res://ui/theme/menu_background.gdshader" id="90_bg_shader"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_menu_bg"]
+shader = ExtResource("90_bg_shader")
 
 [node name="TrackSelect" type="Control"]
 layout_mode = 3
@@ -15,6 +19,7 @@ script = ExtResource("1_script")
 back_scene_path = "res://ui/menus/kart_select.tscn"
 
 [node name="Background" type="ColorRect" parent="."]
+material = SubResource("ShaderMaterial_menu_bg")
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -31,10 +36,10 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -420.0
-offset_top = -280.0
-offset_right = 420.0
-offset_bottom = 280.0
+offset_left = -470.0
+offset_top = -420.0
+offset_right = 470.0
+offset_bottom = 420.0
 grow_horizontal = 2
 grow_vertical = 2
 
@@ -49,7 +54,7 @@ text = "SELECT TRACK"
 horizontal_alignment = 1
 
 [node name="Preview" type="TextureRect" parent="Panel/VBox"]
-custom_minimum_size = Vector2(0, 80)
+custom_minimum_size = Vector2(0, 190)
 layout_mode = 2
 mouse_filter = 2
 expand_mode = 1
@@ -60,5 +65,7 @@ layout_mode = 2
 theme_override_constants/separation = 12
 
 [node name="BackButton" type="Button" parent="Panel/VBox"]
+custom_minimum_size = Vector2(320, 0)
 layout_mode = 2
+size_flags_horizontal = 4
 text = "BACK"

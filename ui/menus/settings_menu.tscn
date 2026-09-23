@@ -1,7 +1,11 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://ui/menus/settings_menu.gd" id="1_script"]
 [ext_resource type="Theme" path="res://ui/theme/default_theme.tres" id="2_theme"]
+[ext_resource type="Shader" path="res://ui/theme/menu_background.gdshader" id="90_bg_shader"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_menu_bg"]
+shader = ExtResource("90_bg_shader")
 
 [node name="SettingsMenu" type="Control"]
 process_mode = 3
@@ -16,6 +20,7 @@ script = ExtResource("1_script")
 back_scene_path = "res://ui/menus/main_menu.tscn"
 
 [node name="Background" type="ColorRect" parent="."]
+material = SubResource("ShaderMaterial_menu_bg")
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -45,7 +50,7 @@ theme_override_constants/separation = 12
 
 [node name="Title" type="Label" parent="Panel/VBox"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 38
+theme_type_variation = &"ScreenTitle"
 text = "SETTINGS"
 horizontal_alignment = 1
 
@@ -64,7 +69,7 @@ theme_override_constants/separation = 8
 
 [node name="Heading" type="Label" parent="Panel/VBox/Tabs/Audio"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 28
+theme_type_variation = &"SectionHeading"
 text = "AUDIO"
 
 [node name="MasterLabel" type="Label" parent="Panel/VBox/Tabs/Audio"]
@@ -117,7 +122,7 @@ theme_override_constants/separation = 6
 
 [node name="Heading" type="Label" parent="Panel/VBox/Tabs/Video"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 28
+theme_type_variation = &"SectionHeading"
 text = "VIDEO"
 
 [node name="ResolutionLabel" type="Label" parent="Panel/VBox/Tabs/Video"]
@@ -189,7 +194,7 @@ theme_override_constants/separation = 8
 
 [node name="Heading" type="Label" parent="Panel/VBox/Tabs/Controls/Scroll/Rows"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 28
+theme_type_variation = &"SectionHeading"
 text = "CONTROLS"
 
 [node name="RemapHint" type="Label" parent="Panel/VBox/Tabs/Controls/Scroll/Rows"]
@@ -233,7 +238,7 @@ theme_override_constants/separation = 12
 
 [node name="Heading" type="Label" parent="Panel/VBox/Tabs/Accessibility"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 28
+theme_type_variation = &"SectionHeading"
 text = "ACCESSIBILITY"
 
 [node name="SpeedLinesToggle" type="CheckButton" parent="Panel/VBox/Tabs/Accessibility"]
@@ -261,7 +266,7 @@ theme_override_constants/separation = 12
 
 [node name="Heading" type="Label" parent="Panel/VBox/Tabs/Gameplay"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 28
+theme_type_variation = &"SectionHeading"
 text = "GAMEPLAY"
 
 [node name="SpeedometerToggle" type="CheckButton" parent="Panel/VBox/Tabs/Gameplay"]
@@ -291,5 +296,7 @@ layout_mode = 2
 text = "REPLAY TUTORIAL"
 
 [node name="BackButton" type="Button" parent="Panel/VBox"]
+custom_minimum_size = Vector2(320, 0)
 layout_mode = 2
+size_flags_horizontal = 4
 text = "BACK"

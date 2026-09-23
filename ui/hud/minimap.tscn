@@ -1,15 +1,24 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://ui/hud/minimap.gd" id="1_script"]
 [ext_resource type="Theme" path="res://ui/theme/default_theme.tres" id="2_theme"]
 
+[sub_resource type="StyleBoxFlat" id="Style_backdrop"]
+bg_color = Color(0.02, 0.03, 0.07, 0.28)
+corner_radius_top_left = 24
+corner_radius_top_right = 24
+corner_radius_bottom_right = 24
+corner_radius_bottom_left = 24
+shadow_color = Color(0.02, 0.03, 0.07, 0.2)
+shadow_size = 16
+
 [node name="Minimap" type="Control"]
-custom_minimum_size = Vector2(260, 200)
+custom_minimum_size = Vector2(132, 102)
 mouse_filter = 2
 theme = ExtResource("2_theme")
 script = ExtResource("1_script")
 
-[node name="Background" type="PanelContainer" parent="."]
+[node name="Background" type="Panel" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -17,11 +26,31 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
+theme_override_styles/panel = SubResource("Style_backdrop")
+
+[node name="TrackEdge" type="Line2D" parent="."]
+width = 14.0
+default_color = Color(0.02, 0.03, 0.07, 0.9)
+closed = true
+joint_mode = 2
+antialiased = true
 
 [node name="TrackLine" type="Line2D" parent="."]
-width = 4.0
-default_color = Color(0.18, 0.72, 0.94, 0.92)
+width = 9.0
+default_color = Color(0.88, 0.92, 1, 1)
 closed = true
+joint_mode = 2
 antialiased = true
+
+[node name="TrackCenter" type="Line2D" parent="."]
+width = 2.0
+default_color = Color(0.16, 0.85, 1, 0.7)
+closed = true
+joint_mode = 2
+antialiased = true
+
+[node name="StartMarker" type="Polygon2D" parent="."]
+color = Color(1, 1, 1, 1)
+polygon = PackedVector2Array(-1.5, -9, 1.5, -9, 1.5, 9, -1.5, 9)
 
 [node name="Dots" type="Node2D" parent="."]

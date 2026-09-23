@@ -1,19 +1,21 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://ui/tutorial/tutorial_controller.gd" id="1_script"]
+[ext_resource type="Theme" path="res://ui/theme/default_theme.tres" id="2_theme"]
 
 [node name="TutorialOverlay" type="CanvasLayer"]
 layer = 20
 script = ExtResource("1_script")
 
 [node name="Panel" type="PanelContainer" parent="."]
+theme = ExtResource("2_theme")
 anchors_preset = 5
 anchor_left = 0.5
 anchor_right = 0.5
-offset_left = -320.0
-offset_right = 320.0
-offset_top = 20.0
-offset_bottom = 92.0
+offset_left = -360.0
+offset_right = 360.0
+offset_top = 92.0
+offset_bottom = 170.0
 grow_horizontal = 2
 
 [node name="VBox" type="VBoxContainer" parent="Panel"]
@@ -29,15 +31,17 @@ text = ""
 [node name="GlyphLabel" type="Label" parent="Panel/VBox"]
 layout_mode = 2
 horizontal_alignment = 1
-theme_override_colors/font_color = Color(0.25, 0.9, 1, 1)
+theme_type_variation = &"CaptionLabel"
+theme_override_colors/font_color = Color(0.16, 0.85, 1, 1)
 theme_override_font_sizes/font_size = 18
 text = ""
 
 [node name="SkipButton" type="Button" parent="."]
+theme = ExtResource("2_theme")
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -172.0
+offset_left = -212.0
 offset_top = 16.0
 offset_right = -16.0
 offset_bottom = 52.0

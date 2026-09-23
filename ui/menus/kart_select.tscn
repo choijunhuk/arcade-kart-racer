@@ -1,7 +1,11 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://ui/menus/kart_select.gd" id="1_script"]
 [ext_resource type="Theme" path="res://ui/theme/default_theme.tres" id="2_theme"]
+[ext_resource type="Shader" path="res://ui/theme/menu_background.gdshader" id="90_bg_shader"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_menu_bg"]
+shader = ExtResource("90_bg_shader")
 
 [node name="KartSelect" type="Control"]
 layout_mode = 3
@@ -15,6 +19,7 @@ script = ExtResource("1_script")
 back_scene_path = "res://ui/menus/driver_select.tscn"
 
 [node name="Background" type="ColorRect" parent="."]
+material = SubResource("ShaderMaterial_menu_bg")
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -31,10 +36,10 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -510.0
-offset_top = -340.0
-offset_right = 510.0
-offset_bottom = 340.0
+offset_left = -545.0
+offset_top = -385.0
+offset_right = 545.0
+offset_bottom = 385.0
 grow_horizontal = 2
 grow_vertical = 2
 
@@ -49,17 +54,20 @@ text = "SELECT KART"
 horizontal_alignment = 1
 
 [node name="Scroll" type="ScrollContainer" parent="Panel/VBox"]
-custom_minimum_size = Vector2(0, 500)
+custom_minimum_size = Vector2(0, 560)
 follow_focus = true
 layout_mode = 2
 horizontal_scroll_mode = 0
 
 [node name="Grid" type="GridContainer" parent="Panel/VBox/Scroll"]
 layout_mode = 2
-size_flags_horizontal = 3
-theme_override_constants/h_separation = 18
+size_flags_horizontal = 6
+theme_override_constants/h_separation = 22
+theme_override_constants/v_separation = 22
 columns = 3
 
 [node name="BackButton" type="Button" parent="Panel/VBox"]
+custom_minimum_size = Vector2(320, 0)
 layout_mode = 2
+size_flags_horizontal = 4
 text = "BACK"
