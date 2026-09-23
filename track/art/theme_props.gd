@@ -22,7 +22,8 @@ const BILLBOARD_HEIGHT: float = 4.5
 const NEON_COLORS: Array[Color] = [Color(1.0, 0.2, 0.7), Color(0.15, 0.9, 1.0), Color(1.0, 0.8, 0.2)]
 
 
-static func install(root: Node3D, track: Node3D, line: RacingLine, theme: int) -> void:
+## `kenney` mirrors video.art_style == "kenney"; the Kenney straight dressing is skipped otherwise.
+static func install(root: Node3D, track: Node3D, line: RacingLine, theme: int, kenney: bool = false) -> void:
 	var width: float = float(track.get("road_width")) if track.has_method("bank_at") else 14.0
 	var wall: float = float(track.get("wall_height")) if track.has_method("bank_at") else 2.0
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
@@ -56,7 +57,8 @@ static func install(root: Node3D, track: Node3D, line: RacingLine, theme: int) -
 	for pick: int in range(kinds.size()):
 		for part: Array in kinds[pick]["parts"]:
 			_batch_chunks(root, "Theme%s" % kinds[pick]["name"], part[0], part[1], buckets[pick])
-	_straight_banners(root, line, width * 0.5, theme)
+	if kenney:
+		_straight_banners(root, line, width * 0.5, theme)
 
 
 ## Kenney banner towers every 24 m on both sides of the main straight plus

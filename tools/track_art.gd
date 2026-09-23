@@ -48,22 +48,21 @@ static func install(track: Node3D) -> void:
 	var root: Node3D = Node3D.new()
 	root.name = "ProceduralArt"
 	track.add_child(root)
+	# A track swapped out before its deferred art install runs is no longer in the tree
+	# (sandbox/snapshot track switching); without settings, skip the quality/CC0-art passes.
+	var tree: SceneTree = track.get_tree()
+	var settings: Node = tree.root.get_node_or_null("SettingsManager") if tree != null else null
+	var kenney: bool = settings != null and String(settings.call("get_setting", &"video", &"art_style", "kenney")) == "kenney"
 	TrackSky.apply(track, theme)
 	TrackBackdrop.install(root, line, theme)
-	ThemeProps.install(root, track, line, theme)
+	ThemeProps.install(root, track, line, theme, kenney)
 	WorldMaterials.apply(track, theme)
 	if theme == NIGHT_THEME:
 		_lamps(root, track, line)
 	TrackDressing.install(root, track, line, theme)
-	# A track swapped out before its deferred art install runs is no longer in the tree
-	# (sandbox/snapshot track switching); skip the quality/CC0-art passes instead of
-	# dereferencing null.
-	var tree: SceneTree = track.get_tree()
-	var settings: Node = tree.root.get_node_or_null("SettingsManager") if tree != null else null
 	if settings == null:
 		return
-	var art_style: String = String(settings.call("get_setting", &"video", &"art_style", "kenney"))
-	if art_style == "kenney":
+	if kenney:
 		TrackKenneyProps.install(root, track, line, theme)
 	QualityTier.apply_scene(track, int(settings.call("get_setting", &"video", &"particle_quality", 2)))
 
