@@ -3,7 +3,9 @@ extends Control
 
 ## Short-lived race feedback on one player's HUD (19-D item 4): +N/-N rank
 ## change popups beside the position readout, a lap card with the lap time and
-## its split against the best earlier lap (green faster / red slower), a
+## its split against the best lap so far (the player's saved best for this
+## track/mirror record key, then any faster lap this race; green faster / red
+## slower), a
 ## "HIT BY <ITEM>" toast naming what hit you, and a stronger wrong-way cue
 ## (turn-around hint + pulsing red screen edges). EventBus reads only.
 
@@ -71,13 +73,27 @@ func bind(player_kart: KartController, item_manager: ItemManager) -> void:
 	queue_redraw()
 
 
+## Seeds the split baseline with a saved best lap (seconds; <= 0 means none),
+## so the first lap already shows a split. Faster laps still replace it.
+func seed_best_lap(seconds: float) -> void:
+	if seconds > 0.0 and (_best_lap < 0.0 or seconds < _best_lap):
+		_best_lap = seconds
+
+
+## Read-only lookup of a P1-P4 profile's saved best lap for `record_key`
+## (RaceConfig.record_track_id(), the same key RaceResults persists), or -1.
+static func saved_best_seconds(save_manager: SaveManagerService, record_key: StringName, profile_index: int) -> float:
+	var best_ms: int = save_manager.get_player_best_lap_ms(profile_index, record_key) if save_manager != null else -1
+	return float(best_ms) / 1000.0 if best_ms > 0 else -1.0
+
+
 ## "+2" / "-1" text for a rank change (positive = places gained).
 static func rank_delta_text(places_gained: int) -> String:
 	return "+%d" % places_gained if places_gained > 0 else "%d" % places_gained
 
 
-## Signed split of `lap_seconds` against the best earlier lap (negative =
-## faster); NAN when there is no earlier lap to compare with.
+## Signed split of `lap_seconds` against the best lap so far (negative =
+## faster); NAN when there is nothing to compare with.
 static func lap_split(lap_seconds: float, best_before: float) -> float:
 	return lap_seconds - best_before if best_before > 0.0 else NAN
 

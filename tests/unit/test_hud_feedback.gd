@@ -75,3 +75,62 @@ func test_item_hit_names_the_item_and_wrong_way_adds_turn_hint() -> void:
 	assert_true(feedback._turn_label.visible)
 	EventBus.wrong_way.emit(context["kart"], false)
 	assert_false(feedback._turn_label.visible)
+
+
+func test_saved_best_seeds_the_first_lap_split() -> void:
+	var context: Dictionary = _make_feedback()
+	var feedback: HudFeedback = context["feedback"]
+	feedback.seed_best_lap(41.0)
+	EventBus.lap_completed.emit(context["kart"], 1, 40.5)
+	assert_string_contains(feedback._lap_label.text, "-0.500", "first lap compares with the saved best")
+	assert_eq(feedback._lap_label.get_theme_color("font_color"), HudFeedback.GAIN_COLOR)
+	EventBus.lap_completed.emit(context["kart"], 2, 81.3)
+	assert_string_contains(feedback._lap_label.text, "+0.300", "the in-session best (40.5) replaced the saved one")
+	feedback.seed_best_lap(-1.0)
+	feedback.seed_best_lap(45.0)
+	EventBus.lap_completed.emit(context["kart"], 3, 121.8)
+	assert_string_contains(feedback._lap_label.text, "+0.000", "a slower or missing saved best never replaces a faster one")
+
+
+func test_saved_best_lookup_uses_the_record_key_and_profile() -> void:
+	var path: String = "user://test_hud_feedback_save.json"
+	var save: SaveManagerService = SaveManagerService.new(path)
+	assert_eq(save.record_player_race_result(1, &"test_loop_mirror", 38250, 2), OK)
+	assert_almost_eq(HudFeedback.saved_best_seconds(save, &"test_loop_mirror", 1), 38.25, 0.0001)
+	assert_eq(HudFeedback.saved_best_seconds(save, &"test_loop", 1), -1.0, "non-mirror key is separate")
+	assert_eq(HudFeedback.saved_best_seconds(save, &"test_loop_mirror", 0), -1.0, "other profile is separate")
+	assert_eq(HudFeedback.saved_best_seconds(null, &"test_loop", 0), -1.0)
+	for file: String in [path, path + ".bak"]:
+		if FileAccess.file_exists(file):
+			DirAccess.remove_absolute(file)
+
+
+func test_race_presentation_seeds_each_split_screen_hud_by_profile() -> void:
+	var path: String = "user://test_hud_feedback_presentation.json"
+	var save: SaveManagerService = SaveManagerService.new(path)
+	save.record_player_race_result(1, &"test_loop", 39000, 1)
+	var config: RaceConfig = RaceConfig.new()
+	config.track = TrackData.new()
+	config.track.id = &"test_loop"
+	var first: PlayerSlot = PlayerSlot.new()
+	first.grid_slot = 0
+	var second: PlayerSlot = PlayerSlot.new()
+	second.grid_slot = 2
+	config.players = [first, second]
+	var karts: Array[KartController] = []
+	for _slot: int in range(3):
+		var kart: KartController = (load("res://kart/kart.tscn") as PackedScene).instantiate() as KartController
+		add_child_autofree(kart)
+		karts.append(kart)
+	var huds: Array[RaceHud] = []
+	for _index: int in range(2):
+		var hud: RaceHud = (load("res://ui/hud/hud.tscn") as PackedScene).instantiate() as RaceHud
+		add_child_autofree(hud)
+		huds.append(hud)
+	assert_eq(RacePresentation.human_profile_index(config, karts, karts[2]), 1)
+	RacePresentation.seed_saved_best_laps(config, karts, [karts[0], karts[2]], huds, save)
+	assert_eq((huds[0].get_node("Feedback") as HudFeedback)._best_lap, -1.0, "P1 has no saved best")
+	assert_almost_eq((huds[1].get_node("Feedback") as HudFeedback)._best_lap, 39.0, 0.0001, "P2 profile seeded")
+	for file: String in [path, path + ".bak"]:
+		if FileAccess.file_exists(file):
+			DirAccess.remove_absolute(file)
