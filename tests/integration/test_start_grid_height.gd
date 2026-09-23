@@ -14,13 +14,13 @@ const TRACKS: Array[String] = [
 ]
 const KART_COUNT: int = 8
 const COUNTDOWN_TIMEOUT_TICKS: int = 600
-const POST_GO_TICKS: int = 3
+const POST_GO_TICKS: int = 10
 const HOVER_TOLERANCE: float = 0.03
 ## An upright kart on a sloped grid (Glacier Crown, ~7 degrees) must ride a
 ## little higher than hover so its body box clears the road; never float more.
 const MAX_SLOPE_LIFT: float = 0.15
-## Allowed change of height-above-road across GO.
-const GO_POP_TOLERANCE: float = 0.05
+## Allowed vertical motion across GO for a kart given zero input.
+const GO_POP_TOLERANCE: float = 0.02
 
 
 func test_every_grid_kart_waits_on_the_road_and_does_not_pop_at_go() -> void:
@@ -31,20 +31,21 @@ func test_every_grid_kart_waits_on_the_road_and_does_not_pop_at_go() -> void:
 func _check_track(track_path: String) -> void:
 	var track_name: String = track_path.get_file()
 	var manager: Node = (load(RACE_SCENE_PATH) as PackedScene).instantiate()
-	manager.call("configure", _make_config(track_path), _make_idle_provider)
+	manager.call("configure", _make_config(track_path), _make_zero_input_provider)
 	add_child(manager)
+	var karts: Array[KartController] = manager.call("get_karts") as Array[KartController]
+	_silence_ai(karts)
 	# Spawned inside physics tick N; the settle must have run by the end of
 	# tick N+1, before NetRace's first snapshot could ever go out (tick N+2 at
 	# the earliest: SNAPSHOT_INTERVAL = 3 ticks after the session runs).
 	await wait_physics_frames(2)
 	assert_eq(int(manager.call("get_state")), RaceState.COUNTDOWN, "%s: still counting down" % track_name)
-	var karts: Array[KartController] = manager.call("get_karts") as Array[KartController]
 	assert_eq(karts.size(), KART_COUNT)
-	var countdown_gaps: Array[float] = []
+	var countdown_y: Array[float] = []
 	for slot: int in range(karts.size()):
 		var kart: KartController = karts[slot]
 		var gap: float = _height_above_road(kart)
-		countdown_gaps.append(gap)
+		countdown_y.append(kart.global_position.y)
 		assert_between(gap, kart.tuning.hover_height - HOVER_TOLERANCE, kart.tuning.hover_height + MAX_SLOPE_LIFT,
 			"%s slot %d must rest at hover height above the road during the countdown" % [track_name, slot])
 		assert_false(_body_overlaps_world(kart), "%s slot %d body must not sit inside the road" % [track_name, slot])
@@ -57,8 +58,7 @@ func _check_track(track_path: String) -> void:
 	assert_eq(int(manager.call("get_state")), RaceState.RACING, "%s: race must start" % track_name)
 	await wait_physics_frames(POST_GO_TICKS)
 	for slot: int in range(karts.size()):
-		var gap_after: float = _height_above_road(karts[slot])
-		assert_almost_eq(gap_after, countdown_gaps[slot], GO_POP_TOLERANCE,
+		assert_almost_eq(karts[slot].global_position.y, countdown_y[slot], GO_POP_TOLERANCE,
 			"%s slot %d must not pop vertically at GO" % [track_name, slot])
 	remove_child(manager)
 	manager.free()
@@ -100,5 +100,15 @@ func _center_ray_hits(kart: KartController) -> bool:
 	return ray.is_colliding()
 
 
-func _make_idle_provider(_kart: KartController, _line: RacingLine) -> InputProvider:
+## Every kart, human slot and AI slots alike, gets zero input, so any
+## vertical motion after GO comes from the spawn height, not from driving.
+func _silence_ai(karts: Array[KartController]) -> void:
+	for kart: KartController in karts:
+		var ai: Node = kart.get_node_or_null("AIController")
+		if ai != null:
+			ai.process_mode = Node.PROCESS_MODE_DISABLED
+		kart.set_input_provider(InputProvider.new())
+
+
+func _make_zero_input_provider(_kart: KartController, _line: RacingLine) -> InputProvider:
 	return InputProvider.new()
