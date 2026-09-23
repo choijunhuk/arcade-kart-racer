@@ -35,8 +35,8 @@ void fragment() {
 		float cols = abs(fract((uv.x - 0.5) * z * 1.4) - 0.5);
 		float line_w = 0.04 * z * 0.25 + 0.01;
 		float grid = (1.0 - smoothstep(0.0, line_w, rows)) + (1.0 - smoothstep(0.0, line_w * 1.2, cols));
-		color += band_color.rgb * clamp(grid, 0.0, 1.0) * grid_strength * depth;
-		color += glow_color.rgb * 0.05 * (1.0 - depth);
+		color += band_color.rgb * clamp(grid, 0.0, 1.0) * grid_strength * depth * smoothstep(0.0, 0.1, depth);
+		color += glow_color.rgb * 0.05 * (1.0 - depth) * smoothstep(0.0, 0.12, depth);
 	}
 	// Turbo glow low-left, cool glow top-right.
 	color += glow_color.rgb * glow_strength * pow(max(0.0, 1.0 - distance(uv, vec2(0.05, 1.05)) * 1.3), 2.2);

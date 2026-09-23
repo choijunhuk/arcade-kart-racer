@@ -1,7 +1,7 @@
 class_name TransitionOverlay
 extends CanvasLayer
 
-const FADE_SECONDS: float = 0.18
+const FADE_SECONDS: float = 0.26
 
 @onready var _fade: ColorRect = $Fade
 
@@ -21,7 +21,7 @@ func transition_to(scene_path: String) -> void:
 	_busy = true
 	visible = true
 	var fade_out: Tween = create_tween()
-	fade_out.tween_property(_fade, "modulate:a", 1.0, FADE_SECONDS)
+	fade_out.tween_property(_fade, "modulate:a", 1.0, FADE_SECONDS).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
 	await fade_out.finished
 	var loading: Control = preload("res://ui/components/loading_screen.tscn").instantiate() as Control
 	add_child(loading)

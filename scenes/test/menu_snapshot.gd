@@ -16,6 +16,8 @@ const SCREENS: Array[String] = [
 	"res://ui/menus/settings_menu.tscn",
 	"res://ui/menus/local_lobby.tscn",
 	"res://ui/menus/online_lobby.tscn",
+	"res://ui/components/loading_screen.tscn",
+	"res://ui/components/transition_overlay.tscn",
 ]
 const DEFAULT_SETTLE_SECONDS: float = 1.6
 
@@ -44,6 +46,14 @@ func _run() -> void:
 	for path: String in _queue:
 		var screen: Node = (load(path) as PackedScene).instantiate()
 		add_child(screen)
+		if screen is TransitionOverlay:
+			# Freeze the wipe mid-sweep over the main menu for review.
+			var under: Node = (load(SCREENS[0]) as PackedScene).instantiate()
+			add_child(under)
+			move_child(under, 0)
+			screen.tree_exited.connect(under.queue_free)
+			screen.visible = true
+			(screen.get_node(^"Fade") as ColorRect).modulate.a = 0.55
 		await get_tree().create_timer(_settle_seconds).timeout
 		await RenderingServer.frame_post_draw
 		var out: String = "%s/%s.png" % [_out_dir, path.get_file().get_basename()]
