@@ -32,6 +32,7 @@ var _flick_elapsed: float = 0.0
 var _flick_index: int = 0
 var _spin: float = 0.0
 var _pop_tween: Tween
+var _flick_tween: Tween
 
 
 ## Places the frame, icon, name and cooldown bar for the current rect.
@@ -88,11 +89,16 @@ func _advance_roulette(delta: float, result: ItemData) -> void:
 			return
 		_flick_index = (_flick_index + 1) % pool.size()
 		_icon.texture = pool[_flick_index]
+		if _flick_tween != null:
+			_flick_tween.kill()
 		_icon.scale = Vector2(1.0, 0.82)
-		create_tween().tween_property(_icon, "scale", Vector2.ONE, ROULETTE_FLICK_SECONDS * 0.9)
+		_flick_tween = create_tween()
+		_flick_tween.tween_property(_icon, "scale", Vector2.ONE, ROULETTE_FLICK_SECONDS * 0.9)
 
 
 func _pop_icon() -> void:
+	if _flick_tween != null:
+		_flick_tween.kill()
 	if _pop_tween != null:
 		_pop_tween.kill()
 	_icon.scale = Vector2.ONE * LAND_POP_SCALE
