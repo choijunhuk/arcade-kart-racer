@@ -15,6 +15,12 @@ const TELEPORT_DISTANCE: float = 6.0
 var _points: Array[Vector3] = []
 var _array_mesh: ArrayMesh = ArrayMesh.new()
 var _target: Node3D
+## Reused per frame (resized/overwritten in place) so the ribbon rebuild does
+## not allocate fresh Packed arrays every _process.
+var _vertices: PackedVector3Array = PackedVector3Array()
+var _colors: PackedColorArray = PackedColorArray()
+var _indices: PackedInt32Array = PackedInt32Array()
+var _arrays: Array = []
 
 
 func _ready() -> void:
@@ -65,27 +71,38 @@ func _rebuild() -> void:
 	var camera: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null
 	if _points.size() < 2 or camera == null:
 		return
-	var vertices: PackedVector3Array = PackedVector3Array()
-	var colors: PackedColorArray = PackedColorArray()
-	var indices: PackedInt32Array = PackedInt32Array()
 	var last: int = _points.size() - 1
+	_vertices.resize(_points.size() * 2)
+	_colors.resize(_points.size() * 2)
+	_indices.resize(last * 6)
 	for index: int in range(_points.size()):
 		var along: Vector3 = _points[maxi(index - 1, 0)] - _points[mini(index + 1, last)]
 		var to_camera: Vector3 = camera.global_position - _points[index]
 		var side: Vector3 = along.cross(to_camera).normalized()
 		var fade: float = 1.0 - float(index) / float(last)
 		var half: float = head_width * 0.5 * lerpf(0.25, 1.0, fade)
-		vertices.append(_points[index] - side * half)
-		vertices.append(_points[index] + side * half)
 		var color: Color = Color(trail_color, trail_color.a * fade * fade)
-		colors.append(color)
-		colors.append(color)
+		_vertices[index * 2] = _points[index] - side * half
+		_vertices[index * 2 + 1] = _points[index] + side * half
+		_colors[index * 2] = color
+		_colors[index * 2 + 1] = color
 	for segment: int in range(last):
 		var a: int = segment * 2
-		indices.append_array(PackedInt32Array([a, a + 1, a + 2, a + 2, a + 1, a + 3]))
-	var arrays: Array = []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = vertices
-	arrays[Mesh.ARRAY_COLOR] = colors
-	arrays[Mesh.ARRAY_INDEX] = indices
-	_array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		var i: int = segment * 6
+		_indices[i] = a
+		_indices[i + 1] = a + 1
+		_indices[i + 2] = a + 2
+		_indices[i + 3] = a + 2
+		_indices[i + 4] = a + 1
+		_indices[i + 5] = a + 3
+	if _arrays.size() != Mesh.ARRAY_MAX:
+		_arrays.resize(Mesh.ARRAY_MAX)
+	_arrays[Mesh.ARRAY_VERTEX] = _vertices
+	_arrays[Mesh.ARRAY_COLOR] = _colors
+	_arrays[Mesh.ARRAY_INDEX] = _indices
+	_array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _arrays)
+	# Drop the extra references so the next in-place write does not trigger
+	# a copy-on-write of the member arrays.
+	_arrays[Mesh.ARRAY_VERTEX] = null
+	_arrays[Mesh.ARRAY_COLOR] = null
+	_arrays[Mesh.ARRAY_INDEX] = null
