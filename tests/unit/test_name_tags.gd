@@ -49,6 +49,22 @@ func test_hud_binds_name_tags_to_the_viewport_player() -> void:
 
 
 func test_overlapping_tags_are_decluttered() -> void:
-	var placed: Array[Dictionary] = [{"box": Rect2(100.0, 100.0, 80.0, 20.0)}]
+	var placed: Array[Rect2] = [Rect2(100.0, 100.0, 80.0, 20.0)]
 	assert_false(RaceNameTags.declutter_accepts(Rect2(150.0, 110.0, 80.0, 20.0), placed))
 	assert_true(RaceNameTags.declutter_accepts(Rect2(100.0, 140.0, 80.0, 20.0), placed))
+
+
+func test_tag_scratch_is_allocated_once_per_bind() -> void:
+	var tags: RaceNameTags = RaceNameTags.new()
+	add_child_autofree(tags)
+	var karts: Array[KartController] = []
+	for _index: int in range(3):
+		var kart: KartController = (load("res://kart/kart.tscn") as PackedScene).instantiate() as KartController
+		add_child_autofree(kart)
+		karts.append(kart)
+	tags.bind(karts[0], null, karts)
+	assert_eq(tags._pool.size(), 2, "one reusable tag per opponent")
+	var first: RaceNameTags.TagInfo = tags._pool[0]
+	tags._draw()
+	tags._draw()
+	assert_same(tags._pool[0], first, "draws reuse the pooled tags")
