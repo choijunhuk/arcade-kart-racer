@@ -16,6 +16,8 @@ var _look_back_blend: float = 0.0
 var _shake: CameraShake = CameraShake.new()
 var _fov_model: CameraFov = CameraFov.new()
 var _base_tuning: FeelTuning
+var _smoothed_look: Vector3 = Vector3.FORWARD
+var _look_ahead: Vector3 = Vector3.ZERO
 
 
 func _ready() -> void:
@@ -37,7 +39,9 @@ func set_target(target: KartController) -> void:
 	_shake.clear()
 	if _target == null:
 		return
-	global_position = _desired_position(_look_direction(), 1.0)
+	_smoothed_look = _look_direction()
+	_look_ahead = Vector3.ZERO
+	global_position = _desired_position(_smoothed_look, 1.0)
 	_apply_look_rotation(Vector3.ZERO)
 
 
@@ -45,14 +49,17 @@ func _process(delta: float) -> void:
 	if _target == null:
 		return
 	_update_look_back(delta)
-	var look_direction: Vector3 = _look_direction().rotated(Vector3.UP, PI * _look_back_blend)
-	var drift_weight: float = clampf(tuning.feedback_lerp_speed * delta, 0.0, 1.0)
+	var raw_look: Vector3 = _look_direction()
+	_smoothed_look = smooth_direction(_smoothed_look, raw_look, smoothing_weight(tuning.look_smoothing, delta))
+	_update_look_ahead(raw_look, delta)
+	var look_direction: Vector3 = _smoothed_look.rotated(Vector3.UP, PI * _look_back_blend)
+	var drift_weight: float = smoothing_weight(tuning.feedback_lerp_speed, delta)
 	var desired: Vector3 = _resolve_clipping(_desired_position(look_direction, drift_weight))
 	var recovered: Vector3 = _resolve_clipping(global_position)
 	if recovered.distance_squared_to(global_position) > POSITION_EPSILON * POSITION_EPSILON:
 		global_position = recovered
 	else:
-		global_position = global_position.lerp(desired, clampf(tuning.follow_stiffness * delta, 0.0, 1.0))
+		global_position = global_position.lerp(desired, smoothing_weight(tuning.follow_stiffness, delta))
 	var sample: CameraShake.Sample = _shake.step(delta, SettingsManager.get_shake_strength())
 	_apply_look_rotation(sample.rotation_offset)
 	global_position += global_basis * sample.position_offset
@@ -113,8 +120,33 @@ func _look_direction() -> Vector3:
 	return velocity_forward
 
 
+## Frame-rate independent exponential smoothing weight for a rate per second.
+static func smoothing_weight(rate: float, delta: float) -> float:
+	return 1.0 - exp(-maxf(rate, 0.0) * maxf(delta, 0.0))
+
+
+## Slerps a flat chase direction toward a new one; snaps on near-reversal.
+static func smooth_direction(current: Vector3, target: Vector3, weight: float) -> Vector3:
+	if current.is_equal_approx(target) or current.dot(target) < -0.95 or current.length_squared() < 0.0001:
+		return target
+	return current.slerp(target, weight).normalized()
+
+
+## Aims ahead of the kart with speed, and into the turn by the lag between
+## the smoothed chase direction and the live travel direction.
+func _update_look_ahead(raw_look: Vector3, delta: float) -> void:
+	if _look_back_blend > 0.0:
+		_look_ahead = _look_ahead.lerp(Vector3.ZERO, smoothing_weight(tuning.look_smoothing, delta))
+		return
+	var speed_ratio: float = _target.get_speed_ratio()
+	var goal: Vector3 = raw_look * tuning.look_ahead_distance * speed_ratio
+	goal += (raw_look - _smoothed_look) * tuning.turn_look_ahead * speed_ratio
+	goal.y = 0.0
+	_look_ahead = _look_ahead.lerp(goal, smoothing_weight(tuning.look_smoothing, delta))
+
+
 func _apply_look_rotation(shake_rotation: Vector3) -> void:
-	var focus: Vector3 = _target.global_position + Vector3.UP * LOOK_TARGET_HEIGHT
+	var focus: Vector3 = _target.global_position + Vector3.UP * LOOK_TARGET_HEIGHT + _look_ahead
 	if focus.distance_to(global_position) <= POSITION_EPSILON:
 		return
 	look_at(focus, Vector3.UP)
@@ -154,6 +186,8 @@ func _connect_events() -> void:
 		EventBus.kart_landed.connect(_on_kart_landed)
 	if not EventBus.item_exploded.is_connected(_on_item_exploded):
 		EventBus.item_exploded.connect(_on_item_exploded)
+	if not EventBus.boost_started.is_connected(_on_boost_started):
+		EventBus.boost_started.connect(_on_boost_started)
 	if not SettingsManager.settings_changed.is_connected(_on_settings_changed):
 		SettingsManager.settings_changed.connect(_on_settings_changed)
 
@@ -167,6 +201,8 @@ func _disconnect_events() -> void:
 		EventBus.kart_landed.disconnect(_on_kart_landed)
 	if EventBus.item_exploded.is_connected(_on_item_exploded):
 		EventBus.item_exploded.disconnect(_on_item_exploded)
+	if EventBus.boost_started.is_connected(_on_boost_started):
+		EventBus.boost_started.disconnect(_on_boost_started)
 	if SettingsManager.settings_changed.is_connected(_on_settings_changed):
 		SettingsManager.settings_changed.disconnect(_on_settings_changed)
 
@@ -179,6 +215,11 @@ func _on_settings_changed(section: StringName) -> void:
 func _on_kart_hit(kart: Node, _hit_type: int) -> void:
 	if kart == _target:
 		_shake.add_trauma(tuning.kart_hit_trauma)
+
+
+func _on_boost_started(kart: Node, _spec: Resource) -> void:
+	if kart == _target:
+		_shake.add_trauma(tuning.boost_start_trauma)
 
 
 func _on_wall_head_on(kart: Node) -> void:

@@ -26,6 +26,13 @@ extends Resource
 @export var kart_hit_trauma: float = 0.6
 @export var item_explosion_trauma: float = 0.7
 @export var item_explosion_shake_radius: float = 25.0
+## Metres the camera aims ahead of the kart at full speed.
+@export var look_ahead_distance: float = 2.5
+## Gain on the gap between smoothed and live travel direction (look into turns).
+@export var turn_look_ahead: float = 4.0
+## Exponential smoothing rate for the chase direction (higher = snappier).
+@export var look_smoothing: float = 7.0
+@export var boost_start_trauma: float = 0.15
 
 @export_group("Kart Body")
 @export var roll_per_lateral: float = 0.025

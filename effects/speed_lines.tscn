@@ -7,7 +7,7 @@
 shader = ExtResource("2_shader")
 
 [node name="SpeedLines" type="CanvasLayer"]
-layer = 5
+layer = 0
 script = ExtResource("1_script")
 
 [node name="Lines" type="ColorRect" parent="."]

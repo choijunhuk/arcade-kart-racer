@@ -5,12 +5,11 @@ extends RefCounted
 ## to the kart's target footprint, and mesh baking so Body/wheels stay single
 ## MeshInstance3D nodes. Physics/collision are never touched from here.
 ##
-## Body is merged to ONE surface/material because `KartVisuals` always drives
-## Body through a single `material_override` shader (hit-flash); a multi-
-## material body mesh would just get flattened to one color at runtime anyway,
-## so merging keeps the same look while cutting the draw call to one.
-## Wheels are not behind that shader, so their two source materials (rim/tire)
-## are kept separate.
+## Body is merged to ONE surface driven by the car-paint `material_override`
+## shader (livery + hit flash); the source surfaces survive as vertex-colour
+## roles (paint/glass/trim), so the car keeps its two-tone look in one draw.
+## Wheels are not behind that shader, so tyre and rim stay separate surfaces
+## (rim is surface 1, recoloured per driver by KartLivery).
 
 const MODEL_DIR: String = "res://assets/kenney/racing_kit/"
 ## Paint-surface reference colors per race car variant (geometry is identical
@@ -41,6 +40,17 @@ const GROUND_CONTACT_Y: float = -0.35
 static var _fallback_warned: bool = false
 static var _body_cache: Dictionary[StringName, ArrayMesh] = {}
 static var _wheel_cache: Dictionary[String, ArrayMesh] = {}
+static var _wheel_layout_cache: Dictionary[StringName, Dictionary] = {}
+static var _tyre_material: StandardMaterial3D = _make_wheel_material(Color(0.055, 0.055, 0.065), 0.88, 0.0)
+static var _rim_material: StandardMaterial3D = _make_wheel_material(Color(0.78, 0.8, 0.83), 0.3, 0.8)
+
+
+static func _make_wheel_material(color: Color, roughness: float, metallic: float) -> StandardMaterial3D:
+	var material: StandardMaterial3D = StandardMaterial3D.new()
+	material.albedo_color = color
+	material.roughness = roughness
+	material.metallic = metallic
+	return material
 
 
 ## Nearest CC0 paint variant to a kart's body color, by squared RGB distance.
@@ -75,10 +85,13 @@ static func ground_offset(source_min_y: float, scale_y: float, ground_y: float) 
 	return ground_y - source_min_y * scale_y
 
 
-## Builds (and caches, per kart id) the merged single-surface body mesh, tinted
-## to `data.body_color` and scaled to `KartMeshBuilder.target_body_size(data)`.
-## Returns null if the source asset can't be loaded, so callers can fall back
-## to the procedural chassis.
+## Builds (and caches, per kart id) the merged single-surface body mesh, scaled
+## to `KartMeshBuilder.target_body_size(data)` and turned 180 degrees so the
+## source model's nose (+Z) matches the kart's forward (-Z). Each source
+## surface's role is baked into vertex COLOR (r = paint, g = glass, else trim)
+## so the one car-paint shader can draw livery, cockpit glass and dark trim in
+## a single draw call. Returns null if the source asset can't be loaded, so
+## callers can fall back to the procedural chassis.
 static func build_body_mesh(data: KartData) -> ArrayMesh:
 	if _body_cache.has(data.id):
 		return _body_cache[data.id]
@@ -90,31 +103,65 @@ static func build_body_mesh(data: KartData) -> ArrayMesh:
 		root.free()
 		return null
 	var source: Mesh = body_node.mesh
-	var local_aabb: AABB = source.get_aabb()
-	var target: Vector3 = KartMeshBuilder.target_body_size(data)
-	var scale: Vector3 = fit_scale(local_aabb.size, target)
-	var center_x: float = local_aabb.position.x + local_aabb.size.x * 0.5
-	var center_z: float = local_aabb.position.z + local_aabb.size.z * 0.5
-	var translate_y: float = ground_offset(local_aabb.position.y, scale.y, 0.0)
-	var transform: Transform3D = Transform3D(
-		Basis().scaled(scale),
-		Vector3(-center_x * scale.x, translate_y, -center_z * scale.z),
-	)
-	var surface_tool: SurfaceTool = SurfaceTool.new()
-	surface_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var transform: Transform3D = body_transform(source.get_aabb(), KartMeshBuilder.target_body_size(data))
+	var vertices: PackedVector3Array = PackedVector3Array()
+	var normals: PackedVector3Array = PackedVector3Array()
+	var colors: PackedColorArray = PackedColorArray()
+	var indices: PackedInt32Array = PackedInt32Array()
 	for surface_index: int in range(source.get_surface_count()):
-		surface_tool.append_from(source, surface_index, transform)
-	surface_tool.set_material(PrimitiveArt.material(data.body_color))
-	var merged: ArrayMesh = surface_tool.commit()
+		var arrays: Array = source.surface_get_arrays(surface_index)
+		var role: Color = _surface_role(source.surface_get_material(surface_index))
+		var base: int = vertices.size()
+		var surface_vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array
+		var surface_normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL] as PackedVector3Array
+		for index: int in range(surface_vertices.size()):
+			vertices.append(transform * surface_vertices[index])
+			normals.append((transform.basis * surface_normals[index]).normalized())
+			colors.append(role)
+		var surface_indices: Variant = arrays[Mesh.ARRAY_INDEX]
+		if surface_indices is PackedInt32Array and not (surface_indices as PackedInt32Array).is_empty():
+			for index: int in surface_indices as PackedInt32Array:
+				indices.append(base + index)
+		else:
+			for index: int in range(surface_vertices.size()):
+				indices.append(base + index)
+	var merged_arrays: Array = []
+	merged_arrays.resize(Mesh.ARRAY_MAX)
+	merged_arrays[Mesh.ARRAY_VERTEX] = vertices
+	merged_arrays[Mesh.ARRAY_NORMAL] = normals
+	merged_arrays[Mesh.ARRAY_COLOR] = colors
+	merged_arrays[Mesh.ARRAY_INDEX] = indices
+	var merged: ArrayMesh = ArrayMesh.new()
+	merged.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, merged_arrays)
+	merged.surface_set_material(0, PrimitiveArt.material(data.body_color))
+	merged.set_meta(&"vertex_roles", true)
+	_wheel_layout_cache[data.id] = _wheel_layout(root, body_node, transform)
 	root.free()
 	_body_cache[data.id] = merged
 	return merged
 
 
-## Builds (and caches) one wheel's merged mesh, recentered on its own rolling
-## axis (so spinning the pivot node doesn't make it orbit) and scaled to
-## `WHEEL_VISUAL_RADIUS`. Wheel geometry/material is identical across paint
-## variants, so any one source model works for all four wheel pivots.
+## Scale-to-footprint, centre on X/Z, rest on Y=0, and face the nose to -Z.
+static func body_transform(source_aabb: AABB, target: Vector3) -> Transform3D:
+	var scale: Vector3 = fit_scale(source_aabb.size, target)
+	var center: Vector3 = source_aabb.position + source_aabb.size * 0.5
+	var fit: Transform3D = Transform3D(
+		Basis().scaled(scale),
+		Vector3(-center.x * scale.x, ground_offset(source_aabb.position.y, scale.y, 0.0), -center.z * scale.z),
+	)
+	return Transform3D(Basis(Vector3.UP, PI), Vector3.ZERO) * fit
+
+
+## Kart-local wheel pivot X/Z (keyed by kart.tscn pivot name) matching the
+## source model's wheel wells, captured when that kart's body mesh was built.
+static func wheel_layout(data: KartData) -> Dictionary:
+	return _wheel_layout_cache.get(data.id, {})
+
+
+## Builds (and caches) one wheel's mesh, recentered on its own rolling axis
+## (so spinning the pivot node doesn't make it orbit), turned like the body and
+## scaled to `WHEEL_VISUAL_RADIUS`. Tyres get dark rubber; surface 1 (rim)
+## keeps a neutral metal that KartLivery overrides per driver.
 static func build_wheel_mesh(pivot_name: StringName) -> ArrayMesh:
 	var cache_key: String = String(pivot_name)
 	if _wheel_cache.has(cache_key):
@@ -134,17 +181,43 @@ static func build_wheel_mesh(pivot_name: StringName) -> ArrayMesh:
 	var source_radius: float = maxf(local_aabb.size.y, local_aabb.size.z) * 0.5
 	var scale: float = WHEEL_VISUAL_RADIUS / source_radius if source_radius > 0.0 else 1.0
 	var center: Vector3 = local_aabb.position + local_aabb.size * 0.5
-	var transform: Transform3D = Transform3D(Basis().scaled(Vector3.ONE * scale), center * -scale)
+	var transform: Transform3D = Transform3D(Basis(Vector3.UP, PI), Vector3.ZERO) * Transform3D(
+		Basis().scaled(Vector3.ONE * scale), center * -scale,
+	)
 	var merged: ArrayMesh = null
 	for surface_index: int in range(source.get_surface_count()):
 		var surface_tool: SurfaceTool = SurfaceTool.new()
 		surface_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
 		surface_tool.append_from(source, surface_index, transform)
-		surface_tool.set_material(source.surface_get_material(surface_index))
+		surface_tool.set_material(_tyre_material if surface_index == 0 else _rim_material)
 		merged = surface_tool.commit(merged)
 	root.free()
 	_wheel_cache[cache_key] = merged
 	return merged
+
+
+static func _surface_role(material: Material) -> Color:
+	var name: String = material.resource_name if material != null else ""
+	if name == "glass":
+		return Color(0.0, 1.0, 0.0)
+	if name == "carTire":
+		return Color(0.0, 0.0, 0.0)
+	return Color(1.0, 0.0, 0.0)
+
+
+## Source wheel/body nodes are direct children of the model root.
+static func _wheel_layout(root: Node3D, body_node: MeshInstance3D, transform: Transform3D) -> Dictionary:
+	var layout: Dictionary = {}
+	var to_body: Transform3D = body_node.transform.affine_inverse()
+	for pivot_name: StringName in WHEEL_NODE_NAMES:
+		var wheel: MeshInstance3D = root.find_child(WHEEL_NODE_NAMES[pivot_name], true, false) as MeshInstance3D
+		if wheel == null or wheel.mesh == null:
+			continue
+		var wheel_aabb: AABB = wheel.mesh.get_aabb()
+		var center_in_root: Vector3 = wheel.transform * (wheel_aabb.position + wheel_aabb.size * 0.5)
+		var kart_local: Vector3 = transform * (to_body * center_in_root)
+		layout[pivot_name] = Vector2(kart_local.x, kart_local.z)
+	return layout
 
 
 static func _instantiate_model(model_name: StringName) -> Node3D:

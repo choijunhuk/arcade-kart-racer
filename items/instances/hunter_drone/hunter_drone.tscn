@@ -1,20 +1,85 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://items/instances/hunter_drone/hunter_drone.gd" id="1_script"]
+[ext_resource type="Script" path="res://effects/item_fx.gd" id="2_fx"]
+[ext_resource type="Script" path="res://effects/projectile_trail.gd" id="3_trail"]
 
 [sub_resource type="StandardMaterial3D" id="Material"]
+albedo_color = Color(0.2, 0.08, 0.3, 1)
+metallic = 0.7
+roughness = 0.3
+
+[sub_resource type="StandardMaterial3D" id="Material_ring"]
 albedo_color = Color(0.72, 0.2, 1, 1)
 emission_enabled = true
-emission = Color(0.42, 0.05, 1, 1)
-emission_energy_multiplier = 1.5
+emission = Color(0.6, 0.15, 1, 1)
+emission_energy_multiplier = 2.5
+
+[sub_resource type="StandardMaterial3D" id="Material_eye"]
+albedo_color = Color(1, 0.2, 0.5, 1)
+emission_enabled = true
+emission = Color(1, 0.15, 0.45, 1)
+emission_energy_multiplier = 4.0
 
 [sub_resource type="SphereMesh" id="Mesh"]
 material = SubResource("Material")
-radius = 0.55
-height = 1.1
+radius = 0.32
+height = 0.5
+radial_segments = 16
+rings = 8
+
+[sub_resource type="TorusMesh" id="Mesh_ring"]
+material = SubResource("Material_ring")
+inner_radius = 0.46
+outer_radius = 0.56
+rings = 24
+ring_segments = 6
+
+[sub_resource type="BoxMesh" id="Mesh_rotor"]
+material = SubResource("Material_ring")
+size = Vector3(1.0, 0.04, 0.1)
+
+[sub_resource type="SphereMesh" id="Mesh_eye"]
+material = SubResource("Material_eye")
+radius = 0.12
+height = 0.24
+radial_segments = 10
+rings = 5
 
 [node name="HunterDrone" type="Node3D"]
 script = ExtResource("1_script")
 
-[node name="Mesh" type="MeshInstance3D" parent="."]
+[node name="Visual" type="Node3D" parent="."]
+script = ExtResource("2_fx")
+face_travel = true
+spin_speed = 9.0
+bob_height = 0.12
+bob_speed = 5.0
+blink_speed = 9.0
+
+[node name="Mesh" type="MeshInstance3D" parent="Visual"]
 mesh = SubResource("Mesh")
+
+[node name="Spinner" type="Node3D" parent="Visual"]
+
+[node name="Ring" type="MeshInstance3D" parent="Visual/Spinner"]
+mesh = SubResource("Mesh_ring")
+
+[node name="RotorA" type="MeshInstance3D" parent="Visual/Spinner"]
+position = Vector3(0, 0.2, 0)
+mesh = SubResource("Mesh_rotor")
+
+[node name="RotorB" type="MeshInstance3D" parent="Visual/Spinner"]
+position = Vector3(0, 0.2, 0)
+rotation_degrees = Vector3(0, 90, 0)
+mesh = SubResource("Mesh_rotor")
+
+[node name="Blink" type="MeshInstance3D" parent="Visual"]
+position = Vector3(0, 0, -0.27)
+material_override = SubResource("Material_eye")
+mesh = SubResource("Mesh_eye")
+
+[node name="Trail" type="MeshInstance3D" parent="."]
+script = ExtResource("3_trail")
+trail_color = Color(0.7, 0.25, 1, 0.85)
+head_width = 0.45

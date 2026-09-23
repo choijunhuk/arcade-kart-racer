@@ -1,20 +1,104 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://items/instances/spike_mine/spike_mine.gd" id="1_script"]
+[ext_resource type="Script" path="res://effects/item_fx.gd" id="2_fx"]
 
 [sub_resource type="StandardMaterial3D" id="Material"]
-albedo_color = Color(0.18, 0.18, 0.22, 1)
-metallic = 0.7
+albedo_color = Color(0.16, 0.16, 0.2, 1)
+metallic = 0.75
+roughness = 0.35
+
+[sub_resource type="StandardMaterial3D" id="Material_spike"]
+albedo_color = Color(0.95, 0.72, 0.12, 1)
+metallic = 0.5
+roughness = 0.3
+
+[sub_resource type="StandardMaterial3D" id="Material_light"]
+albedo_color = Color(1, 0.1, 0.05, 1)
+emission_enabled = true
+emission = Color(1, 0.08, 0.02, 1)
+emission_energy_multiplier = 4.0
 
 [sub_resource type="SphereMesh" id="Mesh"]
 material = SubResource("Material")
-radius = 0.7
-height = 1.0
+radius = 0.42
+height = 0.84
+radial_segments = 14
+rings = 7
+
+[sub_resource type="CylinderMesh" id="Mesh_spike"]
+material = SubResource("Material_spike")
+top_radius = 0.0
+bottom_radius = 0.1
+height = 0.36
+radial_segments = 6
+rings = 1
+
+[sub_resource type="SphereMesh" id="Mesh_light"]
+radius = 0.1
+height = 0.2
 radial_segments = 8
 rings = 4
 
 [node name="SpikeMine" type="Node3D"]
 script = ExtResource("1_script")
 
-[node name="Mesh" type="MeshInstance3D" parent="."]
+[node name="Visual" type="Node3D" parent="."]
+script = ExtResource("2_fx")
+spin_speed = 0.8
+blink_speed = 6.0
+
+[node name="Mesh" type="MeshInstance3D" parent="Visual"]
 mesh = SubResource("Mesh")
+
+[node name="Spinner" type="Node3D" parent="Visual"]
+
+[node name="Spike0" type="MeshInstance3D" parent="Visual/Spinner"]
+position = Vector3(0.000, 0.000, 0.480)
+rotation_degrees = Vector3(90, 0, 0)
+mesh = SubResource("Mesh_spike")
+
+[node name="Spike1" type="MeshInstance3D" parent="Visual/Spinner"]
+position = Vector3(0.480, 0.000, 0.000)
+rotation_degrees = Vector3(90, 90, 0)
+mesh = SubResource("Mesh_spike")
+
+[node name="Spike2" type="MeshInstance3D" parent="Visual/Spinner"]
+position = Vector3(0.000, 0.000, -0.480)
+rotation_degrees = Vector3(90, 180, 0)
+mesh = SubResource("Mesh_spike")
+
+[node name="Spike3" type="MeshInstance3D" parent="Visual/Spinner"]
+position = Vector3(-0.480, 0.000, -0.000)
+rotation_degrees = Vector3(90, 270, 0)
+mesh = SubResource("Mesh_spike")
+
+[node name="Spike4" type="MeshInstance3D" parent="Visual/Spinner"]
+position = Vector3(0.218, 0.368, 0.218)
+rotation_degrees = Vector3(40, 45, 0)
+mesh = SubResource("Mesh_spike")
+
+[node name="Spike5" type="MeshInstance3D" parent="Visual/Spinner"]
+position = Vector3(0.218, 0.368, -0.218)
+rotation_degrees = Vector3(40, 135, 0)
+mesh = SubResource("Mesh_spike")
+
+[node name="Spike6" type="MeshInstance3D" parent="Visual/Spinner"]
+position = Vector3(-0.218, 0.368, -0.218)
+rotation_degrees = Vector3(40, 225, 0)
+mesh = SubResource("Mesh_spike")
+
+[node name="Spike7" type="MeshInstance3D" parent="Visual/Spinner"]
+position = Vector3(-0.218, 0.368, 0.218)
+rotation_degrees = Vector3(40, 315, 0)
+mesh = SubResource("Mesh_spike")
+
+[node name="Spike8" type="MeshInstance3D" parent="Visual/Spinner"]
+position = Vector3(0.000, 0.480, 0.000)
+rotation_degrees = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_spike")
+
+[node name="Blink" type="MeshInstance3D" parent="Visual"]
+position = Vector3(0, 0.36, 0.3)
+material_override = SubResource("Material_light")
+mesh = SubResource("Mesh_light")
