@@ -94,7 +94,6 @@ static func body_mesh(data: KartData) -> ArrayMesh:
 	var mesh: SoftMesh = SoftMesh.new()
 	var deck: Array = _tub(mesh, s)
 	_pods(mesh, s)
-	mesh.dome_rings = 2
 	_bumpers(mesh, s)
 	for wheel: Vector3 in wheel_positions(s).values():
 		_fender(mesh, s, wheel)
@@ -121,18 +120,18 @@ static func wheel_mesh(front: bool, outer: float, s: Shape) -> ArrayMesh:
 	var path: PackedVector3Array = PackedVector3Array()
 	var sizes: PackedVector2Array = PackedVector2Array()
 	var center_radius: float = (radius + inner) * 0.5
-	for index: int in range(16):
-		var angle: float = TAU * float(index) / 16.0
+	for index: int in range(22):
+		var angle: float = TAU * float(index) / 22.0
 		path.append(Vector3(0.0, sin(angle), cos(angle)) * center_radius)
 		sizes.append(Vector2(half, (radius - inner) * 0.5))
-	tyre.sweep(path, sizes, Color.WHITE, 6, 2.8, Vector3.UP, true, 0.0, Vector3.ZERO)
+	tyre.sweep(path, sizes, Color.WHITE, 8, 2.8, Vector3.UP, true, 0.0, Vector3.ZERO)
 	var rim: SoftMesh = SoftMesh.new()
 	rim.dome_rings = 2
 	var axle: PackedVector3Array = PackedVector3Array([Vector3(-0.5, 0, 0), Vector3(0.42, 0, 0), Vector3(0.62, 0, 0)])
 	for index: int in range(axle.size()):
 		axle[index] *= half * outer
 	var rim_sizes: PackedVector2Array = PackedVector2Array([Vector2.ONE * (inner + 0.01), Vector2.ONE * (inner + 0.01), Vector2.ONE * inner * 0.55])
-	rim.sweep(axle, rim_sizes, Color.WHITE, 10, 2.0, Vector3.UP, false, 0.7)
+	rim.sweep(axle, rim_sizes, Color.WHITE, 16, 2.0, Vector3.UP, false, 0.7)
 	# Raised spokes on the rim face so the wheel visibly spins.
 	rim.dome_rings = 1
 	var face_x: float = (0.42 * half + 0.012) * outer
@@ -156,11 +155,11 @@ static func _tub(mesh: SoftMesh, s: Shape) -> Array:
 	var path: PackedVector3Array = PackedVector3Array()
 	var sizes: PackedVector2Array = PackedVector2Array()
 	var deck: Array = []
-	for key: Vector4 in SoftMesh.smooth(keys, 2):
+	for key: Vector4 in SoftMesh.smooth(keys, 3):
 		path.append(Vector3(0.0, (key.z + key.w) * 0.5, key.x))
 		sizes.append(Vector2(key.y, (key.w - key.z) * 0.5))
 		deck.append(Vector2(key.x, key.w))
-	mesh.sweep(path, sizes, PAINT, 12, 3.0, Vector3.UP, false, 0.7)
+	mesh.sweep(path, sizes, PAINT, 16, 3.0, Vector3.UP, false, 0.7)
 	return deck
 
 
@@ -178,7 +177,7 @@ static func _pods(mesh: SoftMesh, s: Shape) -> void:
 			var bottom: float = s.floor_y + 0.02
 			path.append(Vector3(side * (inner + half), (top + bottom) * 0.5, lerpf(z0, z1, t)))
 			sizes.append(Vector2(half * lerpf(0.82, 0.95, sin(t * PI)), (top - bottom) * 0.5))
-		mesh.sweep(path, sizes, PAINT, 10, 2.6, Vector3.UP, false, 1.0)
+		mesh.sweep(path, sizes, PAINT, 16, 2.6, Vector3.UP, false, 1.0)
 
 
 static func _bumpers(mesh: SoftMesh, s: Shape) -> void:
@@ -199,23 +198,23 @@ static func _bumpers(mesh: SoftMesh, s: Shape) -> void:
 ## to the body by a short rounded stay.
 static func _fender(mesh: SoftMesh, s: Shape, wheel: Vector3) -> void:
 	var front: bool = wheel.z < 0.0
-	var radius: float = (FRONT_RADIUS if front else REAR_RADIUS) + 0.06
+	var radius: float = (FRONT_RADIUS if front else REAR_RADIUS) + 0.075
 	var half: float = (s.front_tyre if front else s.rear_tyre) + 0.03
 	var from: float = deg_to_rad(20.0 if front else 45.0)
 	var to: float = deg_to_rad(150.0 if front else 125.0)
 	var path: PackedVector3Array = PackedVector3Array()
 	var sizes: PackedVector2Array = PackedVector2Array()
-	for index: int in range(5):
-		var t: float = float(index) / 4.0
+	for index: int in range(7):
+		var t: float = float(index) / 6.0
 		var angle: float = lerpf(from, to, t)
 		path.append(wheel + Vector3(0.0, sin(angle), -cos(angle)) * radius)
-		sizes.append(Vector2(half, 0.034) * lerpf(0.8, 1.0, sin(t * PI)))
-	mesh.dome_rings = 2
-	mesh.sweep(path, sizes, PAINT, 8, 2.3, Vector3.UP, false, 1.0, wheel)
+		# Chunky oval section tapering at both ends: no flat blade or sharp lip.
+		sizes.append(Vector2(half, 0.05) * lerpf(0.62, 1.0, sin(t * PI)))
+	mesh.sweep(path, sizes, PAINT, 12, 2.0, Vector3.UP, false, 1.0, wheel)
 	var inward: float = -signf(wheel.x)
 	var top: Vector3 = wheel + Vector3(inward * half * 0.55, radius * 0.9, 0.0)
 	var anchor: Vector3 = Vector3(signf(wheel.x) * s.tub_half * 0.7, s.floor_y + s.size.y * 0.3, wheel.z)
-	mesh.sweep(PackedVector3Array([top, anchor]), PackedVector2Array([Vector2(0.04, 0.03), Vector2(0.05, 0.04)]), PAINT, 6, 2.0, Vector3.FORWARD, false, 0.8)
+	mesh.sweep(PackedVector3Array([top, anchor]), PackedVector2Array([Vector2(0.04, 0.03), Vector2(0.05, 0.04)]), PAINT, 10, 2.0, Vector3.FORWARD, false, 0.8)
 
 
 ## Rounded bucket-seat backrest behind the driver.
@@ -240,17 +239,17 @@ static func _spoiler(mesh: SoftMesh, s: Shape, deck: Array) -> void:
 	_tube(mesh, wing, Vector2(0.13, 0.026), ACCENT)
 	for side: float in [-1.0, 1.0]:
 		var strut: PackedVector3Array = PackedVector3Array([Vector3(side * span * 0.42, cover - 0.03, z - 0.04), Vector3(side * span * 0.42, y - 0.01, z)])
-		mesh.sweep(strut, PackedVector2Array([Vector2(0.022, 0.05), Vector2(0.022, 0.05)]), TRIM, 6, 3.0, Vector3.UP, false, 0.5)
+		mesh.sweep(strut, PackedVector2Array([Vector2(0.022, 0.05), Vector2(0.022, 0.05)]), TRIM, 8, 3.0, Vector3.UP, false, 0.5)
 
 
 ## Sweeps a smoothed tube with a constant rounded section through `keys`.
 static func _tube(mesh: SoftMesh, keys: Array, half: Vector2, role: Color) -> void:
 	var path: PackedVector3Array = PackedVector3Array()
 	var sizes: PackedVector2Array = PackedVector2Array()
-	for point: Vector3 in SoftMesh.smooth(keys, 2):
+	for point: Vector3 in SoftMesh.smooth(keys, 3):
 		path.append(point)
 		sizes.append(half)
-	mesh.sweep(path, sizes, role, 8, 2.6, Vector3.UP, false, 1.0)
+	mesh.sweep(path, sizes, role, 10, 2.4, Vector3.UP, false, 1.0)
 
 
 static func _deck_height(deck: Array, z: float) -> float:

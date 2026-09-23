@@ -85,13 +85,13 @@ func apply_body(body: MeshInstance3D) -> ShaderMaterial:
 func apply_driver(driver_node: MeshInstance3D) -> void:
 	if driver_node == null:
 		return
-	var suit: StandardMaterial3D = _glossy(helmet, 0.75, 0.0)
+	var suit: StandardMaterial3D = _soft(_glossy(helmet, 0.75, 0.0))
 	suit.vertex_color_use_as_albedo = true
 	driver_node.material_override = suit
 	_apply_face(driver_node.get_node_or_null(KartDriverBuilder.HEAD_NODE_NAME) as MeshInstance3D)
 	var helmet_node: MeshInstance3D = driver_node.get_node_or_null(HELMET_NODE_NAME) as MeshInstance3D
 	if helmet_node != null:
-		var shell: StandardMaterial3D = _glossy(helmet, 0.22, 0.15)
+		var shell: StandardMaterial3D = _soft(_glossy(helmet, 0.22, 0.15))
 		shell.clearcoat_enabled = true
 		shell.clearcoat = 1.0
 		shell.clearcoat_roughness = 0.1
@@ -100,7 +100,7 @@ func apply_driver(driver_node: MeshInstance3D) -> void:
 		helmet_node.material_override = shell
 		var stripe: MeshInstance3D = helmet_node.get_node_or_null(HELMET_STRIPE_NODE_NAME) as MeshInstance3D
 		if stripe != null:
-			stripe.material_override = _glossy(accent, 0.3, 0.1)
+			stripe.material_override = _soft(_glossy(accent, 0.3, 0.1))
 
 
 ## Accent-tinted metallic rims on each wheel mesh.
@@ -151,6 +151,13 @@ func _apply_face(head: MeshInstance3D) -> void:
 	face.set_shader_parameter("hair_color", hair)
 	face.set_shader_parameter("expression", expression)
 	face.set_shader_parameter("blink_offset", blink_offset)
+
+
+## Driver parts skip receiving shadows: on small rounded meshes the shadow map
+## only draws blocky, faceted terminator bands (the chassis still receives).
+static func _soft(material: StandardMaterial3D) -> StandardMaterial3D:
+	material.disable_receive_shadows = true
+	return material
 
 
 static func _glossy(color: Color, roughness: float, metallic: float) -> StandardMaterial3D:

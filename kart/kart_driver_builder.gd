@@ -27,8 +27,8 @@ const OPENING_HALF_ANGLE: float = 62.0
 const BROW_ARCH: float = 12.0
 const GOGGLE_ELEVATION: float = 52.0
 const STRAP_BACK_ELEVATION: float = 12.0
-const HELMET_SEGMENTS: int = 30
-const HELMET_BANDS: int = 7
+const HELMET_SEGMENTS: int = 34
+const HELMET_BANDS: int = 8
 const SUIT: Color = Color(1.0, 1.0, 1.0)
 const GLOVE: Color = Color(0.2, 0.2, 0.22)
 const WHEEL_TINT: Color = Color(0.1, 0.1, 0.11)
@@ -64,6 +64,7 @@ static func build(driver: MeshInstance3D) -> MeshInstance3D:
 	glass.roughness = 0.08
 	glass.rim_enabled = true
 	glass.rim = 0.6
+	glass.disable_receive_shadows = true
 	visor.material_override = glass
 	return helmet
 
@@ -89,33 +90,35 @@ static func _body() -> ArrayMesh:
 	if _body_mesh != null:
 		return _body_mesh
 	var mesh: SoftMesh = SoftMesh.new()
-	mesh.dome_rings = 2
-	var torso: PackedVector3Array = PackedVector3Array([Vector3(0, -0.04, 0.03), Vector3(0, 0.1, 0.02), Vector3(0, 0.24, 0.0), Vector3(0, 0.31, -0.01)])
-	var torso_sizes: PackedVector2Array = PackedVector2Array([Vector2(0.15, 0.12), Vector2(0.175, 0.125), Vector2(0.17, 0.11), Vector2(0.12, 0.085)])
-	mesh.sweep(torso, torso_sizes, SUIT, 14, 2.4, Vector3.FORWARD, false, 0.7)
+	var torso: PackedVector3Array = PackedVector3Array(SoftMesh.smooth([Vector3(0, -0.04, 0.03), Vector3(0, 0.1, 0.02), Vector3(0, 0.24, 0.0), Vector3(0, 0.31, -0.01)], 3))
+	var torso_sizes: PackedVector2Array = PackedVector2Array(SoftMesh.smooth([Vector2(0.15, 0.12), Vector2(0.175, 0.125), Vector2(0.17, 0.11), Vector2(0.12, 0.085)], 3))
+	mesh.sweep(torso, torso_sizes, SUIT, 18, 2.4, Vector3.FORWARD, false, 0.7)
 	var u: Vector3 = Vector3.RIGHT
 	var n: Vector3 = WHEEL_NORMAL.normalized()
 	var v: Vector3 = n.cross(u).normalized()
 	for side: float in [-1.0, 1.0]:
 		var hand: Vector3 = WHEEL_CENTER + (u * side * 0.94 + v * 0.3) * WHEEL_RADIUS + n * 0.03
-		var shoulder: Vector3 = Vector3(side * 0.17, 0.25, 0.01)
+		# Starts inside the torso so the sleeve grows out of a rounded shoulder.
+		var shoulder: Vector3 = Vector3(side * 0.15, 0.245, 0.01)
 		var elbow: Vector3 = Vector3(side * 0.23, 0.13, -0.14)
 		var wrist: Vector3 = hand + (elbow - hand).normalized() * 0.07
-		var arm: PackedVector3Array = PackedVector3Array(SoftMesh.smooth([shoulder, elbow, wrist], 2))
+		var arm: PackedVector3Array = PackedVector3Array(SoftMesh.smooth([shoulder, elbow, wrist], 4))
 		var arm_sizes: PackedVector2Array = PackedVector2Array()
 		for index: int in range(arm.size()):
-			arm_sizes.append(Vector2.ONE * lerpf(0.058, 0.044, float(index) / float(arm.size() - 1)))
-		mesh.sweep(arm, arm_sizes, SUIT, 10, 2.0, Vector3.UP, false, 0.8)
-		mesh.sweep(PackedVector3Array([wrist, hand]), PackedVector2Array([Vector2(0.05, 0.05), Vector2(0.056, 0.05)]), GLOVE, 8, 2.2, Vector3.UP, false, 1.0)
+			var t: float = float(index) / float(arm.size() - 1)
+			arm_sizes.append(Vector2.ONE * (lerpf(0.058, 0.045, t) + 0.004 * sin(t * PI)))
+		mesh.sweep(arm, arm_sizes, SUIT, 14, 2.0, Vector3.UP, false, 1.0)
+		# Capsule mitten: round both ends, slightly fatter at the fist.
+		mesh.sweep(PackedVector3Array([wrist, wrist.lerp(hand, 0.5), hand]), PackedVector2Array([Vector2(0.05, 0.048), Vector2(0.058, 0.054), Vector2(0.058, 0.054)]), GLOVE, 14, 2.0, Vector3.UP, false, 1.0)
 	var rim: PackedVector3Array = PackedVector3Array()
 	var rim_sizes: PackedVector2Array = PackedVector2Array()
-	for index: int in range(16):
-		var angle: float = TAU * float(index) / 16.0
+	for index: int in range(32):
+		var angle: float = TAU * float(index) / 32.0
 		rim.append(WHEEL_CENTER + (u * cos(angle) + v * sin(angle)) * WHEEL_RADIUS)
 		rim_sizes.append(Vector2(0.018, 0.02))
-	mesh.sweep(rim, rim_sizes, WHEEL_TINT, 6, 2.0, Vector3.UP, true, 0.0, WHEEL_CENTER)
+	mesh.sweep(rim, rim_sizes, WHEEL_TINT, 10, 2.0, Vector3.UP, true, 0.0, WHEEL_CENTER)
 	var column: PackedVector3Array = PackedVector3Array([WHEEL_CENTER + n * 0.02, WHEEL_CENTER - n * 0.26])
-	mesh.sweep(column, PackedVector2Array([Vector2(0.04, 0.04), Vector2(0.025, 0.025)]), WHEEL_TINT, 8, 2.0, Vector3.UP, false, 0.6)
+	mesh.sweep(column, PackedVector2Array([Vector2(0.04, 0.04), Vector2(0.025, 0.025)]), WHEEL_TINT, 10, 2.0, Vector3.UP, false, 0.6)
 	_body_mesh = mesh.commit()
 	_body_mesh.set_meta(&"triangles", mesh.triangle_count())
 	return _body_mesh
@@ -127,12 +130,12 @@ static func _head() -> ArrayMesh:
 		return _head_mesh
 	var mesh: SoftMesh = SoftMesh.new()
 	var rings: Array[PackedVector3Array] = []
-	var bands: int = 10
+	var bands: int = 11
 	for index: int in range(1, bands):
 		var theta: float = PI * float(index) / float(bands)
 		var jaw: float = 1.0 - 0.14 * pow(maxf(cos(theta), 0.0), 2.0)
 		var half: Vector2 = Vector2(1.05, 1.0) * sin(theta) * HEAD_RADIUS * jaw
-		rings.append(SoftMesh.section_ring(Vector3(0.0, -cos(theta) * HEAD_RADIUS, 0.0), Vector3.UP, Vector3.BACK, half, 16, 2.0))
+		rings.append(SoftMesh.section_ring(Vector3(0.0, -cos(theta) * HEAD_RADIUS, 0.0), Vector3.UP, Vector3.BACK, half, 18, 2.0))
 	mesh.add_rings(rings, Color.WHITE, false, Vector3(0.0, -HEAD_RADIUS * 0.96, 0.0), Vector3(0.0, HEAD_RADIUS, 0.0))
 	_head_mesh = mesh.commit()
 	_head_mesh.set_meta(&"triangles", mesh.triangle_count())
@@ -153,17 +156,19 @@ static func _helmet() -> Array[ArrayMesh]:
 			var psi: float = TAU * float(seg) / float(HELMET_SEGMENTS)
 			var elevation: float = lerpf(_edge_elevation(psi), PI * 0.5, t)
 			ring.append(_on_helmet(psi, elevation, HELMET_RADIUS))
-			if band == 0:
-				edge.append(_on_helmet(psi, elevation, HELMET_RADIUS * 0.99))
 		rings.append(ring)
+	# The padded rim follows the opening at twice the shell's density so its
+	# silhouette stays round where the brow arches into the temples.
+	for seg: int in range(HELMET_SEGMENTS * 2):
+		var psi: float = TAU * float(seg) / float(HELMET_SEGMENTS * 2)
+		edge.append(_on_helmet(psi, _edge_elevation(psi), HELMET_RADIUS * 0.99))
 	shell.add_rings(rings, Color.WHITE, false, Vector3.INF, Vector3(0.0, HELMET_RADIUS, 0.0))
 	var rim: SoftMesh = SoftMesh.new()
 	var rim_sizes: PackedVector2Array = PackedVector2Array()
 	rim_sizes.resize(edge.size())
 	rim_sizes.fill(Vector2(0.024, 0.02))
-	rim.sweep(edge, rim_sizes, Color.WHITE, 6, 2.2, Vector3.UP, true, 0.0, Vector3.ZERO)
+	rim.sweep(edge, rim_sizes, Color.WHITE, 10, 2.0, Vector3.UP, true, 0.0, Vector3.ZERO)
 	# Accent racing stripe over the crown, brow to nape (reads from the chase camera).
-	rim.dome_rings = 2
 	var stripe: PackedVector3Array = PackedVector3Array()
 	var stripe_from: float = deg_to_rad(BROW_ELEVATION + 8.0)
 	var stripe_to: float = PI - deg_to_rad(-SKIRT_BACK_ELEVATION - 6.0)
@@ -173,10 +178,9 @@ static func _helmet() -> Array[ArrayMesh]:
 	var stripe_sizes: PackedVector2Array = PackedVector2Array()
 	stripe_sizes.resize(stripe.size())
 	stripe_sizes.fill(Vector2(0.032, 0.009))
-	rim.sweep(stripe, stripe_sizes, Color.WHITE, 6, 2.4, Vector3.UP, false, 1.0, Vector3.ZERO)
+	rim.sweep(stripe, stripe_sizes, Color.WHITE, 8, 2.4, Vector3.UP, false, 1.0, Vector3.ZERO)
 	# Goggles pushed up on the brow; the strap wraps round the back, tilting down.
 	var goggles: SoftMesh = SoftMesh.new()
-	goggles.dome_rings = 2
 	var strap: PackedVector3Array = PackedVector3Array()
 	for index: int in range(24):
 		var psi: float = TAU * float(index) / 24.0
@@ -186,11 +190,11 @@ static func _helmet() -> Array[ArrayMesh]:
 	var strap_sizes: PackedVector2Array = PackedVector2Array()
 	strap_sizes.resize(strap.size())
 	strap_sizes.fill(Vector2(0.02, 0.009))
-	goggles.sweep(strap, strap_sizes, Color.WHITE, 6, 2.4, Vector3.UP, true, 0.0, Vector3.ZERO)
+	goggles.sweep(strap, strap_sizes, Color.WHITE, 8, 2.4, Vector3.UP, true, 0.0, Vector3.ZERO)
 	for side: float in [-1.0, 1.0]:
 		var normal: Vector3 = _on_helmet(-PI * 0.5 + side * deg_to_rad(21.0), deg_to_rad(GOGGLE_ELEVATION), 1.0).normalized()
 		var lens: PackedVector3Array = PackedVector3Array([normal * (HELMET_RADIUS - 0.01), normal * (HELMET_RADIUS + 0.018)])
-		goggles.sweep(lens, PackedVector2Array([Vector2(0.058, 0.046), Vector2(0.058, 0.046)]), Color.WHITE, 12, 2.6, Vector3.UP, false, 0.45)
+		goggles.sweep(lens, PackedVector2Array([Vector2(0.058, 0.046), Vector2(0.058, 0.046)]), Color.WHITE, 16, 2.6, Vector3.UP, false, 0.45)
 	for part: SoftMesh in [shell, rim, goggles]:
 		var mesh: ArrayMesh = part.commit()
 		mesh.set_meta(&"triangles", part.triangle_count())

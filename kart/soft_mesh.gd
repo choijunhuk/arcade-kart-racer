@@ -10,7 +10,7 @@ extends RefCounted
 ## section's side axis towards its up axis yields outward-facing triangles.
 
 ## Rings emitted per domed end (plus the closing tip vertex).
-var dome_rings: int = 3
+var dome_rings: int = 4
 var vertices: PackedVector3Array = PackedVector3Array()
 var colors: PackedColorArray = PackedColorArray()
 var indices: PackedInt32Array = PackedInt32Array()
