@@ -11,6 +11,16 @@ const RESPAWN_MAX_ATTEMPTS: int = 6
 const WALL_FALL_GUARD_SECONDS: float = 1.0
 const WALL_FALL_RECOVERY_DEPTH: float = 3.0
 const DRIVEABLE_SURFACE_META: StringName = &"driveable_surface"
+## Corner-safe respawn (19-D item 1): a checkpoint inside a tight corner
+## (Track01's closing arc has no outer wall) would release the kart facing the
+## tangent with only ~18 m of road before the cliff, so a full-throttle restart
+## fell straight off again in a loop. A spot inside such a corner steps back
+## along the line until this much road ahead is no tighter than the limit.
+const RESPAWN_CLEAR_RUN: float = 40.0
+const RESPAWN_MAX_CURVATURE: float = 0.03
+const RESPAWN_MAX_CORNER_STEP_BACK: float = 90.0
+## Never step back past (or right onto) the previous checkpoint gate.
+const RESPAWN_PREVIOUS_GATE_MARGIN: float = 6.0
 
 enum RespawnPhase {
 	IDLE,
@@ -227,7 +237,10 @@ static func resolve_respawn_transform(
 	var respawn_point: Marker3D = lap_tracker.get_respawn_point(kart) if lap_tracker != null else null
 	if respawn_point == null or racing_line == null:
 		return kart.global_transform
-	var offset: float = racing_line.offset_at(respawn_point.global_position)
+	var offset: float = corner_safe_offset(
+		racing_line, racing_line.offset_at(respawn_point.global_position),
+		_previous_gate_distance(respawn_point, racing_line),
+	)
 	for attempt: int in range(RESPAWN_MAX_ATTEMPTS):
 		var candidate_offset: float = offset - RESPAWN_STEP_BACK * float(attempt)
 		var position: Vector3 = racing_line.sample(candidate_offset)
@@ -235,6 +248,40 @@ static func resolve_respawn_transform(
 			return _oriented_transform(position, racing_line.tangent_at(candidate_offset))
 	var fallback_offset: float = offset - RESPAWN_STEP_BACK * float(RESPAWN_MAX_ATTEMPTS)
 	return _oriented_transform(racing_line.sample(fallback_offset), racing_line.tangent_at(fallback_offset))
+
+
+## When the checkpoint spot itself sits inside a corner tighter than
+## `RESPAWN_MAX_CURVATURE`, steps `offset` back in `RESPAWN_STEP_BACK`
+## increments (at most `max_step_back` metres) until the next
+## `RESPAWN_CLEAR_RUN` metres of line stay within that limit. A spot outside
+## a corner keeps the exact checkpoint offset (spec §14.5).
+static func corner_safe_offset(racing_line: RacingLine, offset: float, max_step_back: float) -> float:
+	if absf(racing_line.curvature_at(offset)) <= RESPAWN_MAX_CURVATURE:
+		return offset
+	var limit: float = clampf(max_step_back, 0.0, RESPAWN_MAX_CORNER_STEP_BACK)
+	var step_back: float = 0.0
+	while step_back + RESPAWN_STEP_BACK <= limit \
+			and racing_line.max_curvature_in(offset - step_back, RESPAWN_CLEAR_RUN) > RESPAWN_MAX_CURVATURE:
+		step_back += RESPAWN_STEP_BACK
+	return fposmod(offset - step_back, maxf(racing_line.length(), 0.001))
+
+
+## Line distance back to the previous checkpoint gate minus a margin, read
+## from the respawn marker's own Checkpoint siblings (no upward race lookup).
+static func _previous_gate_distance(respawn_point: Marker3D, racing_line: RacingLine) -> float:
+	var checkpoint: Checkpoint = respawn_point.get_parent() as Checkpoint
+	var container: Node = checkpoint.get_parent() if checkpoint != null else null
+	if container == null:
+		return 0.0
+	var gates: Array[Checkpoint] = []
+	for child: Node in container.get_children():
+		if child is Checkpoint:
+			gates.append(child as Checkpoint)
+	if gates.size() < 2:
+		return RESPAWN_MAX_CORNER_STEP_BACK
+	var previous: Checkpoint = gates[(gates.find(checkpoint) - 1 + gates.size()) % gates.size()]
+	var gap: float = fposmod(checkpoint.offset - previous.offset, maxf(racing_line.length(), 0.001))
+	return maxf(0.0, gap - RESPAWN_PREVIOUS_GATE_MARGIN)
 
 
 static func _is_position_occupied(position: Vector3, self_kart: KartController, other_karts: Array[KartController]) -> bool:
