@@ -118,10 +118,12 @@ static func create_panel(player_index: int) -> PanelView:
 	view.panel = PanelContainer.new()
 	view.panel.name = "Player%dPanel" % (player_index + 1)
 	view.panel.custom_minimum_size = PANEL_SIZE
+	view.panel.theme_type_variation = &"SubPanel"
 	var rows: VBoxContainer = VBoxContainer.new()
 	rows.add_theme_constant_override("separation", 12)
 	view.panel.add_child(rows)
-	view.title = _label(rows, "P%d" % (player_index + 1), 32)
+	view.title = _label(rows, "P%d" % (player_index + 1), 40)
+	view.title.theme_type_variation = &"ScreenTitle"
 	view.device = _label(rows, "", 18)
 	view.driver = _label(rows, "", 24)
 	view.kart = _label(rows, "", 24)

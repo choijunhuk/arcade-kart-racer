@@ -4,7 +4,8 @@ extends MenuScreen
 const TRACK_DIRECTORY: String = "res://data/tracks"
 const DIFFICULTY_SELECT_PATH: String = "res://ui/menus/difficulty_select.tscn"
 const NO_RECORD_TEXT: String = "--:--.---"
-const TRACK_BUTTON_SIZE: Vector2 = Vector2(720.0, 78.0)
+const TRACK_BUTTON_SIZE: Vector2 = Vector2(860.0, 92.0)
+const THUMBNAIL_WIDTH: int = 150
 const MILLISECONDS_PER_MINUTE: int = 60_000
 const MILLISECONDS_PER_SECOND: int = 1_000
 const SECONDS_PER_MINUTE: int = 60
@@ -34,6 +35,12 @@ func _build_track_list() -> void:
 		var track: TrackData = resource as TrackData
 		var button: Button = Button.new()
 		button.custom_minimum_size = TRACK_BUTTON_SIZE
+		button.theme_type_variation = &"CardButton"
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.icon = load("res://assets/previews/%s.png" % track.id) as Texture2D
+		button.expand_icon = true
+		button.add_theme_constant_override(&"icon_max_width", THUMBNAIL_WIDTH)
+		button.add_theme_constant_override(&"h_separation", 22)
 		var best_lap_ms: int = SaveManager.get_best_lap_ms(track.id)
 		button.text = "%s\n%d LAPS  •  BEST %s" % [
 			track.display_name,

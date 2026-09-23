@@ -71,14 +71,16 @@ func show_kart(data: KartData, night_theme: bool = false, driver: DriverData = n
 		return
 	if _visuals != null:
 		_visuals.queue_free()
-	_visuals = _build_visual_skeleton()
+	_visuals = build_visual_skeleton()
 	_viewport.add_child(_visuals)
 	KartMeshBuilder.decorate(_visuals, data, night_theme)
 	if driver != null:
 		KartMeshBuilder.apply_paint_pattern(_visuals.get_node("Body") as MeshInstance3D, driver)
 
 
-func _build_visual_skeleton() -> Node3D:
+## Bare Visuals skeleton (Body/Driver/wheel nodes) matching kart/kart.tscn,
+## ready for KartMeshBuilder.decorate(); shared with MenuBackdrop.
+static func build_visual_skeleton() -> Node3D:
 	var visuals: Node3D = Node3D.new()
 	visuals.name = "Visuals"
 	var body: MeshInstance3D = MeshInstance3D.new()

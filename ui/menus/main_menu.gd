@@ -3,14 +3,15 @@ extends MenuScreen
 
 const MODE_SELECT_PATH: String = "res://ui/menus/mode_select.tscn"
 const SETTINGS_PATH: String = "res://ui/menus/settings_menu.tscn"
-const KART_DIRECTORY: String = "res://data/karts"
+const INTRO_OFFSET: float = -80.0
+const INTRO_SECONDS: float = 0.36
+const INTRO_STAGGER: float = 0.055
 
 @onready var _play_button: Button = $Panel/VBox/PlayButton
 @onready var _time_trial_button: Button = $Panel/VBox/TimeTrialButton
 @onready var _online_button: Button = $Panel/VBox/OnlineButton
 @onready var _settings_button: Button = $Panel/VBox/SettingsButton
 @onready var _quit_button: Button = $Panel/VBox/QuitButton
-@onready var _orbit_kart: KartPreview = $OrbitKart
 @onready var _tutorial_prompt: PanelContainer = $TutorialPrompt
 @onready var _start_tutorial_button: Button = $TutorialPrompt/VBox/StartTutorialButton
 @onready var _skip_tutorial_button: Button = $TutorialPrompt/VBox/SkipTutorialButton
@@ -20,7 +21,8 @@ func _ready() -> void:
 	super._ready()
 	GameState.reset_session()
 	GameState.current_mode = GameState.Mode.MENU
-	_show_orbit_kart()
+	($Footer/Version as Label).text = "v%s" % str(ProjectSettings.get_setting("application/config/version", ""))
+	_play_intro.call_deferred()
 	_play_button.pressed.connect(go_to.bind(MODE_SELECT_PATH))
 	_time_trial_button.pressed.connect(_start_time_trial)
 	_settings_button.pressed.connect(go_to.bind(SETTINGS_PATH))
@@ -66,12 +68,21 @@ func _quit_game() -> void:
 	GameState.request_quit() # Spec item 2: lets NetUpnp veto for a live worker/permanent-lease removal, instead of quitting outright.
 
 
-## Showcases the first cataloged kart, slowly orbiting behind the panel.
-func _show_orbit_kart() -> void:
-	var karts: Array[Resource] = ResourceScanner.scan_tres(KART_DIRECTORY)
-	if karts.is_empty():
-		return
-	_orbit_kart.show_kart(karts[0] as KartData)
+## Logo and buttons sweep in from the left, staggered (after layout, so the
+## container has already placed them).
+func _play_intro() -> void:
+	var index: int = 0
+	for child: Node in $Panel/VBox.get_children():
+		var control: Control = child as Control
+		if control == null or not control.visible:
+			continue
+		var rest_x: float = control.position.x
+		control.position.x = rest_x + INTRO_OFFSET
+		control.modulate.a = 0.0
+		var tween: Tween = create_tween().set_parallel(true)
+		tween.tween_property(control, "position:x", rest_x, INTRO_SECONDS).set_delay(INTRO_STAGGER * index).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		tween.tween_property(control, "modulate:a", 1.0, INTRO_SECONDS).set_delay(INTRO_STAGGER * index)
+		index += 1
 
 
 func _start_time_trial() -> void:

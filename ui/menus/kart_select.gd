@@ -4,9 +4,9 @@ extends MenuScreen
 const KART_DIRECTORY: String = "res://data/karts"
 const TRACK_SELECT_PATH: String = "res://ui/menus/track_select.tscn"
 const GRID_COLUMNS: int = 3
-const CARD_SIZE: Vector2 = Vector2(285.0, 330.0)
+const CARD_SIZE: Vector2 = Vector2(310.0, 292.0)
 const CARD_CONTENT_MARGIN: int = 12
-const PREVIEW_HEIGHT: float = 82.0
+const PREVIEW_HEIGHT: float = 96.0
 const STAT_BAR_SCENE: PackedScene = preload("res://ui/components/stat_bar.tscn")
 const STAT_RANGES: Dictionary = {
 	"max_speed": Vector2(24.0, 32.0),
@@ -48,24 +48,19 @@ func _build_kart_grid() -> void:
 func _create_kart_card(kart: KartData) -> Button:
 	var button: Button = Button.new()
 	button.custom_minimum_size = CARD_SIZE
+	button.theme_type_variation = &"CardButton"
 	button.text = ""
 	var content: VBoxContainer = VBoxContainer.new()
 	content.name = "Content"
 	content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, CARD_CONTENT_MARGIN)
 	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_theme_constant_override(&"separation", 6)
 	button.add_child(content)
-	var preview: TextureRect = TextureRect.new()
-	preview.custom_minimum_size.y = PREVIEW_HEIGHT
-	preview.texture = load("res://assets/art/%s.png" % kart.id) as Texture2D
-	preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	content.add_child(preview)
+	content.add_child(CardArt.swatch(load("res://assets/art/%s.png" % kart.id) as Texture2D, kart.body_color, PREVIEW_HEIGHT))
 	var name_label: Label = Label.new()
 	name_label.name = "Name"
 	name_label.text = kart.display_name
-	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	CardArt.style_name(name_label)
 	content.add_child(name_label)
 	var stats: VBoxContainer = VBoxContainer.new()
 	stats.name = "Stats"

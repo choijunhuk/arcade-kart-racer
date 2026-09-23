@@ -102,11 +102,11 @@ func _hide_network_pause() -> void:
 func _configure_network_buttons(active: bool) -> void:
 	_restart_button.visible = not active
 	_settings_button.visible = not active
-	_continue_button.text = "RESUME" if active else "Continue"
+	_continue_button.text = "RESUME" if active else "CONTINUE"
 	_pending_end_session_confirm = false
 	_wire_focus()
 	if not active:
-		_menu_button.text = "Quit to Menu"
+		_menu_button.text = "QUIT TO MENU"
 	elif _ends_session_for_everyone():
 		_menu_button.text = "END SESSION"
 	else:

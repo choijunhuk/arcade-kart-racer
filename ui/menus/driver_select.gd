@@ -4,9 +4,9 @@ extends MenuScreen
 const DRIVER_DIRECTORY: String = "res://data/drivers"
 const KART_SELECT_PATH: String = "res://ui/menus/kart_select.tscn"
 const GRID_COLUMNS: int = 4
-const CARD_SIZE: Vector2 = Vector2(230.0, 210.0)
+const CARD_SIZE: Vector2 = Vector2(240.0, 236.0)
 const CARD_CONTENT_MARGIN: int = 10
-const PORTRAIT_HEIGHT: float = 64.0
+const PORTRAIT_HEIGHT: float = 92.0
 const MIN_DRIVER_MODIFIER: float = -0.05
 const DRIVER_MODIFIER_SPAN: float = 0.1
 const PERCENT_SCALE: float = 100.0
@@ -44,25 +44,21 @@ func _build_driver_grid() -> void:
 func _create_driver_card(driver: DriverData) -> Button:
 	var button: Button = Button.new()
 	button.custom_minimum_size = CARD_SIZE
+	button.theme_type_variation = &"CardButton"
 	button.text = ""
 	var content: VBoxContainer = VBoxContainer.new()
 	content.name = "Content"
 	content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, CARD_CONTENT_MARGIN)
 	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_theme_constant_override(&"separation", 6)
 	button.add_child(content)
-	var portrait: TextureRect = TextureRect.new()
+	var portrait: PanelContainer = CardArt.swatch(load("res://assets/art/%s.png" % driver.id) as Texture2D, driver.driver_color, PORTRAIT_HEIGHT)
 	portrait.name = "Portrait"
-	portrait.custom_minimum_size.y = PORTRAIT_HEIGHT
-	portrait.texture = load("res://assets/art/%s.png" % driver.id) as Texture2D
-	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	content.add_child(portrait)
 	var name_label: Label = Label.new()
 	name_label.name = "Name"
 	name_label.text = driver.display_name
-	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	CardArt.style_name(name_label)
 	content.add_child(name_label)
 	var stats: VBoxContainer = VBoxContainer.new()
 	stats.name = "Stats"
