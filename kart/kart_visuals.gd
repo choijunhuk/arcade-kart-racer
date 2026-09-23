@@ -6,7 +6,13 @@ extends Node3D
 const WHEEL_RADIUS: float = 0.28
 const MIN_BOB_SPEED_RATIO: float = 0.25
 const BOB_NOISE_SEED: int = 3_141
-const DRIVER_MATERIAL_ROUGHNESS: float = 0.75
+## Kart meshes render on their own layer so contact-shadow decals skip them.
+const KART_RENDER_LAYER: int = 1 << 1
+const CONTACT_SHADOW_CULL_MASK: int = 0xFFFFF & ~KART_RENDER_LAYER
+const CONTACT_SHADOW_SIZE: Vector3 = Vector3(1.9, 1.2, 2.6)
+const CONTACT_SHADOW_Y: float = -0.3
+const CONTACT_SHADOW_ALPHA: float = 0.6
+static var _shadow_texture: GradientTexture2D
 
 @export var feel_tuning: FeelTuning = preload("res://data/tuning/feel_default.tres")
 
@@ -35,17 +41,18 @@ var _flash_material: ShaderMaterial
 var _flash_segments_remaining: int = 0
 var _flash_segment_remaining: float = 0.0
 var _bob_noise: FastNoiseLite = FastNoiseLite.new()
+var _contact_shadow: Decal
 
 
 func _ready() -> void:
 	_base_local_y = position.y
-	_rear_left_base = _wheel_rl.position
-	_rear_right_base = _wheel_rr.position
 	_bob_noise.seed = BOB_NOISE_SEED
 	_bob_noise.frequency = 1.0
 	KartMeshBuilder.decorate(self, _controller.get_kart_data(), _controller.get_night_theme())
-	_install_hit_flash_material()
-	apply_driver_data(_controller.get_driver_data())
+	_rear_left_base = _wheel_rl.position
+	_rear_right_base = _wheel_rr.position
+	_apply_livery(_controller.get_driver_data())
+	_install_contact_shadow()
 	if not EventBus.kart_hit.is_connected(_on_kart_hit):
 		EventBus.kart_hit.connect(_on_kart_hit)
 
@@ -68,17 +75,66 @@ func _process(delta: float) -> void:
 	_update_hit_flash(delta)
 	if _controller.network_replica:
 		transform = network_pose * transform
+	_update_contact_shadow()
 
 
-## Applies the selected driver's suit color.
+func _update_contact_shadow() -> void:
+	if _contact_shadow == null:
+		return
+	var anchor: Transform3D = _controller.global_transform
+	if _controller.network_replica:
+		anchor = anchor * network_pose
+	_contact_shadow.global_transform = anchor.translated_local(Vector3(0.0, CONTACT_SHADOW_Y, 0.0))
+
+
+## Applies the selected driver's livery (paint, number, helmet, suit, rims).
 func apply_driver_data(driver: DriverData) -> void:
 	if driver == null:
 		return
-	var material: StandardMaterial3D = StandardMaterial3D.new()
-	material.albedo_color = driver.driver_color
-	material.roughness = DRIVER_MATERIAL_ROUGHNESS
-	_driver_mesh.material_override = material
-	KartMeshBuilder.apply_paint_pattern(_body_mesh, driver)
+	_apply_livery(driver)
+
+
+func _apply_livery(driver: DriverData) -> void:
+	KartMeshBuilder.apply_paint_pattern(_body_mesh, driver, _controller.get_kart_data())
+	_flash_material = _body_mesh.material_override as ShaderMaterial
+	for node: Node in find_children("*", "GeometryInstance3D", true, false):
+		(node as VisualInstance3D).layers = KART_RENDER_LAYER
+
+
+## Soft blob shadow projected onto whatever is under the kart (never onto
+## karts: their meshes live on KART_RENDER_LAYER, excluded from the cull mask).
+func _install_contact_shadow() -> void:
+	var decal: Decal = Decal.new()
+	decal.name = "ContactShadow"
+	decal.size = CONTACT_SHADOW_SIZE
+	decal.position = Vector3(0.0, CONTACT_SHADOW_Y, 0.0)
+	decal.texture_albedo = _contact_shadow_texture()
+	decal.modulate = Color(0.0, 0.0, 0.0, CONTACT_SHADOW_ALPHA)
+	decal.albedo_mix = 1.0
+	decal.upper_fade = 0.2
+	decal.lower_fade = 0.6
+	decal.cull_mask = CONTACT_SHADOW_CULL_MASK
+	decal.distance_fade_enabled = true
+	decal.distance_fade_begin = QualityTier.DETAIL_DISTANCE
+	decal.distance_fade_length = 15.0
+	add_child(decal)
+	_contact_shadow = decal
+
+
+static func _contact_shadow_texture() -> GradientTexture2D:
+	if _shadow_texture != null:
+		return _shadow_texture
+	var gradient: Gradient = Gradient.new()
+	gradient.offsets = PackedFloat32Array([0.0, 0.55, 1.0])
+	gradient.colors = PackedColorArray([Color(0, 0, 0, 1), Color(0, 0, 0, 0.7), Color(0, 0, 0, 0)])
+	_shadow_texture = GradientTexture2D.new()
+	_shadow_texture.gradient = gradient
+	_shadow_texture.width = 64
+	_shadow_texture.height = 64
+	_shadow_texture.fill = GradientTexture2D.FILL_RADIAL
+	_shadow_texture.fill_from = Vector2(0.5, 0.5)
+	_shadow_texture.fill_to = Vector2(1.0, 0.5)
+	return _shadow_texture
 
 
 func _update_body_pose(delta: float) -> void:
@@ -162,18 +218,6 @@ func _update_trick_visual(delta: float) -> void:
 			clampf(feel_tuning.feedback_lerp_speed * delta, 0.0, 1.0),
 		)
 	rotation.y = _trick_spin
-
-
-func _install_hit_flash_material() -> void:
-	var shader: Shader = load("res://effects/hit_flash.gdshader") as Shader
-	_flash_material = ShaderMaterial.new()
-	_flash_material.shader = shader
-	var source: StandardMaterial3D = _body_mesh.get_active_material(0) as StandardMaterial3D
-	if source != null:
-		_flash_material.set_shader_parameter("albedo_color", source.albedo_color)
-		_flash_material.set_shader_parameter("metallic", source.metallic)
-		_flash_material.set_shader_parameter("roughness", source.roughness)
-	_body_mesh.material_override = _flash_material
 
 
 func _on_kart_hit(kart: Node, _hit_type: int) -> void:

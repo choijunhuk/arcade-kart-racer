@@ -12,26 +12,31 @@ static var _meshes: Dictionary[StringName, ArrayMesh] = {}
 const HUB_CAP_RADIUS: float = 0.085
 const HUB_CAP_HEIGHT: float = 0.28
 ## Headlight placement, mirrored left/right at the nose (-z).
-const HEADLIGHT_SIZE: Vector3 = Vector3(0.22, 0.12, 0.08)
-const HEADLIGHT_X: float = 0.52
-const HEADLIGHT_Y: float = -0.02
-const HEADLIGHT_Z: float = -1.14
+const HEADLIGHT_SIZE: Vector3 = Vector3(0.16, 0.06, 0.06)
+const HEADLIGHT_X: float = 0.42
+const HEADLIGHT_Y: float = -0.19
+const HEADLIGHT_Z: float = -1.02
 const HEADLIGHT_COLOR: Color = Color(1.0, 0.96, 0.78)
 ## Exhaust pipe geometry, matches effects/boost_effects.tscn Exhaust position (0, -0.05, 1.15).
-const EXHAUST_PIPE_RADIUS: float = 0.09
-const EXHAUST_PIPE_LENGTH: float = 0.3
-const EXHAUST_PIPE_POSITION: Vector3 = Vector3(0.0, -0.05, 1.1)
-## Helmet visor placement relative to the driver head sphere (radius 0.34, y 0.4).
-const VISOR_SIZE: Vector3 = Vector3(0.42, 0.16, 0.1)
-const VISOR_POSITION: Vector3 = Vector3(0.0, 0.42, -0.24)
-## Prefix tagging driver-paint decal children so they can be replaced on driver change.
+const EXHAUST_PIPE_RADIUS: float = 0.075
+const EXHAUST_PIPE_LENGTH: float = 0.2
+const EXHAUST_PIPE_POSITION: Vector3 = Vector3(0.0, -0.1, 1.05)
+## Driver figure (driver-local units): suit torso, helmet shell, accent
+## stripe and a wrap-around visor facing the kart's nose (-Z).
+const TORSO_RADIUS: float = 0.21
+const TORSO_HEIGHT: float = 0.56
+const HELMET_RADIUS: float = 0.25
+const HELMET_Y: float = 0.4
+const HELMET_STRIPE_SCALE: Vector3 = Vector3(0.26, 1.03, 1.03)
+const VISOR_SCALE: Vector3 = Vector3(0.94, 0.52, 0.78)
+const VISOR_OFFSET: Vector3 = Vector3(0.0, 0.01, -0.08)
+## Prefix tagging legacy driver-paint decal children so they are removed on driver change.
 const PAINT_DECAL_PREFIX: String = "PaintDecal"
-const PAINT_PATTERN_COUNT: int = 3
 ## Driver placement: matches kart.tscn/kart_preview.gd's authored offset for
 ## the boxy procedural chassis. The Kenney chassis' cockpit sits lower and
 ## more open, so its driver is nestled down and shrunk to match.
 const PROCEDURAL_DRIVER_POSITION: Vector3 = Vector3(0.0, 0.55, 0.15)
-const KENNEY_DRIVER_POSITION: Vector3 = Vector3(0.0, 0.22, 0.05)
+const KENNEY_DRIVER_POSITION: Vector3 = Vector3(0.0, 0.1, 0.12)
 const KENNEY_DRIVER_SCALE: float = 0.7
 
 ## Visual target footprint for a kart (BODY_SIZES, scaled for named "_"
@@ -98,15 +103,20 @@ static func decorate(visuals: Node3D, data: KartData, night_theme: bool = false)
 	# particle emitter, which is positioned in Kart-local space).
 	var accessory_y_offset: float = -body.position.y
 	_add_headlights(body, night_theme, accessory_y_offset)
-	_add_exhaust_pipe(body, accent, accessory_y_offset)
+	_add_exhaust_pipe(body, accessory_y_offset)
 	for wheel_name: String in ["WheelFL", "WheelFR", "WheelRL", "WheelRR"]:
 		var pivot: Node3D = visuals.get_node(wheel_name) as Node3D
 		var kenney_wheel: ArrayMesh = KartKenneyArt.build_wheel_mesh(StringName(wheel_name)) if kenney_body != null else null
 		if kenney_wheel != null:
+			var layout: Dictionary = KartKenneyArt.wheel_layout(data)
+			if layout.has(StringName(wheel_name)):
+				var ground_xz: Vector2 = layout[StringName(wheel_name)] as Vector2
+				pivot.position = Vector3(ground_xz.x, KartKenneyArt.GROUND_CONTACT_Y + KartKenneyArt.WHEEL_VISUAL_RADIUS, ground_xz.y)
 			var placeholder: Node = pivot.get_node_or_null("Mesh")
 			if placeholder is MeshInstance3D:
 				(placeholder as MeshInstance3D).visible = false
 			var node: MeshInstance3D = MeshInstance3D.new()
+			node.name = "WheelMesh"
 			node.mesh = kenney_wheel
 			pivot.add_child(node)
 			continue
@@ -121,27 +131,16 @@ static func decorate(visuals: Node3D, data: KartData, night_theme: bool = false)
 		node.material_override = accent
 		pivot.add_child(node)
 		_add_wheel_hub(node, data.body_color)
-	var driver: Node3D = visuals.get_node("Driver") as Node3D
+	var driver: MeshInstance3D = visuals.get_node("Driver") as MeshInstance3D
 	if kenney_body != null:
 		# The Kenney chassis' cockpit sits lower than the boxy procedural one;
-		# nestle the driver capsule down into it instead of perching on top.
+		# nestle the driver down into it instead of perching on top.
 		driver.position = KENNEY_DRIVER_POSITION
 		driver.scale = Vector3.ONE * KENNEY_DRIVER_SCALE
 	else:
 		driver.position = PROCEDURAL_DRIVER_POSITION
 		driver.scale = Vector3.ONE
-	var helmet: SphereMesh = SphereMesh.new()
-	helmet.radius = 0.34
-	helmet.height = 0.55
-	helmet.radial_segments = 12
-	helmet.rings = 6
-	var head: MeshInstance3D = MeshInstance3D.new()
-	head.mesh = helmet
-	head.position.y = 0.4
-	head.material_override = accent
-	driver.add_child(head)
-	PrimitiveArt.add_box(driver, Vector3(0.5, 0.16, 0.15), Vector3(0, 0.43, -0.28), PrimitiveArt.material(Color(0.02, 0.06, 0.12)))
-	_add_helmet_visor(driver)
+	var head: MeshInstance3D = _build_driver(driver)
 	_disable_detail_shadows(body)
 	_disable_detail_shadows(driver, head)
 	for wheel_name: String in ["WheelFL", "WheelFR", "WheelRL", "WheelRR"]:
@@ -173,7 +172,7 @@ static func _add_headlights(body: MeshInstance3D, night_theme: bool, y_offset: f
 
 
 ## Dark metal tailpipe at the rear, aligned with the BoostEffects exhaust particles.
-static func _add_exhaust_pipe(body: MeshInstance3D, accent: StandardMaterial3D, y_offset: float = 0.0) -> void:
+static func _add_exhaust_pipe(body: MeshInstance3D, y_offset: float = 0.0) -> void:
 	var pipe: CylinderMesh = CylinderMesh.new()
 	pipe.top_radius = EXHAUST_PIPE_RADIUS
 	pipe.bottom_radius = EXHAUST_PIPE_RADIUS
@@ -183,8 +182,16 @@ static func _add_exhaust_pipe(body: MeshInstance3D, accent: StandardMaterial3D, 
 	node.mesh = pipe
 	node.rotation.x = PI * 0.5
 	node.position = EXHAUST_PIPE_POSITION + Vector3(0.0, y_offset, 0.0)
-	node.material_override = PrimitiveArt.material(accent.albedo_color.darkened(0.6))
+	node.material_override = _gunmetal()
 	body.add_child(node)
+
+
+static func _gunmetal() -> StandardMaterial3D:
+	var material: StandardMaterial3D = StandardMaterial3D.new()
+	material.albedo_color = Color(0.13, 0.13, 0.15)
+	material.metallic = 0.85
+	material.roughness = 0.35
+	return material
 
 
 ## Small contrasting hub cap centered on an already-built wheel rim node.
@@ -200,61 +207,67 @@ static func _add_wheel_hub(rim_node: MeshInstance3D, body_color: Color) -> void:
 	rim_node.add_child(node)
 
 
-## Glossy visor strip on the driver's helmet (high metallic, low roughness).
-static func _add_helmet_visor(driver: Node3D) -> void:
-	var visor: StandardMaterial3D = StandardMaterial3D.new()
-	visor.albedo_color = Color(0.05, 0.08, 0.12)
-	visor.metallic = 0.95
-	visor.roughness = 0.05
-	PrimitiveArt.add_box(driver, VISOR_SIZE, VISOR_POSITION, visor)
+## Replaces the driver placeholder with suit torso + helmet (shell, accent
+## stripe, glossy visor). Colours come from KartLivery.apply_driver().
+static func _build_driver(driver: MeshInstance3D) -> MeshInstance3D:
+	for child: Node in driver.get_children():
+		driver.remove_child(child)
+		child.queue_free()
+	var torso: CapsuleMesh = CapsuleMesh.new()
+	torso.radius = TORSO_RADIUS
+	torso.height = TORSO_HEIGHT
+	torso.radial_segments = 12
+	torso.rings = 4
+	driver.mesh = torso
+	var helmet: MeshInstance3D = _sphere(driver, KartLivery.HELMET_NODE_NAME, HELMET_RADIUS, Vector3(0.0, HELMET_Y, 0.0))
+	var stripe: MeshInstance3D = _sphere(helmet, KartLivery.HELMET_STRIPE_NODE_NAME, HELMET_RADIUS, Vector3.ZERO)
+	stripe.scale = HELMET_STRIPE_SCALE
+	var visor: MeshInstance3D = _sphere(helmet, "Visor", HELMET_RADIUS, VISOR_OFFSET)
+	visor.scale = VISOR_SCALE
+	var glass: StandardMaterial3D = StandardMaterial3D.new()
+	glass.albedo_color = Color(0.03, 0.05, 0.09)
+	glass.metallic = 0.9
+	glass.roughness = 0.06
+	glass.rim_enabled = true
+	glass.rim = 0.6
+	visor.material_override = glass
+	return helmet
 
 
-## Replaces any existing driver-paint decals with a pattern chosen deterministically
-## from the driver id: 0 stripe, 1 checker, 2 gradient (Phase 17b item 3).
-static func apply_paint_pattern(body: MeshInstance3D, driver: DriverData) -> void:
+static func _sphere(parent: Node3D, node_name: String, radius: float, at: Vector3) -> MeshInstance3D:
+	var sphere: SphereMesh = SphereMesh.new()
+	sphere.radius = radius
+	sphere.height = radius * 2.0
+	sphere.radial_segments = 16
+	sphere.rings = 8
+	var node: MeshInstance3D = MeshInstance3D.new()
+	node.name = node_name
+	node.mesh = sphere
+	node.position = at
+	parent.add_child(node)
+	return node
+
+
+## Applies the driver's livery (body paint shader + race number; helmet, suit
+## and rims when the body sits in a full Visuals rig). The pattern index is
+## deterministic per driver id (KartLivery.pattern_for). A null driver only
+## clears legacy decals so callers can keep the kart's default paint.
+static func apply_paint_pattern(body: MeshInstance3D, driver: DriverData, kart: KartData = null) -> void:
 	for child: Node in body.get_children():
 		if String(child.name).begins_with(PAINT_DECAL_PREFIX):
 			body.remove_child(child)
 			child.queue_free()
-	if driver == null:
+	if driver == null and kart == null:
 		return
-	# Decal Y constants below assume body's local origin is roof-height
-	# (procedural chassis); the Kenney mesh's local origin is ground-height
-	# instead (see decorate()'s body.position.y), so compensate the same way.
-	var y_offset: float = -body.position.y
-	var pattern: int = int(hash(driver.id)) % PAINT_PATTERN_COUNT
-	if pattern < 0:
-		pattern += PAINT_PATTERN_COUNT
-	match pattern:
-		0:
-			_paint_stripe(body, driver.driver_color, y_offset)
-		1:
-			_paint_checker(body, driver.driver_color, y_offset)
-		_:
-			_paint_gradient(body, driver.driver_color, y_offset)
-
-
-static func _paint_stripe(body: MeshInstance3D, paint: Color, y_offset: float) -> void:
-	_tag_decal(PrimitiveArt.add_box(body, Vector3(0.28, 0.1, 1.9), Vector3(0, 0.32 + y_offset, 0), PrimitiveArt.material(paint)), 0)
-
-
-static func _paint_checker(body: MeshInstance3D, paint: Color, y_offset: float) -> void:
-	const SQUARES: int = 6
-	for index: int in range(SQUARES):
-		var color: Color = paint if index % 2 == 0 else Color.WHITE
-		var offset_z: float = -0.9 + (1.8 * float(index) / float(SQUARES - 1))
-		_tag_decal(PrimitiveArt.add_box(body, Vector3(0.55, 0.09, 0.28), Vector3(0, 0.32 + y_offset, offset_z), PrimitiveArt.material(color)), index)
-
-
-static func _paint_gradient(body: MeshInstance3D, paint: Color, y_offset: float) -> void:
-	const BANDS: int = 5
-	for index: int in range(BANDS):
-		var ratio: float = float(index) / float(BANDS - 1)
-		var color: Color = paint.lerp(Color.WHITE, ratio)
-		var offset_z: float = -0.9 + (1.8 * ratio)
-		_tag_decal(PrimitiveArt.add_box(body, Vector3(1.7, 0.08, 0.36), Vector3(0, 0.31 + y_offset, offset_z), PrimitiveArt.material(color)), index)
-
-
-static func _tag_decal(node: MeshInstance3D, index: int) -> void:
-	node.name = "%s%d" % [PAINT_DECAL_PREFIX, index]
-	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var livery: KartLivery = KartLivery.resolve(driver, kart)
+	livery.apply_body(body)
+	var rig: Node = body.get_parent()
+	if rig == null:
+		return
+	livery.apply_driver(rig.get_node_or_null("Driver") as MeshInstance3D)
+	var wheels: Array[MeshInstance3D] = []
+	for wheel_name: String in ["WheelFL", "WheelFR", "WheelRL", "WheelRR"]:
+		var wheel_mesh: MeshInstance3D = rig.get_node_or_null("%s/WheelMesh" % wheel_name) as MeshInstance3D
+		if wheel_mesh != null:
+			wheels.append(wheel_mesh)
+	livery.apply_wheels(wheels)

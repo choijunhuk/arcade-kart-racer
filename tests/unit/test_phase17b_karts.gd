@@ -15,14 +15,12 @@ func test_paint_pattern_deterministic_for_same_driver() -> void:
 	body_b.free()
 
 func test_paint_pattern_varies_across_roster() -> void:
-	var child_counts: Dictionary[int, bool] = {}
+	# Phase 19: livery patterns are shader styles (KartLivery.pattern_for), not
+	# per-pattern decal child counts, so variety is checked on the pattern index.
+	var patterns: Dictionary[int, bool] = {}
 	for resource: Resource in ResourceScanner.scan_tres("res://data/drivers"):
-		var driver: DriverData = resource as DriverData
-		var body: MeshInstance3D = MeshInstance3D.new()
-		KartMeshBuilder.apply_paint_pattern(body, driver)
-		child_counts[body.get_child_count()] = true
-		body.free()
-	assert_gt(child_counts.size(), 1, "expected more than one distinct pattern across the driver roster")
+		patterns[KartLivery.pattern_for(resource as DriverData)] = true
+	assert_gt(patterns.size(), 1, "expected more than one distinct pattern across the driver roster")
 
 func test_apply_paint_pattern_replaces_previous_decals() -> void:
 	var drivers: Array[Resource] = ResourceScanner.scan_tres("res://data/drivers")
